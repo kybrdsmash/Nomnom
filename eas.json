@@ -1,7 +1,12 @@
 {
   "cli": {
     "version": ">= 12.0.0",
-    "appVersionSource": "local"
+    // "remote" (not "local") because app.config.js is a dynamic (.js) config -
+    // EAS can't write an incremented version number back into a JS file the
+    // way it can a static app.json, so it needs to track versionCode on its
+    // own servers instead. Required for "production"'s autoIncrement below
+    // to work at all.
+    "appVersionSource": "remote"
   },
   "build": {
     "preview": {
