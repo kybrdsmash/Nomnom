@@ -1,0 +1,62 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# local secrets
+config.js
+.env
+tidy-forest-502201-i2-dc8ef26c172c.json
+client_secret_*.apps.googleusercontent.com.json
+
+# Unrelated sibling project (Python food-image generation scripts) that
+# happens to live in this same folder tree - not part of the Nomnom app,
+# and contains its own credentials (token.json) and an embedded .git repo
+# (dish_images) that git can't cleanly nest anyway.
+/Image Generation - 1000 Foods/
+
+# Misc bug-report screenshots, not app source
+/Error Images/
+/1000027631 - error -28 July 2026.png
+
+# Design reference images (53MB) - not read by any app code (app.config.js
+# only points at ./assets/), so excluded to keep the repo/build upload lean.
+# Remove this line if you want them version-controlled after all.
+/Ref Images/

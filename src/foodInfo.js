@@ -1,0 +1,657 @@
+// Content for the long-press "what is this dish" detail view (see
+// FoodDetailModal.js) - a description, a cultural note, and standard
+// allergen/dietary symbols for a curated batch of the 170 dishes in
+// foods.js. This is general knowledge, written once, authored by hand -
+// NOT a live lookup or a verified/medical source. Recipes vary by
+// restaurant and region, so allergen tags describe how a dish is
+// TYPICALLY made, not a guarantee; FoodDetailModal always shows a
+// disclaimer alongside them. Not every one of the 170 icons has an entry
+// yet (many are near-duplicate icon variants of the same dish and are
+// aliased together below); getFoodInfo() returns null for anything not
+// yet written up, and the detail view handles that gracefully.
+
+export const ALLERGEN_TAGS = {
+  gluten: { symbol: '🌾', label: 'Gluten' },
+  dairy: { symbol: '🥛', label: 'Dairy' },
+  egg: { symbol: '🥚', label: 'Egg' },
+  peanut: { symbol: '🥜', label: 'Peanuts' },
+  treenut: { symbol: '🌰', label: 'Tree Nuts' },
+  sesame: { symbol: '🫙', label: 'Sesame' },
+  shellfish: { symbol: '🦐', label: 'Shellfish' },
+  fish: { symbol: '🐟', label: 'Fish' },
+  soy: { symbol: '🫘', label: 'Soy' },
+  pork: { symbol: '🐖', label: 'Pork' },
+  spicy: { symbol: '🌶️', label: 'Spicy' },
+  vegetarian: { symbol: '🥕', label: 'Vegetarian' },
+  vegan: { symbol: '🌱', label: 'Vegan' },
+};
+
+const DISHES = {
+  alfajores: {
+    description: 'Two soft, crumbly cookies sandwiched around a thick layer of dulce de leche, sometimes rolled in shredded coconut or dipped in chocolate.',
+    cultural: 'The name comes from the Arabic "al-hasú," a stuffed sweet carried into Spain during centuries of Moorish rule, then brought across the Atlantic by Spanish colonizers. Nearly every South American country adopted its own version, but Argentina took it furthest - dulce de leche became the defining filling, and alfajores are now sold everywhere from gas stations to gourmet bakeries there.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  'apple-pie': {
+    description: 'A double-crust pastry filled with cinnamon-spiced baked apples, usually served warm with vanilla ice cream or a slice of cheddar.',
+    cultural: 'Apples aren’t even native to North America - colonists brought both the fruit and the pie tradition over from England and the Netherlands, where apple pies had been baked since medieval times. The phrase "as American as apple pie" only caught on in the 20th century, partly through WWII-era news stories about soldiers fighting "for mom and apple pie," cementing a European import as a symbol of American identity.',
+    allergens: ['gluten', 'dairy'],
+  },
+  baklava: {
+    description: 'Layers of paper-thin phyllo pastry brushed with butter, filled with chopped nuts, and soaked in a sweet honey or syrup glaze.',
+    cultural: 'Its exact origins are genuinely contested, with food historians tracing threads back to Assyrian layered-bread desserts and ancient Greek honey cakes, but it was the kitchens of the Ottoman imperial palace in Istanbul that perfected the tissue-thin phyllo technique and spread it across the empire. That shared Ottoman lineage is exactly why Turkey, Greece, and countries across the Levant all consider it their own defining sweet today.',
+    allergens: ['gluten', 'dairy', 'treenut'],
+  },
+  arepa: {
+    description: 'A grilled or fried disc of ground corn dough, split open and stuffed with cheese, meat, beans, or avocado.',
+    cultural: 'Made by Indigenous peoples of the region - including the Timoto-Cuicas - long before European contact, arepas predate the countries that now claim them. They’re still traditionally cooked on a flat griddle called a budare, and the Venezuela-Colombia rivalry over who "really" invented the arepa is a genuinely serious, good-natured national debate on both sides of the border.',
+    allergens: ['dairy'],
+  },
+  'baba-ganoush': {
+    description: 'A smoky dip of roasted, mashed eggplant blended with tahini, garlic, lemon, and olive oil.',
+    cultural: 'The name is often translated as something like "pampered/coquettish father," and while the exact story behind it is murky, one popular legend ties it to a sultan’s harem. Whatever its true history, it’s a mezze-table fixture across Lebanon, Syria, Palestine, and Israel, prized for the deep smokiness that comes from charring the eggplant directly over an open flame.',
+    // The dip itself (eggplant, tahini, garlic, lemon, olive oil) has no
+    // wheat - tahini is ground sesame, not a tree nut, so that's the tag
+    // that actually matters here. Gluten only enters via the pita it's
+    // usually served alongside, not the dip.
+    allergens: ['sesame'],
+  },
+  bagel: {
+    description: 'A dense, chewy ring of bread that’s boiled before baking, giving it its shiny crust - often split, toasted, and spread with cream cheese.',
+    cultural: 'Community records from Kraków as early as 1610 already mention a boiled-then-baked ring bread, and Ashkenazi Jewish immigrants carried that Polish tradition to New York in the late 1800s, where it became a neighborhood staple. A plain bagel topped with lox, cream cheese, capers, and onion became its own classic ("bagel with lox"), and the specific boil-then-bake step - which sets the crust before the interior finishes cooking - is still what separates a real bagel from an ordinary bread roll shaped like one.',
+    allergens: ['gluten'],
+  },
+  'bagel-lox': {
+    description: 'A toasted bagel piled with cream cheese, thin-sliced cold-smoked salmon (lox), and often capers, red onion, and tomato.',
+    cultural: 'Lox (from the Yiddish "laks," meaning salmon) was originally brined rather than smoked, a cheaper preservation method than the smoked salmon Eastern European Jewish immigrants had known back home. It became the centerpiece of New York’s "appetizing" store tradition - shops that, under kosher dietary law, sold only fish and dairy items like cream cheese, never meat, which is why lox and cream cheese became such an inseparable pair.',
+    allergens: ['gluten', 'dairy', 'fish'],
+  },
+  'baked-beans': {
+    description: 'White beans slow-cooked in a sweet-and-savory sauce, usually with molasses or brown sugar, tomato, and often bacon.',
+    cultural: 'Indigenous peoples in New England were already slow-cooking beans with maple syrup in earthenware pots before European contact, a method colonists adapted using molasses from the triangular trade. Puritan Sabbath rules forbade cooking fires on Saturday, so beans were prepared Friday and left in a low oven overnight to still be hot for Saturday’s meal - a practical origin for Boston’s nickname, "Beantown."',
+    allergens: ['pork'],
+  },
+  hamburger: {
+    description: 'A grilled beef patty on a bun, typically dressed with lettuce, tomato, onion, cheese, and condiments.',
+    cultural: 'German immigrants brought the Hamburg-style minced beef patty to the US in the 19th century, and it was widely popularized at American World’s Fairs - most notably St. Louis in 1904 - where it was served as street food to huge crowds. Affordable chains like White Castle then turned it from a fairground novelty into a nationwide staple, and it’s since become arguably the single most recognizable American dish worldwide.',
+    allergens: ['gluten', 'dairy'],
+  },
+  ribs: {
+    description: 'Pork or beef ribs slow-cooked until the meat pulls easily from the bone, usually finished with a smoky-sweet barbecue glaze.',
+    cultural: 'American barbecue splintered into fiercely regional styles as the tradition spread: Memphis favors a dry spice rub eaten with sauce on the side, Kansas City goes for a thick, sweet tomato-based glaze, and the Carolinas swear by thin vinegar or mustard sauces instead. Each region treats its style as the only correct one, and the debates over rub versus sauce, wet versus dry, are taken seriously at barbecue competitions across the South.',
+    allergens: ['pork'],
+  },
+  'beef-stew': {
+    description: 'Chunks of beef slow-braised with root vegetables in a thick, savory broth until fork-tender.',
+    cultural: 'Slow-braising tough cuts of meat with vegetables is one of the most universal cooking techniques on earth, showing up as French pot-au-feu, Hungarian goulash, and Irish stew alike, each shaped by whatever meat, root vegetables, and liquid were locally available. The format became especially associated with frugal, make-the-most-of-a-cheap-cut home cooking during hard economic times in many of these traditions.',
+    allergens: ['gluten'],
+  },
+  'beef-wellington': {
+    description: 'A beef tenderloin coated in mushroom duxelles and often pr osciutto, wrapped in puff pastry, and baked until golden.',
+    cultural: 'Its name is popularly linked to Arthur Wellesley, the Duke of Wellington, supposedly created to celebrate his 1815 victory at Waterloo - though food historians can’t actually confirm the story, and no recipe under that name appears until decades later. Regardless of its true origin, it became a showpiece of British fine dining by the 19th century and remains a technically demanding "special occasion" dish that tests a cook’s pastry skills.',
+    allergens: ['gluten', 'dairy', 'egg', 'pork'],
+  },
+  bibimbap: {
+    description: 'A bowl of warm rice topped with sautéed and seasoned vegetables, often beef, a fried egg, and a spoonful of spicy gochujang sauce, all mixed together before eating.',
+    cultural: 'The name literally means "mixed rice" in Korean, and the dish traces back to the Joseon dynasty as a practical way to use up leftover banchan (vegetable side dishes) in one bowl rather than letting them go to waste. The city of Jeonju is especially famous for its version, and the sizzling dolsot (hot stone bowl) variant - which crisps the rice on contact - has become a signature restaurant presentation worldwide.',
+    allergens: ['egg', 'soy', 'gluten', 'spicy'],
+  },
+  borscht: {
+    description: 'A vibrant magenta soup built on beets, usually with cabbage and other vegetables, served hot or cold with a dollop of sour cream.',
+    cultural: 'Ukraine’s claim to borscht is strong enough that in 2022, UNESCO added Ukrainian borscht-cooking to its endangered intangible cultural heritage list, a decision widely seen as a direct response to Russia’s invasion and its own long-standing claims on the dish. Nearly every Slavic country has its own version - Poland’s clear barszcz, for instance - but the deep-red, beet-forward style most people picture is specifically Ukrainian.',
+    allergens: ['dairy'],
+  },
+  brisket: {
+    description: 'A tough cut of beef slow-smoked for many hours until it becomes tender enough to pull apart, usually sliced and served with barbecue sauce.',
+    cultural: 'It sits at the center of two very different American food lineages: Central Texas barbecue, where German and Czech immigrant butchers built meat markets around smoking the cut low and slow, and Ashkenazi Jewish holiday cooking, where braised brisket has long been a Rosh Hashanah and Passover centerpiece. Both traditions turned an inexpensive, hard-to-cook cut into a celebrated centerpiece dish through completely different techniques.',
+    allergens: [],
+  },
+  burrito: {
+    description: 'A large flour tortilla wrapped around rice, beans, meat, cheese, and salsa, folded into a sealed cylinder.',
+    cultural: 'One popular (if unverified) origin story credits a vendor named Juan Méndez in Ciudad Juárez, who wrapped food in tortillas to keep it warm while selling from a donkey - "burrito" literally means "little donkey." The oversized "Mission-style" burrito familiar in the US, stuffed with rice and far more filling than its Mexican ancestor, was developed by taquerias in San Francisco’s Mission District starting in the 1960s and 70s.',
+    allergens: ['gluten', 'dairy'],
+  },
+  calzone: {
+    description: 'A folded-over pizza dough pocket, stuffed with ricotta, mozzarella, and typically meat or vegetables, baked until golden.',
+    cultural: 'Invented in Naples as a portable, foldable way to eat pizza on the go, the calzone shares its DNA with the smaller, often-fried Italian panzerotto. The name literally means "trouser leg" in Italian, a nod to its folded, stuffed shape.',
+    allergens: ['gluten', 'dairy'],
+  },
+  ceviche: {
+    description: 'Raw fish or seafood "cooked" in citrus juice (usually lime), tossed with onion, chili, and cilantro.',
+    cultural: 'The technique likely dates back to the pre-Columbian Moche civilization on Peru’s coast, who fermented fish with the juice of a local passionfruit-like fruit long before limes arrived with Spanish colonization. It’s since become Peru’s national dish and a matter of real cultural pride - the country even celebrates a national Ceviche Day every June 28th - though close variations are found all along Latin America’s Pacific coast.',
+    allergens: ['fish'],
+  },
+  'shrimp-ceviche': {
+    description: 'Shrimp "cooked" in citrus juice rather than heat, tossed with onion, chili, and cilantro.',
+    cultural: 'A shellfish-forward variation on Peru’s national ceviche tradition, common along Latin America’s Pacific and Gulf coasts. Ecuador’s take is especially distinct, often served in a tomato-based broth with popcorn or plantain chips on the side rather than Peru’s citrus-forward "leche de tigre" style.',
+    allergens: ['shellfish'],
+  },
+  charcuterie: {
+    description: 'A board of cured meats, cheeses, crackers, nuts, and preserves meant for sharing and grazing.',
+    cultural: 'The word comes from French charcutiers, medieval guild butchers legally permitted to sell only prepared pork products - a trade built entirely around preserving meat before refrigeration existed. The modern shareable "board," piled with cured meats, cheese, and garnishes well beyond pork alone, is a much more recent reinvention that took off internationally alongside food-photography culture.',
+    allergens: ['gluten', 'dairy', 'treenut', 'pork'],
+  },
+  cheesesteak: {
+    description: 'Thin-sliced grilled beef and melted cheese piled into a long hoagie roll, often with grilled onions and peppers.',
+    cultural: 'Brothers Pat and Harry Olivieri, hot dog vendors in South Philadelphia, are credited with grilling up chopped beef on a roll in the 1930s almost by accident, and the sandwich took off from there. Philadelphia locals still argue fiercely over Cheez Whiz versus provolone as the "correct" cheese, and the rival stands Pat’s and Geno’s - sitting across the street from each other - have turned the debate into a tourist attraction of its own.',
+    allergens: ['gluten', 'dairy'],
+  },
+  'chicken-rice': {
+    description: 'Simply seasoned chicken served over rice, sometimes cooked in the same broth so the rice absorbs the chicken’s flavor.',
+    cultural: 'This exact poach-and-serve format traces most directly to Hainanese immigrants who brought their home-style chicken rice to Singapore and Malaysia, where it’s since become something close to an unofficial national dish. The rice is traditionally cooked in the same fragrant broth used to poach the chicken, often with pandan leaf and ginger, so nothing about the meal goes to waste.',
+    allergens: [],
+  },
+  katsu: {
+    description: 'A breaded, deep-fried chicken (or pork) cutlet, usually served over rice with a tangy-sweet katsu sauce.',
+    cultural: 'Katsu emerged during Japan’s Meiji era as part of yoshoku, a wave of Western-influenced dishes reimagined with Japanese techniques and ingredients - "katsu" itself comes from the English word "cutlet." Because "katsu" also happens to be a homophone for the Japanese word meaning "to win," the dish is traditionally eaten before exams, job interviews, and sports matches for good luck.',
+    allergens: ['gluten', 'egg'],
+  },
+  chili: {
+    description: 'A thick, spiced stew of ground or chunked meat, beans, and chili peppers, simmered until deeply flavorful.',
+    cultural: 'Chili con carne is often traced to the "chili queens," women who sold it from street stalls in San Antonio’s plazas starting in the late 1800s, and it later spread nationally through Depression-era WPA-funded chili parlors. Texas purists still traditionally leave out the beans entirely, a stance that continues to divide American chili cooks by region - and Cincinnati’s cinnamon-and-chocolate-spiced version, ladled over spaghetti, breaks the mold even further.',
+    allergens: ['spicy'],
+  },
+  churros: {
+    description: 'Ridged, deep-fried dough pastries, dusted in cinnamon sugar and often served with a cup of thick chocolate for dipping.',
+    cultural: 'One widely repeated (though disputed) theory traces churros to Portuguese traders who encountered a similar fried dough, youtiao, in China and adapted it on the voyage home, eventually landing in Spain as shepherd food that was easy to fry over an open fire in the hills. Spanish colonization carried it across Latin America, where it’s now a beloved street food in its own right, and the star-shaped press used to pipe the dough is what gives it those signature ridges for even frying.',
+    allergens: ['gluten', 'dairy'],
+  },
+  congee: {
+    description: 'Rice slow-simmered in a large amount of water or broth until it breaks down into a soft, savory porridge, often topped with egg, pickles, or shredded meat.',
+    cultural: 'Chinese texts describe rice porridge going back more than two thousand years, and it long served as an economical way to stretch scarce grain during lean times and famine relief. That same stretch-and-comfort quality is why it’s still the go-to dish across China and much of East and Southeast Asia when someone is feeling unwell, much like chicken soup in Western households.',
+    allergens: [],
+  },
+  cornbread: {
+    description: 'A dense, slightly sweet quick bread made from cornmeal, often baked in a cast-iron skillet.',
+    cultural: 'Indigenous peoples across North America were grinding corn into meal and baking it long before European colonization, and it was Native communities who taught colonists the technique. It went on to become deeply woven into African American foodways in the South, where enslaved cooks developed variations like hoecakes and johnnycakes that still echo in cornbread recipes today.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  'creme-brulee': {
+    description: 'A rich vanilla custard topped with a thin layer of hard caramelized sugar, cracked with a spoon before eating.',
+    cultural: 'The name first appears in a French cookbook from 1691, but the English "Trinity burnt cream" and Catalan "crema catalana" - a stovetop custard flavored with citrus and cinnamon rather than vanilla - both have centuries-old claims of their own. The hard caramelized sugar crust, cracked open with the back of a spoon, is the detail all three traditions agree is essential.',
+    allergens: ['dairy', 'egg'],
+  },
+  croissants: {
+    description: 'A flaky, buttery, layered pastry rolled into a crescent shape.',
+    cultural: 'Its ancestor, the Austrian kipferl, predates the croissant by centuries, and legend (probably more myth than fact) even ties the crescent shape to Vienna’s 1683 siege by the Ottoman Empire. The croissant as we know it took shape in Paris after Austrian baker August Zang opened a Viennese bakery there in the 1830s, and French bakers spent the following decades perfecting the laminated, buttery dough that made it a breakfast icon.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  curry: {
+    description: 'Meat or vegetables simmered in a spiced, often coconut- or tomato-based sauce, served over rice.',
+    cultural: 'The word likely derives from the Tamil "kari," meaning sauce, but "curry" as a single catch-all category was largely a British colonial simplification of countless distinct regional dishes across South Asia. Curry powder itself was a British commercial invention rather than a traditional Indian ingredient, and the dish took yet another turn when the British Navy introduced curry rice to Japan, where it evolved into its own beloved, milder national comfort food.',
+    allergens: ['spicy'],
+  },
+  'dim-sum': {
+    description: 'Small, shareable steamed or fried bites - buns, dumplings, rolls - traditionally served from carts in bamboo baskets.',
+    cultural: 'Originated in Cantonese teahouses along ancient trade routes as a light bite to accompany tea; "yum cha" (drinking tea) remains a weekend ritual across China and its diaspora. The name itself, loosely translated as "touch the heart" or "a little bit of heart," reflects its origin as a small, casual accompaniment to tea rather than a full meal.',
+    allergens: ['gluten', 'soy'],
+  },
+  dolmades: {
+    description: 'Grape leaves rolled around a filling of seasoned rice (and sometimes ground meat), served warm or chilled.',
+    cultural: 'The technique of wrapping food in leaves spread widely through the Ottoman Empire’s palace kitchens - "dolma" is Turkish for "stuffed" or "filled." Warm, meat-filled versions tend to dominate in Turkey, while the oil-based, meatless version common in Greece reflects Orthodox Christian fasting traditions that restrict meat and dairy on certain days.',
+    allergens: [],
+  },
+  dosa: {
+    description: 'A large, thin, crispy fermented rice-and-lentil crepe, typically served with sambar and coconut chutney.',
+    cultural: 'References to dosa-like foods appear in ancient Tamil Sangam-era literature, and the fermentation technique that gives it its distinct tang has been refined over many centuries in South India. The temple town of Udupi is widely credited with helping spread dosa nationally, as Udupi-style restaurants carried it across India and eventually abroad.',
+    allergens: [],
+  },
+  dumplings: {
+    description: 'Small parcels of dough wrapped around a savory filling, then steamed, boiled, or pan-fried.',
+    cultural: 'Chinese legend credits Han-dynasty physician Zhang Zhongjing with inventing jiaozi to treat frostbitten ears among villagers during a harsh winter, folding the wrapper into an ear-like shape as medicine. Their resemblance to ancient gold ingots is why they’re still tied to wealth and prosperity at Lunar New Year, when families traditionally gather to fold them together by hand.',
+    allergens: ['gluten', 'soy'],
+  },
+  edamame: {
+    description: 'Whole soybean pods, boiled or steamed and lightly salted, eaten by popping the beans out of the pod.',
+    cultural: 'The name literally means "twig bean" in Japanese, from a time when the pods were traditionally sold still attached to the branch. It’s been a casual snack in Japan since at least the Edo period, and its pairing with beer at izakayas (pubs) helped it travel abroad as a familiar bar-food appetizer.',
+    allergens: ['soy'],
+  },
+  'egg-rolls': {
+    description: 'A savory filling of cabbage, vegetables, and often meat, rolled in a thicker wheat wrapper and deep-fried until crisp.',
+    cultural: 'Egg rolls are an American Chinese restaurant invention, developed by Chinese immigrant cooks adapting to available ingredients and American tastes, and they’re noticeably thicker and heartier than the fresh spring rolls found in China itself. They’ve since become one of the most recognizable fixtures of the American Chinese-restaurant menu, appearing alongside dishes with little connection to regional Chinese cooking.',
+    allergens: ['gluten', 'egg', 'soy'],
+  },
+  'eggs-benedict': {
+    description: 'A toasted English muffin topped with Canadian bacon, a poached egg, and rich hollandaise sauce.',
+    cultural: 'Its invention is credited to several competing New York stories, most famously a hungover Wall Street broker named Lemuel Benedict who ordered the components separately at the Waldorf Hotel in 1894 to cure a rough morning. Whichever story is true, it emerged from New York’s late-1800s hotel dining scene and has since become something of a benchmark dish for judging any American brunch menu.',
+    allergens: ['gluten', 'dairy', 'egg', 'pork'],
+  },
+  empanadas: {
+    description: 'A folded pastry turnover filled with seasoned meat, cheese, or vegetables, then baked or fried.',
+    cultural: 'It descends from the Galician and broader Iberian empanada - "empanar" means "to wrap in bread" - and spread throughout Spain’s colonies, where each country developed its own dough and fillings. Argentina’s beef empanadas are especially iconic, and the crimped edge (repulgue) traditionally signals what’s folded inside, letting cooks tell different fillings apart at a glance.',
+    allergens: ['gluten', 'egg'],
+  },
+  fajitas: {
+    description: 'Grilled, sliced meat and peppers served sizzling, alongside warm tortillas for wrapping at the table.',
+    cultural: 'The name comes from the Spanish "faja" (belt or girdle), referencing the skirt steak cut that Texas ranch hands (vaqueros) were traditionally given as part of their pay in the early 20th century, since it was considered a throwaway cut at the time. Vendor Sonny Falcon, often called the "Fajita King," is widely credited with popularizing the dish at Texas fairs and festivals starting in 1969, helping turn a rancher’s scrap cut into a Tex-Mex restaurant staple.',
+    allergens: ['gluten'],
+  },
+  falafel: {
+    description: 'Deep-fried balls or patties of seasoned ground chickpeas (or fava beans), often served in pita with tahini sauce.',
+    cultural: 'Its exact origins are genuinely disputed - one common theory credits Egyptian Coptic Christians, who ate a fava-bean version called ta’amiya as a meat substitute during Lent. It has since become one of the most widely loved street foods across the Middle East, and it also carries real weight as a symbol in the ongoing Israeli-Palestinian debate over culinary heritage and identity.',
+    // The patty itself is traditionally chickpea/fava-based and gluten-free -
+    // gluten only enters via the pita/tahini sauce it's typically served
+    // with, not the falafel itself.
+    allergens: ['sesame', 'vegan'],
+  },
+  pizza: {
+    description: 'A baked, round flatbread topped with tomato sauce, cheese, and other toppings of choice.',
+    cultural: 'Born in Naples as cheap, fast food for the working class, legend credits baker Raffaele Esposito with creating the Margherita in 1889, its red, white, and green toppings meant to echo the Italian flag for a visiting queen. Naples-born immigrants brought it to New York in the early 1900s (Lombardi’s, opened 1905, is often cited as the country’s first licensed pizzeria), and American soldiers returning home from Italy after WWII helped turn it into a nationwide obsession.',
+    allergens: ['gluten', 'dairy'],
+  },
+  flan: {
+    description: 'A soft, creamy egg custard baked with a layer of liquid caramel that turns into a glossy sauce once unmolded.',
+    cultural: 'Its roots stretch back to ancient Rome, where eggs were used to set both sweet and savory custards, and the dish traveled into Spain before Spanish colonization carried it worldwide. It’s now a staple dessert across Latin America and the Philippines, and the layer of liquid caramel poured into the mold before baking is what distinguishes Spanish-style flan from its French cousin, crème caramel.',
+    allergens: ['dairy', 'egg'],
+  },
+  'french-onion-soup': {
+    description: 'Caramelized onions simmered in beef broth, topped with a toasted baguette slice and melted Gruyère.',
+    cultural: 'Onion soup has humble, ancient roots as peasant food, since onions were cheap and available year-round even when little else was. One (probably embellished) legend credits King Louis XV with improvising a version late one night from little more than onions, champagne, and butter, but the now-iconic broiled-cheese crust is a more modern touch that became standard at Parisian bistros in the 20th century.',
+    allergens: ['gluten', 'dairy'],
+  },
+  'grilled-cheese': {
+    description: 'Buttered bread grilled until golden with melted cheese sealed inside.',
+    cultural: 'Its predecessor, the open-faced "cheese dream," was popular in the early 1900s, but the sealed sandwich we know today only became possible once sliced bread (introduced in 1928) and cheap, shelf-stable processed cheeses like Velveeta made it an easy, affordable option. It quickly became a Depression-era lunchtime staple in the US, prized for being filling, cheap, and fast to make.',
+    allergens: ['gluten', 'dairy'],
+  },
+  'grilled-fish': {
+    description: 'A whole fish or fillet grilled over an open flame, often simply seasoned to let the fish itself shine.',
+    cultural: 'Cooking fish directly over fire is one of the oldest food preparation methods in human history, likely predating pottery itself. Coastal cultures worldwide have shaped it with their own distinct seasoning traditions, from simple lemon-and-herb preparations at Mediterranean tavernas to banana-leaf-wrapped, sambal-spiced versions at Southeast Asian night markets.',
+    allergens: ['fish'],
+  },
+  'hot-dog': {
+    description: 'A grilled or boiled sausage served in a split bun, topped with anything from mustard and relish to chili and onions.',
+    cultural: 'German immigrants brought their frankfurter and wiener sausage traditions to the US, and vendor Charles Feltman is often credited with selling the first ones on a bun at Coney Island in 1867. It went on to become a fixture of American baseball games and backyard cookouts, and Nathan’s Famous - founded by one of Feltman’s former employees - has hosted its competitive hot dog eating contest at Coney Island every July 4th since 1916.',
+    allergens: ['gluten', 'pork'],
+  },
+  hummus: {
+    description: 'A smooth dip of blended chickpeas, tahini, lemon, and garlic, usually drizzled with olive oil.',
+    cultural: 'The earliest known written recipes resembling hummus appear in 13th-century Cairo cookbooks, though the combination of chickpeas and sesame paste was likely eaten well before that across the region. It remains a genuine point of national pride and occasional friction today - Lebanon and Israel have each pursued Guinness World Records for the largest single batch ever made, each side eager to claim it as their own.',
+    // Tahini (ground sesame) is a core ingredient, not an optional add-on -
+    // easy to overlook since "hummus" doesn't sound sesame-derived.
+    allergens: ['sesame', 'vegan'],
+  },
+  'jollof-rice': {
+    description: 'Rice slow-cooked in a rich tomato-and-pepper sauce with onions and spices until deeply red and smoky.',
+    cultural: 'The name is thought to trace back to the Wolof people and the historic Jolof Empire of what’s now Senegal and Gambia, and the dish spread widely across West Africa along old trade routes. It sits at the center of the good-natured but genuinely passionate "Jollof Wars," an ongoing rivalry - especially between Nigeria and Ghana - over whose rice grain, tomato ratio, and technique makes the definitive version.',
+    allergens: [],
+  },
+  'kung-pao-chicken': {
+    description: 'Diced chicken stir-fried with peanuts, dried chilies, and vegetables in a savory-sweet sauce.',
+    cultural: 'The dish is named after Ding Baozhen, a Qing dynasty governor of Sichuan whose honorary title was "Gong Bao" (Palace Guardian) - the numbing heat of Sichuan peppercorns central to the dish comes from his home province. During the Cultural Revolution it was briefly renamed "fast-fried chicken cubes" to strip away its association with imperial aristocracy, though the original name and dish both endured.',
+    allergens: ['peanut', 'soy', 'spicy'],
+  },
+  lasagna: {
+    description: 'Wide sheets of pasta layered with meat sauce, béchamel or ricotta, and cheese, then baked until bubbling.',
+    cultural: 'Some food historians consider it among the earliest named pasta dishes in English, pointing to a 14th-century recipe for "loseyn," and the word itself may descend from the ancient Greek "laganon," a flatbread. The version most familiar internationally - loaded with tomato sauce, ricotta, and meatballs - actually reflects Naples’s style more than the original from Emilia-Romagna, which layers green, spinach-tinted pasta with ragù and béchamel instead.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  'lo-mein': {
+    description: 'Soft wheat noodles tossed (not stir-fried crispy) with vegetables and often meat in a savory soy-based sauce.',
+    cultural: 'A Cantonese dish whose name literally translates to "stirred noodles," it reached North America with early Cantonese immigrant communities and became a takeout menu staple across the Chinese diaspora. It’s frequently confused with chow mein, but the key difference is texture - lo mein noodles are boiled and tossed soft, while chow mein noodles are stir-fried until crisp.',
+    allergens: ['gluten', 'soy'],
+  },
+  'lobster-roll': {
+    description: 'Chilled lobster meat, lightly dressed with mayonnaise (or butter, depending who you ask), piled into a split-top toasted bun.',
+    cultural: 'One widely cited origin traces to Perry’s, a Connecticut restaurant that reportedly served warm, butter-tossed lobster in a hot dog bun for a regular customer back in the 1920s. Maine’s cold, mayonnaise-dressed version eventually became the more nationally recognized style, but the two states’ rival preparations - mayo versus warm butter - are still a genuine point of regional pride in New England.',
+    allergens: ['gluten', 'egg', 'shellfish'],
+  },
+  skewers: {
+    description: 'Bite-sized pieces of marinated meat threaded onto a stick and grilled over an open flame.',
+    cultural: 'Cooking meat on a stick over fire is among the oldest food preparation formats in human history, showing up independently in nearly every culture that grills. Trade routes carried and reshaped the idea across continents - Indonesian and Malay satay picked up influences from Arab and Indian traders, while shish kebab became central to Ottoman and Persian court cuisine.',
+    allergens: [],
+  },
+  meatballs: {
+    description: 'Ground meat rolled into balls, seasoned, and cooked in a sauce or broth until tender.',
+    cultural: 'Persian kofta is often cited as an ancestor that traveled the Silk Road and influenced meatball traditions from the Mediterranean to Scandinavia. Sweden’s köttbullar are a great example - historians (and, memorably, IKEA’s own social media account) have pointed out that King Charles XII likely brought the recipe home from his years exiled in the Ottoman Empire in the early 1700s.',
+    allergens: ['gluten', 'egg'],
+  },
+  'miso-soup': {
+    description: 'A light broth made by dissolving fermented soybean paste (miso) into dashi, usually with tofu and seaweed.',
+    cultural: 'Fermented soybean paste techniques trace back to ancient China, but Japan refined and adopted miso as a staple by at least the Nara period, over a thousand years ago. Its long shelf life and dense nutrition made it valuable to samurai as compact, portable battlefield food, well before it became the everyday breakfast companion to rice that it is today.',
+    allergens: ['soy'],
+  },
+  'mole-chicken': {
+    description: 'Chicken simmered in a deep, complex mole sauce built from chilies, spices, and often a touch of chocolate.',
+    cultural: 'Chili-based sauces predate Spanish contact in Mexico, going back to Aztec cooking, though the now-famous addition of chocolate is generally considered a later colonial-era refinement. A popular legend credits colonial nuns in Puebla with improvising mole poblano from whatever ingredients were on hand for a visiting archbishop, while neighboring Oaxaca - proudly called "the land of seven moles" - recognizes seven distinct classic varieties of its own.',
+    allergens: ['treenut'],
+  },
+  tagine: {
+    description: 'Meat, vegetables, and dried fruit slow-cooked together in a cone-shaped clay pot, producing a fragrant, tender stew.',
+    cultural: 'The dish takes its name from the distinctive cone-shaped clay pot it’s cooked in, a design developed by Amazigh (Berber) communities in North Africa. The cone shape isn’t just decorative - it traps rising steam and funnels the condensation back down onto the food, letting the dish cook low and slow with very little added water, a real advantage in North Africa’s arid climate.',
+    allergens: [],
+  },
+  naan: {
+    description: 'A soft, pillowy leavened flatbread traditionally baked against the wall of a tandoor (clay oven).',
+    cultural: '"Naan" is simply the Persian word for bread, and the tandoor-baking technique behind it traveled along trade and migration routes into South Asia over many centuries. Mughal royal kitchens are often credited with refining the enriched, pillowy leavened dough that distinguishes naan from thinner, unleavened Indian flatbreads like roti.',
+    allergens: ['gluten', 'dairy'],
+  },
+  nachos: {
+    description: 'Tortilla chips layered with melted cheese and toppings like jalapeños, salsa, and sour cream.',
+    cultural: 'Invented in 1943 by Ignacio "Nacho" Anaya, a maître d’ at the Victory Club restaurant in Piedras Negras, Mexico, who improvised the dish for a group of hungry US Army wives’ patrons after the kitchen had already closed. The dish crossed the border quickly, spreading through Texas and eventually across the US as an easy, crowd-pleasing bar and stadium snack.',
+    allergens: ['gluten', 'dairy'],
+  },
+  'nasi-lemak': {
+    description: 'Coconut milk-cooked rice served with sambal chili paste, fried anchovies, peanuts, cucumber, and a hard-boiled egg.',
+    cultural: 'The name literally means "fatty" or "creamy rice," referring to the coconut milk used to cook it, and it was traditionally sold by roadside vendors wrapped in a banana leaf for workers heading out to early shifts. Widely regarded as Malaysia’s national dish, it now ranges from humble breakfast-stall versions to elaborate upscale interpretations, while remaining an everyday staple at its core.',
+    allergens: ['peanut', 'egg', 'fish', 'spicy'],
+  },
+  'noodle-soup': {
+    description: 'Noodles served in a hot, savory broth, often with meat, vegetables, and aromatics.',
+    cultural: 'Some of the oldest noodles ever discovered - a 4,000-year-old millet noodle dish - were found at an archaeological site in China, showing just how far back the format goes. Trade, migration, and colonization reshaped it into countless distinct dishes worldwide, from Vietnamese phở (whose clear beef broth carries a notable French colonial-era influence) to Japanese ramen, which exploded in popularity nationwide during the postwar period.',
+    allergens: ['gluten'],
+  },
+  okonomiyaki: {
+    description: 'A savory pancake of shredded cabbage and batter, cooked on a griddle and topped with okonomiyaki sauce, mayo, and bonito flakes.',
+    cultural: 'The name means "grilled as you like it," reflecting its origins as an affordable, flexible dish born out of flour shortages during and after WWII. Osaka mixes its ingredients into one batter before grilling, while Hiroshima builds its version in distinct layers with noodles folded in - and each city insists its own style is the correct one.',
+    allergens: ['gluten', 'egg', 'fish'],
+  },
+  'orange-chicken': {
+    description: 'Battered, deep-fried chicken pieces tossed in a sweet, tangy, citrus-spiked sauce.',
+    cultural: 'It was created in 1987 by chef Andy Kao at Panda Express, loosely inspired by Hunan-style tangerine chicken but sweetened significantly to suit American tastes. It went on to become one of the chain’s best-selling dishes and is now one of the most widely recognized symbols of American Chinese cuisine, despite having no real traditional counterpart in China itself.',
+    allergens: ['gluten', 'egg'],
+  },
+  oysters: {
+    description: 'Raw or lightly cooked oysters, often served on the half shell with lemon, mignonette, or hot sauce.',
+    cultural: 'Oysters have been eaten since prehistory - massive ancient shell middens have been found on coastlines worldwide - and the Romans famously prized them enough to ship live oysters packed in ice via relay across the empire. The old folk rule of only eating oysters in months containing an "R" (September through April) has real roots in pre-refrigeration spoilage risk and the oysters’ summer spawning season, not mere superstition.',
+    allergens: ['shellfish'],
+  },
+  paella: {
+    description: 'A wide, shallow pan of saffron-tinted rice cooked with meat, seafood, or vegetables until a crisp crust (socarrat) forms on the bottom.',
+    cultural: 'Named for the wide, shallow pan it’s cooked in, paella began as a rural farmhand’s midday meal in Valencia, traditionally built around rabbit, snails, and beans rather than seafood. The now-famous seafood versions are actually a later, coastal-tourism-era adaptation, and the prized crispy rice crust that forms on the bottom of the pan, socarrat, is considered by many the best part.',
+    allergens: ['shellfish'],
+  },
+  pierogi: {
+    description: 'Boiled (and often then pan-fried) dumplings filled with potato and cheese, sauerkraut, or meat, usually topped with sour cream or fried onions.',
+    cultural: 'Simple grain-filled dumplings predate the potato’s arrival in Europe by centuries, meaning pierogi’s roots go back further than its now-signature potato filling suggests. It became especially tied to Poland’s Lenten and Christmas Eve (Wigilia) meatless-meal traditions, where a cheese-and-potato or sauerkraut filling kept the dish within religious dietary restrictions.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  pita: {
+    description: 'A round, soft flatbread that puffs into a pocket when baked, used for scooping dips or stuffing with fillings.',
+    cultural: 'Leavened flatbread techniques resembling pita trace back roughly 4,000 years to the ancient Near East, making it one of the oldest breads still eaten in essentially its original form today. Its signature pocket forms because high oven heat causes steam to puff the dough apart in the middle, a quirk of baking that turned out to be perfect for scooping dips and stuffing fillings.',
+    allergens: ['gluten'],
+  },
+  'poke-bowl': {
+    description: 'Cubed raw fish (often ahi tuna) tossed in soy-sesame dressing, served over rice with vegetables and toppings.',
+    cultural: 'Traditional Native Hawaiian poke ("poke" means "to cut" in Hawaiian) was dressed simply with sea salt, seaweed, and crushed candlenut relish - a far cry from the soy-sesame dressing common today. The fast-casual poke bowl that spread across the US mainland in the 2010s layered in Japanese and mainland influences on top of that older fisherman’s dish, made originally with whatever fish was freshly caught that day.',
+    allergens: ['fish', 'soy'],
+  },
+  pretzel: {
+    description: 'A dense, chewy bread twisted into a knot, boiled briefly in a baking-soda bath before baking to give it a dark, glossy crust.',
+    cultural: 'European monks are traditionally credited with twisting the dough into a shape meant to resemble arms crossed in prayer, reportedly given as a reward to children who had learned their prayers. That religious symbolism carried through the centuries - the pretzel’s three holes were later reinterpreted as a nod to the Christian Trinity - before German immigrants made it a beer-hall and street-cart staple in the US.',
+    allergens: ['gluten'],
+  },
+  'pulled-pork': {
+    description: 'Pork shoulder slow-smoked for hours until tender enough to shred by hand, usually tossed in barbecue sauce.',
+    cultural: 'The slow, whole-animal cooking technique behind Southern barbecue traces back to the Caribbean "barbacoa" method, picked up by early European colonizers in the Southeast and adapted from there. Enslaved African Americans developed and refined much of the actual pit-cooking craft credited with today’s barbecue traditions, and the Carolinas in particular still treat sauce style - vinegar, mustard, or tomato-based - as a matter of real regional identity.',
+    allergens: ['pork'],
+  },
+  quiche: {
+    description: 'An open-faced savory tart of eggs and cream baked in a pastry crust, often with cheese, vegetables, or bacon.',
+    cultural: 'The word comes from the Alsatian German "Kuchen" (cake), reflecting the dish’s roots on the French-German border in Lorraine. The original quiche Lorraine used only eggs, cream, and bacon - cheese was a later addition made outside the Lorraine region - and it became an American brunch staple only in the mid-20th century.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  ravioli: {
+    description: 'Small pasta pockets filled with cheese, meat, or vegetables, sealed and boiled, then served in sauce.',
+    cultural: 'Merchant letters from 14th-century Tuscany already mention ravioli, making it one of Italy’s earliest documented stuffed-pasta formats. Medieval recipes sometimes used the word more loosely than today, referring to any small stuffed dumpling-like filling - sometimes without a pasta wrapper at all - and regional fillings still range widely, from classic ricotta and spinach to pumpkin in the north.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  'roast-chicken': {
+    description: 'A whole chicken roasted until the skin turns golden and crisp and the meat stays juicy.',
+    cultural: 'France’s rôtisserie tradition made roast chicken accessible to everyday people for centuries, echoing King Henri IV’s famous wish that every peasant family have a chicken in the pot on Sundays - a phrase that became a symbol of national prosperity. Rotisserie carts, with chickens turning slowly on spits, remain a familiar sight at French markets to this day.',
+    allergens: [],
+  },
+  'roast-duck': {
+    description: 'Duck roasted until the skin turns deeply crisp and lacquered, often glazed with a sweet-savory sauce.',
+    cultural: 'Peking duck traces back to the imperial kitchens of the Yuan dynasty and was further refined during the Ming, when it became a dish reserved for the Chinese royal court. The elaborate lacquering, air-drying, and roasting process that gives the skin its signature crackling crispness can take several days of preparation from start to finish.',
+    allergens: [],
+  },
+  'roast-turkey': {
+    description: 'A whole turkey roasted low and slow until tender, typically served with stuffing and gravy.',
+    cultural: 'Turkeys are native to the Americas and were already domesticated by Indigenous peoples well before European contact. Its now-inseparable link to Thanksgiving owes less to the actual 1621 harvest feast - whose menu likely leaned more on venison and waterfowl - and more to 19th-century writers and Abraham Lincoln’s 1863 proclamation, which formally established the national holiday and cemented turkey as its centerpiece.',
+    allergens: [],
+  },
+  sushi: {
+    description: 'Vinegared rice paired with raw fish, vegetables, or other fillings, often rolled in seaweed (nori).',
+    cultural: 'Sushi began as narezushi, a preservation method that reached Japan over a thousand years ago, in which fish was packed in salted rice and left to ferment for months - the rice was originally discarded, not eaten. Edo-period innovations sped up the process dramatically, eventually replacing fermentation with seasoned vinegar and giving rise to the fresh, quick-to-prepare nigiri style that defines sushi today.',
+    allergens: ['fish', 'soy'],
+  },
+  samosas: {
+    description: 'A triangular pastry deep-fried until crisp, filled with spiced potatoes, peas, or meat.',
+    cultural: 'The samosa traces back to the Middle East and Central Asia, referenced in 10th-century Persian texts under the name "sanbosag," and it reached South Asia by the 13th or 14th century along established trade routes. Local cooks there adapted it with regional spices and fillings, and it has since become a defining fixture of South Asian tea-time snacking.',
+    allergens: ['gluten', 'spicy'],
+  },
+  shakshuka: {
+    description: 'Eggs poached directly in a bubbling, spiced tomato-and-pepper sauce, served straight from the pan with bread.',
+    cultural: 'It likely developed among Ottoman-era North African Jewish communities, particularly in Tunisia, where tomatoes and peppers had become kitchen staples. Migration carried it into Israeli cuisine, where it’s since become especially closely associated with relaxed weekend brunch tables.',
+    allergens: ['egg', 'gluten'],
+  },
+  shawarma: {
+    description: 'Thin-sliced, spice-marinated meat roasted on a vertical spit, shaved off and wrapped in flatbread with vegetables and sauce.',
+    cultural: 'It descends from the Ottoman döner kebab, and its name comes from the Turkish word for "turning" by way of Arabic. The vertical rotisserie technique itself is generally credited to 19th-century Ottoman-era Bursa, and Lebanese immigrants later carried close cousins of the dish abroad, shaping the Greek gyro and Mexican al pastor along the way.',
+    allergens: ['gluten'],
+  },
+  'shrimp-cocktail': {
+    description: 'Chilled, poached shrimp served hooked over the rim of a glass with tangy cocktail sauce for dipping.',
+    cultural: 'Its roots trace to 19th-century American "oyster cocktail" culture, when gold miners reportedly paid steep premiums for fresh, tangy-sauced seafood as a rare luxury far from the coast. Shrimp cocktail itself rose to particular popularity in the US during the 1960s and 70s, becoming a symbol of upscale, formal dining and a fixture of steakhouse and holiday-party menus ever since.',
+    allergens: ['shellfish'],
+  },
+  'soup-dumplings': {
+    description: 'Delicate dumplings filled with meat and a savory broth (gelled, then melted by steaming) that bursts out with the first bite.',
+    cultural: 'Xiaolongbao are credited to a teahouse in Nanxiang, near Shanghai, in the 19th century, where cooks discovered that packing gelled pork-skin aspic into the filling would melt into liquid broth once steamed. The "bite, sip, eat" approach to eating them - a small nibble first to release the hot broth before finishing the rest - is considered essential technique rather than mere table manners.',
+    allergens: ['gluten', 'soy'],
+  },
+  sourdough: {
+    description: 'Bread leavened with a naturally fermented starter instead of commercial yeast, giving it a tangy flavor and chewy crust.',
+    cultural: 'It’s one of the oldest bread-leavening methods in existence, predating commercial yeast by thousands of years. San Francisco’s particular wild-yeast strain became so closely tied to the city that it was later scientifically named after it (Fructilactobacillus sanfranciscensis), a legacy of the 1849 Gold Rush, when miners reportedly carried starters with them as a reliable, portable food source.',
+    allergens: ['gluten'],
+  },
+  'spring-rolls': {
+    description: 'A thin wrapper (fresh or fried) rolled around vegetables, noodles, or meat, often served with a dipping sauce.',
+    cultural: 'Fresh, uncooked versions like Vietnamese gỏi cuốn are a genuinely distinct lineage from fried Chinese chūn juǎn, and it’s the latter that gives the dish its English name - they were traditionally eaten to mark Lichun, the start of spring on the Chinese lunar calendar. Today the format spans East and Southeast Asia in both fresh and fried forms, each region shaping it with its own wrappers and fillings.',
+    allergens: ['gluten', 'soy'],
+  },
+  'sweet-sour-chicken': {
+    description: 'Battered, fried chicken tossed in a bright, tangy-sweet sauce, often with pineapple and bell peppers.',
+    cultural: 'The technique of balancing vinegar and sugar in a single sauce is a genuine, centuries-old Cantonese cooking method, but the bright orange, deep-fried version familiar in Western restaurants was largely shaped by American Chinese restaurateurs adapting the dish to local tastes over the 20th century. It’s now one of the most recognizable dishes on American Chinese menus, despite looking quite different from its Cantonese ancestor.',
+    allergens: ['gluten', 'egg'],
+  },
+  tacos: {
+    description: 'A folded corn or flour tortilla filled with meat, salsa, and toppings of choice.',
+    cultural: 'Indigenous peoples in Mexico were using tortillas as an edible wrapper for food long before Spanish contact, making the taco format itself pre-Hispanic in origin. Some food historians credit 18th-century Mexican silver miners with popularizing the word "taco" specifically, borrowing a term originally used for the small paper-wrapped explosive charges used in mining.',
+    allergens: ['gluten'],
+  },
+  takoyaki: {
+    description: 'Ball-shaped, batter-fried snacks filled with diced octopus, topped with takoyaki sauce, mayo, and bonito flakes.',
+    cultural: 'It was invented in 1935 by Osaka street vendor Tomekichi Endo, who developed it as a variation on an earlier snack called "radioyaki." It’s still cooked today in distinctive half-sphere molded iron pans and traditionally sold from festival street stalls, where vendors use quick wrist-flicks with a skewer to rotate each ball as it cooks.',
+    allergens: ['gluten', 'egg', 'shellfish', 'fish'],
+  },
+  teriyaki: {
+    description: 'Meat or fish glazed and grilled in a sweet soy-based sauce until glossy and caramelized.',
+    cultural: 'The technique dates to Japan’s Edo period, when soy-based glazes were used to both preserve and flavor fish before refrigeration existed. Japanese immigrant communities in Hawaii and the US mainland later adapted it heavily into the thick, sauce-forward "teriyaki" familiar in American restaurants today, a noticeably different balance from its more restrained Japanese roots.',
+    allergens: ['soy'],
+  },
+  'tom-yum': {
+    description: 'A hot and sour Thai soup built on lemongrass, lime leaf, galangal, and chili, often with shrimp.',
+    cultural: 'The name combines the Thai words for "boiled" (tom) and "mixed" or "hodgepodge" (yum), reflecting how the dish balances sharply contrasting spicy, sour, salty, and aromatic flavors in one bowl. Alongside pad thai, it’s one of Thailand’s most recognized culinary exports and regularly appears near the top of international "world’s best soup" rankings.',
+    allergens: ['shellfish', 'spicy'],
+  },
+  tortellini: {
+    description: 'Small ring-shaped pasta filled with meat or cheese, typically served in broth or a light sauce.',
+    cultural: 'Emilia-Romagna’s beloved (if likely apocryphal) legend claims an innkeeper spied the goddess Venus through a keyhole and, awestruck by her navel, shaped pasta in its image - a story locals still tell with real affection. Traditionally it’s served in capon broth for Christmas, a pairing considered close to sacred in the region.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  'mac-cheese': {
+    description: 'Elbow pasta baked or stirred in a rich, creamy cheese sauce, sometimes topped with breadcrumbs.',
+    cultural: 'Pasta-and-cheese dishes appear in medieval European cookbooks, and Thomas Jefferson encountered similar dishes while traveling in France and Italy, bringing a pasta machine home and serving a macaroni-and-cheese dish at an 1802 state dinner that helped introduce it in the US. It wasn’t until Kraft introduced its boxed, powdered version in 1937, though, that mac and cheese became the cheap, fast, everyday staple most Americans grew up on.',
+    allergens: ['gluten', 'dairy'],
+  },
+  tteokbokki: {
+    description: 'Chewy rice cakes simmered in a spicy-sweet gochujang sauce, often with fish cakes and scallions.',
+    cultural: 'The dish actually started out as a mild, soy-sauce-based royal court dish (gungjung tteokbokki) served to Joseon-era kings, a far cry from today’s fiery street food. The now-iconic gochujang-based version is credited to a Seoul vendor named Ma Bok-rim, who developed it in the 1950s, and it has since become one of Korea’s most beloved after-school and late-night snacks.',
+    allergens: ['gluten', 'fish', 'spicy'],
+  },
+  waffles: {
+    description: 'A batter cooked in a ridged iron until crisp outside and soft inside, usually served with syrup and fruit.',
+    cultural: 'Its ancestor is the medieval European wafer, cooked in iron molds often stamped with religious imagery for special occasions. Thomas Jefferson is credited with bringing a waffle iron back from France in the 1790s, and the deep-pocketed Belgian-style waffle became an American favorite after being introduced by Belgian vendors at the 1964 New York World’s Fair.',
+    allergens: ['gluten', 'dairy', 'egg'],
+  },
+  'wonton-soup': {
+    description: 'Delicate dumplings filled with seasoned pork or shrimp, served in a light, savory broth.',
+    cultural: '"Wonton" is a phonetic rendering of the Cantonese term for "swallowing clouds," a poetic nod to how the delicate dumplings look floating in the broth. The format has roots going back over a thousand years in Chinese cuisine, and while it’s become a Cantonese restaurant classic worldwide, regional names, wrapper thickness, and fillings vary widely across the country.',
+    allergens: ['gluten', 'shellfish', 'pork'],
+  },
+};
+
+// Every exact FOODS name (see src/foods.js) maps to one of the keys above -
+// lets several icon variants of the same dish (e.g. "Ceviche"/"Ceviche
+// Bowl"/"Ceviche Two") share one written entry instead of needing duplicate
+// content. Names with no entry below simply aren't documented yet.
+const ALIASES = {
+  Alfajores: 'alfajores',
+  'Apple Pie': 'apple-pie',
+  Arepa: 'arepa',
+  Arepas: 'arepa',
+  'Baba Ganoush': 'baba-ganoush',
+  Bagel: 'bagel',
+  'Bagel with Lox': 'bagel-lox',
+  'Baked Bean Casserole': 'baked-beans',
+  'Baked Beans': 'baked-beans',
+  'BBQ Beans Bowl': 'baked-beans',
+  'BBQ Burger': 'hamburger',
+  'BBQ Ribs': 'ribs',
+  'Baklava Square': 'baklava',
+  'Beef Stew Pot': 'beef-stew',
+  'Beef Stew Rice': 'beef-stew',
+  'Beef Wellington': 'beef-wellington',
+  Bibimbap: 'bibimbap',
+  'Bibimbap Bowl': 'bibimbap',
+  'Bibimbap Plate': 'bibimbap',
+  Borscht: 'borscht',
+  'Braised Beef Plate': 'beef-stew',
+  'Braised Ribs': 'ribs',
+  'Braised Short Ribs': 'ribs',
+  'Brisket Platter': 'brisket',
+  Burrito: 'burrito',
+  Calzone: 'calzone',
+  Ceviche: 'ceviche',
+  'Ceviche Bowl': 'ceviche',
+  'Ceviche Two': 'ceviche',
+  'Charcuterie Board': 'charcuterie',
+  'Charcuterie Board Two': 'charcuterie',
+  'Cheesesteak Sandwich': 'cheesesteak',
+  'Philly Cheesesteak': 'cheesesteak',
+  'Chicken and Rice': 'chicken-rice',
+  'Rice with Chicken': 'chicken-rice',
+  'Chicken Katsu Bowl': 'katsu',
+  'Chili Bowl': 'chili',
+  'Chili Dog': 'chili',
+  Churros: 'churros',
+  Congee: 'congee',
+  'Congee with Egg': 'congee',
+  'Rice Porridge': 'congee',
+  Cornbread: 'cornbread',
+  'Cornbread Loaf': 'cornbread',
+  'Cornbread Slice': 'cornbread',
+  'Creme Brulee': 'creme-brulee',
+  Croissants: 'croissants',
+  'Curry Rice Bowl': 'curry',
+  'Dim Sum Buns': 'dim-sum',
+  Dolmades: 'dolmades',
+  Dosa: 'dosa',
+  Dumplings: 'dumplings',
+  'Dumplings Two': 'dumplings',
+  Edamame: 'edamame',
+  'Edamame Two': 'edamame',
+  'Egg Rolls': 'egg-rolls',
+  'Eggs Benedict': 'eggs-benedict',
+  'Empanada Rolls': 'empanadas',
+  Empanadas: 'empanadas',
+  'Empanadas Two': 'empanadas',
+  Fajitas: 'fajitas',
+  'Falafel Platter': 'falafel',
+  'Falafel Wrap': 'falafel',
+  'Fig and Prosciutto Pizza': 'pizza',
+  Flan: 'flan',
+  'French Onion Soup': 'french-onion-soup',
+  'Glazed Ribs': 'ribs',
+  'Grilled Cheese Sandwich': 'grilled-cheese',
+  'Grilled Fish': 'grilled-fish',
+  'Whole Grilled Fish': 'grilled-fish',
+  Hamburger: 'hamburger',
+  'Hot Dog': 'hot-dog',
+  'Hot Dog with Kraut': 'hot-dog',
+  'Loaded Hot Dog': 'hot-dog',
+  'Hummus Plate': 'hummus',
+  'Jollof Rice': 'jollof-rice',
+  'Kung Pao Chicken': 'kung-pao-chicken',
+  Lasagna: 'lasagna',
+  'Lasagna Square': 'lasagna',
+  'Lo Mein Takeout': 'lo-mein',
+  'Loaded Nachos': 'nachos',
+  'Lobster Roll': 'lobster-roll',
+  'Meat Skewers': 'skewers',
+  'Meat Skewers Plate': 'skewers',
+  'Meatball Stew': 'meatballs',
+  'Meatball Stew Two': 'meatballs',
+  Meatballs: 'meatballs',
+  'Miso Soup': 'miso-soup',
+  'Miso Soup Two': 'miso-soup',
+  'Mole Chicken': 'mole-chicken',
+  'Moroccan Tagine': 'tagine',
+  'Naan Bread': 'naan',
+  'Naan Bread Two': 'naan',
+  Nachos: 'nachos',
+  'Spicy Nachos': 'nachos',
+  'Nasi Lemak Plate': 'nasi-lemak',
+  'Noodle Soup': 'noodle-soup',
+  Okonomiyaki: 'okonomiyaki',
+  'Okonomiyaki Two': 'okonomiyaki',
+  'Orange Chicken': 'orange-chicken',
+  Oysters: 'oysters',
+  Paella: 'paella',
+  Pierogi: 'pierogi',
+  'Pierogi Two': 'pierogi',
+  'Pita Plate': 'pita',
+  'Pita Platter': 'pita',
+  Pizza: 'pizza',
+  'Pizza Two': 'pizza',
+  'Poke Bowl': 'poke-bowl',
+  Pretzel: 'pretzel',
+  'Pulled Pork and Mash': 'pulled-pork',
+  Quiche: 'quiche',
+  Ravioli: 'ravioli',
+  'Ribs Platter': 'ribs',
+  'Ribs Rack': 'ribs',
+  'Roast Chicken': 'roast-chicken',
+  'Roast Duck Plate': 'roast-duck',
+  'Roast Turkey': 'roast-turkey',
+  'Salmon Sushi Rolls': 'sushi',
+  Samosas: 'samosas',
+  Shakshuka: 'shakshuka',
+  'Shawarma Wrap': 'shawarma',
+  'Shrimp Ceviche': 'shrimp-ceviche',
+  'Shrimp Cocktail': 'shrimp-cocktail',
+  'Soup Dumplings': 'soup-dumplings',
+  'Sourdough Bread': 'sourdough',
+  'Spring Roll Basket': 'spring-rolls',
+  'Spring Rolls': 'spring-rolls',
+  'Sushi Rolls': 'sushi',
+  'Sushi Rolls Two': 'sushi',
+  'Sweet and Sour Chicken': 'sweet-sour-chicken',
+  Tacos: 'tacos',
+  'Takoyaki Skewers': 'takoyaki',
+  'Teriyaki Bowl': 'teriyaki',
+  'Tom Yum Soup': 'tom-yum',
+  'Tortellini Soup': 'tortellini',
+  'Truffle Mac and Cheese': 'mac-cheese',
+  Tteokbokki: 'tteokbokki',
+  'Tteokbokki Two': 'tteokbokki',
+  'Waffles with Berries': 'waffles',
+  'Wonton Soup': 'wonton-soup',
+};
+
+export function getFoodInfo(name) {
+  const key = ALIASES[name];
+  return key ? DISHES[key] || null : null;
+}
