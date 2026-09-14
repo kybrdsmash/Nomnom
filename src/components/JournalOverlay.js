@@ -141,7 +141,6 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
                 feedback about it anyway (user request) - picking a result
                 opens its normal detail view, where "Your Feedback" already
                 handles adding/editing an entry. */}
-            <ReviewMilestoneBadge journal={journal} />
             <PlaceSearchBar
               placeholder="Search for a restaurant to review..."
               onSelect={onShowDetails}
@@ -157,7 +156,10 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
               // not just when (user request).
               mineByCity.map(({ city, spots }) => (
                 <View key={city} style={{ marginBottom: 8 }}>
-                  <Text style={styles.categoryHeader}>{city}</Text>
+                  <View style={styles.cityHeaderRow}>
+                    <Text style={styles.categoryHeader}>{city}</Text>
+                    <ReviewMilestoneBadge count={spots.length} />
+                  </View>
                   {spots.map(renderMineRow)}
                 </View>
               ))
@@ -193,7 +195,8 @@ const makeStyles = (colors) => StyleSheet.create({
   overlayTitle: { color: colors.accent, fontSize: 24, fontWeight: 'bold', letterSpacing: 1 },
   overlayBack: { padding: 5 },
   emptyText: { color: colors.textMuted, textAlign: 'center', marginTop: 40, fontSize: 16, fontStyle: 'italic', paddingHorizontal: 20 },
-  categoryHeader: { color: colors.gold, fontSize: 13, fontWeight: 'bold', letterSpacing: 1, marginBottom: 8, marginTop: 4 },
+  cityHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 4 },
+  categoryHeader: { color: colors.gold, fontSize: 13, fontWeight: 'bold', letterSpacing: 1 },
 
   tabRow: { flexDirection: 'row', backgroundColor: '#333', borderRadius: 22, padding: 4, marginBottom: 16 },
   // borderWidth pinned at rest (transparent) so switching tabs only ever
