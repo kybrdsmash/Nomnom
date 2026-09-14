@@ -21,20 +21,6 @@ const LONG_PRESS_MS = 500;
 // the gesture as a drag instead of a hold.
 const DRAG_CANCEL_PX = 10;
 
-// The decorative pivot (see the comment where it renders) is a solid line
-// segment centered vertically, flanked on each side by this many dots -
-// fading from "practically part of the line" to faint/tiny/far-apart at the
-// tips (user request: "gradient of dots turning into a line then turning
-// back into a gradient of dots").
-const PIVOT_DOTS_PER_SIDE = 3;
-// Fraction of the pivot's total measured height that stays a solid line,
-// centered - the rest is split between the dot gradients on each side.
-const PIVOT_LINE_FRACTION = 0.3;
-const PIVOT_MAX_DOT_SIZE = 3;
-const PIVOT_MIN_DOT_SIZE = 1;
-const PIVOT_MAX_OPACITY = 0.6; // matches the old solid line's opacity
-const PIVOT_MIN_OPACITY = 0.12;
-
 // Order-independent - same set of cuisines regardless of which order they
 // were toggled in.
 function sameCuisines(a, b) {
@@ -48,12 +34,12 @@ function sameCuisines(a, b) {
  * rolls the label to the next/previous slot - the button itself never moves
  * or resizes, only the text does - vertical rather than horizontal (user
  * request: this sits close to the screen edge, where a vertical swipe feels
- * more natural), rolling around a decorative pivot on the right edge - a
- * line fading into a gradient of dots on each side - that suggests the
- * roll's axis. Capped to
- * exactly one slot per gesture, no matter how far or fast you drag - it
- * used to keep cycling for every STEP_PX crossed in one continuous drag,
- * which felt like it could run away from you (user feedback).
+ * more natural). A plain 3-dot indicator on the right edge shows which slot
+ * is active (accent) vs. the other two (greyed out) - purely visual, not
+ * individually tappable (see the comment where it renders for why). Swiping
+ * is capped to exactly one slot per gesture, no matter how far or fast you
+ * drag - it used to keep cycling for every STEP_PX crossed in one continuous
+ * drag, which felt like it could run away from you (user feedback).
  *
  * A plain tap loads whichever slot is currently showing into the cuisine
  * selection. A long-press either saves the current selection into the slot
@@ -76,10 +62,6 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
   const [flash, setFlash] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameText, setRenameText] = useState('');
-  // Measured (not assumed) - same reasoning as the drag sliders elsewhere in
-  // this app: pixel-exact positioning for the pivot's dots needs the real
-  // rendered height of their container, not a guessed constant.
-  const [pivotHeight, setPivotHeight] = useState(0);
 
   // Reassigned every render so the frozen PanResponder callbacks (see
   // useRef below) always see the CURRENT props, not whichever instance
@@ -193,26 +175,6 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
   const activeSlot = slots[activeIndex] || { name: `Fave ${activeIndex + 1}`, cuisines: [] };
   const hasContent = (activeSlot.cuisines || []).length > 0;
 
-  // Dots on each side of the center line, spaced and sized by a quadratic
-  // falloff from the line's edge (user request: "quadratic distribution...
-  // very dense to very light gradually then rapidly"). t goes 0 (right at
-  // the line) to 1 (the tip); using t*t for both the distance-from-line AND
-  // the size/opacity interpolation means each successive dot is packed
-  // tighter and barely fading near the line (small t*t deltas), then spreads
-  // out and fades increasingly fast approaching the tip (t*t grows faster
-  // as t grows) - dense-then-gradual-then-rapid in one curve.
-  const pivotLineHalf = (pivotHeight * PIVOT_LINE_FRACTION) / 2;
-  const pivotDotSpan = Math.max(0, pivotHeight / 2 - pivotLineHalf);
-  const pivotDots = Array.from({ length: PIVOT_DOTS_PER_SIDE }, (_, i) => {
-    const t = (i + 1) / PIVOT_DOTS_PER_SIDE;
-    const q = t * t;
-    return {
-      distance: pivotLineHalf + q * pivotDotSpan,
-      size: PIVOT_MAX_DOT_SIZE - q * (PIVOT_MAX_DOT_SIZE - PIVOT_MIN_DOT_SIZE),
-      opacity: PIVOT_MAX_OPACITY - q * (PIVOT_MAX_OPACITY - PIVOT_MIN_OPACITY),
-    };
-  });
-
   if (renaming) {
     return (
       <View style={styles.renameBox}>
@@ -247,32 +209,17 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
           vanished entirely (user feedback), especially right after
           swiping past a slot that just happens to be unsaved. */}
       {!hasContent && <View style={styles.emptyDot} />}
-      {/* Decorative pivot on the right edge - purely visual, so the vertical
-          roll reads as rotating around this side rather than just sliding
-          (user request). A solid line segment centered vertically, fading
-          out into a symmetric gradient of dots on each side (user request -
-          see the pivotDots computation above for the quadratic spacing/
-          size/opacity curve). */}
-      <View
-        style={styles.pivotWrap}
-        onLayout={(e) => setPivotHeight(e.nativeEvent.layout.height)}
-      >
-        <View style={[styles.pivotLine, { height: pivotHeight * PIVOT_LINE_FRACTION, top: pivotHeight / 2 - pivotLineHalf }]} />
-        {pivotDots.map(({ distance, size, opacity }, i) => (
-          <React.Fragment key={i}>
-            <View
-              style={[
-                styles.pivotDot,
-                { width: size, height: size, borderRadius: size / 2, opacity, top: pivotHeight / 2 - distance - size / 2 },
-              ]}
-            />
-            <View
-              style={[
-                styles.pivotDot,
-                { width: size, height: size, borderRadius: size / 2, opacity, top: pivotHeight / 2 + distance - size / 2 },
-              ]}
-            />
-          </React.Fragment>
+      {/* Plain 3-dot slot indicator on the right edge (user request: "just 3
+          dots... two dots are greyed out when not selected" - no bar, no
+          arrows) - one dot per slot, the active one in accent color, the
+          other two muted. Purely visual, not individually tappable - a
+          nested Pressable here would fight the button's own PanResponder
+          for touch ownership, the exact bug class this file already went
+          out of its way to avoid (see the docstring above). Swiping/tapping
+          the button itself is still the only way to change slots. */}
+      <View style={styles.dotColumn}>
+        {Array.from({ length: SLOT_COUNT }, (_, i) => (
+          <View key={i} style={[styles.dot, i === activeIndex ? styles.dotActive : styles.dotInactive]} />
         ))}
       </View>
     </View>
@@ -283,7 +230,7 @@ const makeStyles = (colors) => StyleSheet.create({
   // borderWidth pinned at 2 (transparent at rest) rather than only
   // appearing during the flash - same fix as App.js's modeBtn/FilterPanel's
   // toggleBtn: a sudden 0->2px border can nudge/squeeze fixed-width content.
-  // Extra right padding clears room for the decorative pivot line/arrows.
+  // Extra right padding clears room for the dot indicator.
   // colors.card (not cardAlt) - matches the All/None/search row it shares
   // (see CuisineDropdown's topRow) so the whole control strip reads as one
   // distinct group, set apart from the cuisine bubbles below it.
@@ -309,23 +256,12 @@ const makeStyles = (colors) => StyleSheet.create({
     position: 'absolute', bottom: 4, left: 4, width: 4, height: 4, borderRadius: 2,
     backgroundColor: colors.textMuted,
   },
-  // Same top/bottom insets the old single-piece pivot line used - onLayout
-  // measures this wrapper's real height (pivotHeight) so the line/dots
-  // below can be positioned in exact pixels rather than percentages (an
-  // unreliable RN layout path on Android for absolutely positioned views -
-  // same reasoning as the drag sliders elsewhere in this app).
-  pivotWrap: { position: 'absolute', right: 8, top: 10, bottom: 10, width: 6, alignItems: 'center' },
-  // height/top are set inline per-render from the measured pivotHeight (see
-  // where this renders) - centered vertically, only its height varies. No
-  // left/right set here (or on pivotDot below) on purpose - an absolutely
-  // positioned child with neither offset set still follows the parent's
-  // alignItems in RN's Yoga layout, so pivotWrap's alignItems:'center'
-  // centers these on the horizontal axis without needing to compute it here.
-  pivotLine: { position: 'absolute', width: 1, backgroundColor: colors.neon },
-  // width/height/borderRadius/opacity/top are all computed per-dot inline
-  // (see pivotDots above) - this base style just fixes the color/position
-  // type shared by every dot.
-  pivotDot: { position: 'absolute', backgroundColor: colors.neon },
+  // Vertical stack of 3 plain dots on the right edge, top-to-bottom matching
+  // slot order - replaces the earlier decorative pivot (see git history).
+  dotColumn: { position: 'absolute', right: 8, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
+  dot: { width: 5, height: 5, borderRadius: 2.5, marginVertical: 3 },
+  dotActive: { backgroundColor: colors.accent },
+  dotInactive: { backgroundColor: colors.textMuted, opacity: 0.4 },
   // Same footprint as `button` so swapping into rename mode doesn't shift
   // any layout around it.
   renameBox: {
