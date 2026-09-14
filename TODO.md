@@ -44,19 +44,35 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 
 - [x] Pinch-to-zoom (1x-4x), zoom maintained until explicitly pinched back down, pan-vs-swipe-to-next-photo disambiguated by speed + edge-proximity per user spec. See `src/components/FullscreenImageViewer.js`. **Needs real on-device testing** - velocity/edge thresholds are reused from CoinSpinner's already-tuned flick threshold as a starting point, not verified against this specific gesture feel.
 
-## Cross-device audit (2026-09-14, code review only - not yet acted on)
+## Cross-device audit (2026-09-14)
 
-Full agent report has the file/line detail for every item below; this is just the priority list to work through.
+Full agent report has the file/line detail for every item below.
 
-**High risk (likely to visibly break/clip on other devices):**
-- No real safe-area handling on Android at all (`SafeAreaView` imported from core `react-native`, not `react-native-safe-area-context` - the latter isn't even installed) - every "clears the status bar/nav bar" padding value is a guess tuned on one test phone. `FriendSpin.js` already needed one manual patch for this exact problem.
-- Same unpatched hardcoded top/bottom padding in `FriendSpin.js`, `HistoryFavoritesOverlay.js`, `JournalOverlay.js` (all `paddingTop: 60`), plus the Add-Favorite FAB in `HistoryFavoritesOverlay.js` (`bottom: 30`, no clearance fix) - real risk of colliding with a taller gesture-bar/home-indicator inset than the test device has.
-- Two components still have the *un-fixed* version of this app's own documented "Android elevation-change makes a view vanish" bug: `FabMenu.js` (price buttons, Open Now toggle) and `EliminationList.js` (selected bracket row, the more dangerous 0→10 jump variant).
-- `FaveCuisineButton.js`'s vertical-swipe PanResponder lives inside a real vertical `ScrollView` (`CuisineDropdown.js`) with no `onPanResponderTerminationRequest` - untested on iOS, where the native scroll view's gesture recognizer is more aggressive about stealing child gestures than Android.
+- [x] Real safe-area handling — `react-native-safe-area-context` installed, `SafeAreaProvider` wraps the app, every hardcoded top/bottom padding guess (App.js, FriendSpin.js, HistoryFavoritesOverlay.js incl. its FAB, JournalOverlay.js, FullscreenImageViewer.js) replaced with real `useSafeAreaInsets()` values, deliberate design offsets preserved on top. Fixed 2026-09-14.
+- [x] `FabMenu.js` + `EliminationList.js` elevation-vanishing-view bug — pinned to elevation 10 in both style variants, matching the already-established fix pattern. Fixed 2026-09-14.
+- [x] `FaveCuisineButton.js`'s PanResponder-inside-ScrollView — added `onPanResponderTerminationRequest: () => false` as a defensive iOS mitigation. **Not iOS-verified** — needs a real device/simulator check once available.
+- [x] `DaydreamRaccoon.js` bubble — added `collapsable={false}` as preventive insurance against the same Android bug class already hit (and fixed) in RollingFoodStrip/CoinSpinner.
+- [x] Missing iOS shadow properties in `BrowseList.js`, `EliminationList.js`, `SettingsPanel.js`, `FriendSpin.js` — now spread the existing `buttonDepth` helper. Fixed 2026-09-14.
+- [ ] Tablet-specific layout — deliberately deferred (user: "worry about tablets later"). Considered a shared scale-utility approach (extending `useVerticalScale`'s existing pattern to width too) instead of a full redesign, since "just scale it to fit" is an acceptable v1 per the user - not built yet, revisit once there's an actual tablet to test against rather than half-applying it now.
+- [ ] `maxFontSizeMultiplier` / accessibility text-scaling guard — also deferred, tied to the same "revisit with real devices" reasoning as tablets above. Low risk today since most text sits in flexible containers.
+- [ ] `ResultCard.js` stacks ~300px of fixed (non-`vscale`-scaled) vertical chrome — not broken (already inside a `ScrollView`, so nothing is unreachable even on a small phone), just could scroll less on short screens if scaled like the rest of the home screen. Not urgent.
 
-**Medium risk (cramped/off, not broken):** `ResultCard.js` stacks ~300px of fixed (non-`vscale`-scaled) vertical chrome; `FullscreenImageViewer.js`'s close button/counter aren't safe-area-aware (risk near an iPhone Dynamic Island); `DaydreamRaccoon.js`'s bubble has the same elevation+native-driven-child+no-`collapsable` risk profile as the already-fixed RollingFoodStrip/CoinSpinner bugs, just hasn't been hit yet; shadow-only-via-`elevation` (flat on iOS) in `BrowseList.js`, `EliminationList.js`, `SettingsPanel.js`, `FriendSpin.js`; no tablet-specific layout despite `ios.supportsTablet: true` being set; no `maxFontSizeMultiplier` guard anywhere (mostly low-risk since most text sits in flexible containers).
+**Low risk, no action needed:** a couple of animated views lack `collapsable={false}` but have safely-pinned elevation (the harmless half of that bug class); two tab-toggle components change elevation between states but route through a component that already remounts on state change (a different, adequate fix); several small decorative dots/handles are sized relative to their own tiny parent control, never a "different phone" risk.
 
-**Clean:** no stale `Dimensions.get()` calls anywhere (consistently uses `useWindowDimensions()`); `buttonDepth`/`neonSelected` helpers already ship correct cross-platform shadow properties, so the shadow gaps above are the exception, not the rule.
+**Clean:** no stale `Dimensions.get()` calls anywhere (consistently uses `useWindowDimensions()`); `buttonDepth`/`neonSelected` helpers already ship correct cross-platform shadow properties, so the shadow gaps above were the exception, not the rule.
+
+## In-app bug reporting (2026-09-14, in progress)
+
+- [x] "Report a Bug" text field in Settings, submits to a new Firestore `bugReports` collection (`src/api/bugReports.js`). One-way mailbox - the app never reads it back.
+- [ ] **Firestore security rules for `bugReports`** — need write-only access for any signed-in (anonymous) user, no read/update/delete from the client at all (only the scheduled daily check, running server-side, needs to read/update status):
+  ```
+  match /bugReports/{reportId} {
+    allow create: if request.auth != null;
+    allow read, update, delete: if false;
+  }
+  ```
+- [ ] Push the repo to a private GitHub remote — required before the daily scheduled cloud agent can clone/access the code at all. In progress 2026-09-14.
+- [ ] Set up the daily scheduled cloud routine (via Claude's `/schedule`) — reads new `bugReports` since last run, investigates, attempts real fixes on a branch (not pushed - user explicitly chose "attempt real fixes unattended" over "propose only"), and produces a daily digest split into: done/awaiting your approval to push, vs. needs your feedback before proceeding. Blocked on the GitHub push above.
 
 ## Someday / vision
 
