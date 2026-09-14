@@ -888,6 +888,7 @@ function AppInner() {
         setProfile={setProfile}
         preferences={preferences}
         setPreferences={setPreferences}
+        myUid={myUid}
       />
 
       <FabMenu
