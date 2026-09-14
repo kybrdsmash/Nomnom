@@ -118,6 +118,63 @@ export default function RollingFoodStrip({ onLongPressFood }) {
     setRollers(next);
   };
 
+  // Drives continuous spinning as a self-re-chaining sequence of single-turn
+  // Animated.timing calls, rather than Animated.loop - a real bug in
+  // Animated.loop's NATIVE repeat mode (verified against React Native's own
+  // source, AnimatedImplementation.js): with useNativeDriver, .start()
+  // replays the exact same from->to arc captured at THAT .start() call on
+  // every subsequent native repeat, not just the first. Resuming from a
+  // non-zero value (via setValue, which pause/scrub here need to do so the
+  // roller freezes exactly in place) means every repeat after the first
+  // replayed that same short PARTIAL arc instead of a fresh 360deg turn -
+  // looked like the icon spinning a tiny fraction of a turn (~15-30deg, a
+  // typical "how far into this lap was it when paused" remainder) then
+  // stuttering in place forever (user report - persisted even after
+  // properly stopping the OLD loop before resuming, since the bug was in
+  // the RESUMED loop's own native configuration, not leftover state from
+  // the old one). Manually chaining turns and explicitly wrapping the value
+  // back to 0 between them sidesteps native repeat mode entirely - every
+  // turn after the first is always a fresh full circle, never replayed.
+  //
+  // `fromValue` is only meaningful for the FIRST turn in a chain (0 for a
+  // fresh spawn, or wherever `currentRotateRef` was frozen for a resume) -
+  // every turn after that always passes 0 explicitly, rather than reading
+  // back through currentRotateRef (whose listener update is itself an async
+  // native round-trip, so reading it immediately after this function's own
+  // setValue(0) below isn't guaranteed to see that write yet).
+  const spinRoller = (roller, fromValue) => {
+    roller.spinActive = true;
+    // A resumed turn only covers whatever's left of the current lap, at the
+    // same steady rate - not a fresh full ROTATION_MS - so resuming doesn't
+    // visibly change the roller's rotation speed.
+    const duration = Math.max(0, ROTATION_MS * (1 - fromValue));
+    Animated.timing(roller.rotate, {
+      toValue: 1,
+      duration,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      // A stale completion from a turn that got stopped mid-flight (pause,
+      // exit, scrub) - either finished:false directly, or spinActive was
+      // already flipped off by the time this lands. Don't chain another
+      // turn in either case.
+      if (!finished || !roller.spinActive) return;
+      roller.rotate.setValue(0);
+      spinRoller(roller, 0);
+    });
+  };
+
+  // Single place every pause/exit/scrub-grant path stops a roller's spin
+  // from - centralizing this is what the original bug report's root cause
+  // was missing (see git history: handleTapRoller's pause branch used to
+  // skip two of these three steps that the scrub gesture's pause already
+  // did correctly).
+  const stopRollerSpin = (roller) => {
+    roller.spinActive = false;
+    roller.rotate.stopAnimation();
+    roller.rotate.setValue(roller.currentRotateRef.current);
+  };
+
   // Pure roller construction - does NOT touch state, callers add the
   // result themselves. `startX` overrides the default spawn edge (used by
   // the scrub gesture, which places a newly-revealed icon wherever the
@@ -138,31 +195,21 @@ export default function RollingFoodStrip({ onLongPressFood }) {
     // Mirrors currentXRef above - keeps a plain, synchronously-readable
     // copy of `rotate`'s current angle updated as the native-driven
     // animation runs, so pausing/scrubbing can freeze it exactly without
-    // needing stopAnimation()'s async native round-trip (see the comment
-    // on the pause branch below for why that was still racy).
+    // needing stopAnimation()'s async native round-trip.
     const currentRotateRef = { current: 0 };
     const rotateListenerId = rotate.addListener(({ value }) => { currentRotateRef.current = value; });
-    // resetBeforeIteration: false - Animated.loop otherwise resets its
-    // value back to whatever it was AT CONSTRUCTION TIME (0) before every
-    // single .start() call, not just the first. That's invisible during
-    // uninterrupted rolling, but freezing `rotate` mid-spin at some
-    // non-boundary value and later restarting the loop needs it to
-    // continue from wherever `rotate` actually is, not snap back to 0.
-    const rotateAnim = Animated.loop(
-      Animated.timing(rotate, { toValue: 1, duration: ROTATION_MS, easing: Easing.linear, useNativeDriver: true }),
-      { resetBeforeIteration: false }
-    );
     const tripDuration = randomBetween(MIN_TRIP_MS, MAX_TRIP_MS);
     const roller = {
-      id, food: food || pickFood(), translateX, rotate, rotateAnim, currentXRef, listenerId,
+      id, food: food || pickFood(), translateX, rotate, currentXRef, listenerId,
       currentRotateRef, rotateListenerId, tripDuration, paused: false,
+      spinActive: false, // set true by spinRoller, false by stopRollerSpin
     };
     // Built once here (not per-render) and kept for the roller's whole
     // lifetime - see createRollerPanResponder below for why tap/long-
     // press/swipe-toss all need to be resolved by one responder.
     roller.panResponder = createRollerPanResponder(id);
     if (animate) {
-      rotateAnim.start();
+      spinRoller(roller, 0);
       // Linear, not eased - a background decoration rolling at a steady
       // pace reads as "rolling"; easing in/out would look like it was
       // accelerating or braking for no reason.
@@ -188,7 +235,7 @@ export default function RollingFoodStrip({ onLongPressFood }) {
   const exitRoller = (id, { feedsHistory = true } = {}) => {
     const roller = rollersRef.current.find((r) => r.id === id);
     if (!roller) return;
-    roller.rotateAnim.stop();
+    stopRollerSpin(roller);
     roller.translateX.removeListener(roller.listenerId);
     roller.rotate.removeListener(roller.rotateListenerId);
     if (feedsHistory) {
@@ -214,7 +261,7 @@ export default function RollingFoodStrip({ onLongPressFood }) {
       const remainingDistance = (width + ICON_SIZE) - roller.currentXRef.current;
       const totalDistance = width + ICON_SIZE * 2;
       const remainingDuration = Math.max(300, roller.tripDuration * (remainingDistance / totalDistance));
-      roller.rotateAnim.start();
+      spinRoller(roller, roller.currentRotateRef.current);
       Animated.timing(roller.translateX, {
         toValue: width + ICON_SIZE,
         duration: remainingDuration,
@@ -240,35 +287,25 @@ export default function RollingFoodStrip({ onLongPressFood }) {
       // stopAnimation() can make the NEXT Animated.timing (on resume, below)
       // start from a stale old value instead of wherever it actually
       // visually stopped, which looked like the roller froze and never
-      // continued after being tapped again (user feedback).
-      //
-      // Both values read from their own live-tracked ref (currentXRef /
-      // currentRotateRef, both kept current by a listener added at spawn)
-      // rather than stopAnimation(callback) - that callback resolves through
-      // an async round-trip to the native side, and if a resume happens
-      // before that round-trip lands, its setValue() arrives AFTER the new
-      // resume animation has already started and (setValue always stops
-      // whatever animation is currently running on a value) yanks it right
-      // back to the stale pre-pause position - "stutters and doesn't roll"
-      // after being tapped to resume (user report). translateX used to still
-      // do this the racy way even after rotate was fixed for the identical
-      // race, which is exactly why the stutter persisted for the position
-      // (not just the rotation) on a quick pause-then-resume.
+      // continued after being tapped again (user feedback). Reads from its
+      // own live-tracked ref (currentXRef, kept current by a listener added
+      // at spawn) rather than stopAnimation(callback) - that callback
+      // resolves through an async round-trip to the native side, and if a
+      // resume happens before that round-trip lands, its setValue() arrives
+      // AFTER the new resume animation has already started and yanks it
+      // right back to the stale pre-pause position.
       r.translateX.stopAnimation();
       r.translateX.setValue(r.currentXRef.current);
-      // `rotate`'s fix above was itself incomplete - it synced the JS-side
-      // value but never called stopAnimation() on the value or .stop() on
-      // the `rotateAnim` loop wrapping it (stripPan's grant handler below
-      // does both, and doesn't have this bug). Without those two calls, the
-      // Animated.loop instance's own internal restart bookkeeping never
-      // learns it was interrupted, so a later tap-to-resume's
-      // `rotateAnim.start()` can race against a stray in-flight native
-      // completion from the OLD loop iteration - looked like the icon
-      // resuming, spinning a fraction of a turn (~15-30deg), then stuttering
-      // and freezing as the two competed for the same value (user report).
-      r.rotate.stopAnimation();
-      r.rotate.setValue(r.currentRotateRef.current);
-      r.rotateAnim.stop();
+      // rotate's actual bug (see spinRoller's comment above buildRoller for
+      // the full story, verified against React Native's own source): it
+      // isn't about stopping the OLD spin cleanly before resuming - it's
+      // that Animated.loop's native repeat mode replays the exact arc
+      // captured at .start() on every repeat, so resuming from a non-zero
+      // value made every lap after the first replay that same short
+      // leftover arc instead of a fresh turn. stopRollerSpin here just
+      // freezes the value in place for now; spinRoller (used on resume)
+      // is what actually avoids the bug.
+      stopRollerSpin(r);
     });
     const pausedIds = new Set(toPause.map((r) => r.id));
     setRollersBoth(rollersRef.current.map((r) => (pausedIds.has(r.id) ? { ...r, paused: true } : r)));
@@ -284,7 +321,7 @@ export default function RollingFoodStrip({ onLongPressFood }) {
     const roller = rollersRef.current.find((r) => r.id === id);
     if (!roller) return;
     const target = direction === 'left' ? -ICON_SIZE : width + ICON_SIZE;
-    roller.rotateAnim.start();
+    spinRoller(roller, roller.currentRotateRef.current);
     Animated.timing(roller.translateX, {
       toValue: target,
       duration: TOSS_DURATION_MS,
@@ -378,7 +415,7 @@ export default function RollingFoodStrip({ onLongPressFood }) {
     rollersRef.current.forEach((r) => {
       const newX = r.currentXRef.current + delta;
       if (newX > width + ICON_SIZE || newX < -ICON_SIZE) {
-        r.rotateAnim.stop();
+        stopRollerSpin(r);
         r.translateX.removeListener(r.listenerId);
         r.rotate.removeListener(r.rotateListenerId);
         if (newX > width + ICON_SIZE) {
@@ -415,7 +452,7 @@ export default function RollingFoodStrip({ onLongPressFood }) {
       const remainingDistance = (width + ICON_SIZE) - r.currentXRef.current;
       const totalDistance = width + ICON_SIZE * 2;
       const remainingDuration = Math.max(300, r.tripDuration * (remainingDistance / totalDistance));
-      r.rotateAnim.start();
+      spinRoller(r, r.currentRotateRef.current);
       Animated.timing(r.translateX, {
         toValue: width + ICON_SIZE,
         duration: remainingDuration,
@@ -447,9 +484,7 @@ export default function RollingFoodStrip({ onLongPressFood }) {
         rollersRef.current.forEach((r) => {
           r.translateX.stopAnimation();
           r.translateX.setValue(r.currentXRef.current);
-          r.rotate.stopAnimation();
-          r.rotate.setValue(r.currentRotateRef.current);
-          r.rotateAnim.stop();
+          stopRollerSpin(r);
         });
       },
       onPanResponderMove: (evt) => {
@@ -488,7 +523,7 @@ export default function RollingFoodStrip({ onLongPressFood }) {
     return () => {
       clearTimeout(timeoutRef.current);
       rollersRef.current.forEach((r) => {
-        r.rotateAnim.stop();
+        stopRollerSpin(r);
         r.translateX.removeListener(r.listenerId);
         r.rotate.removeListener(r.rotateListenerId);
       });
