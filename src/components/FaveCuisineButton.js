@@ -169,6 +169,15 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
         clearLongPressTimer();
         Animated.spring(slideY, { toValue: 0, useNativeDriver: true }).start();
       },
+      // This button lives inside a real vertical ScrollView (see
+      // CuisineDropdown.js), and its own gesture is also vertical - iOS's
+      // native scroll view gesture recognizer is more aggressive than
+      // Android's about reclaiming a touch from a child responder mid-
+      // gesture, which could otherwise cut a swipe-to-roll short partway
+      // through. Telling the OS this responder should not yield once
+      // granted is the standard defensive mitigation for that conflict -
+      // not yet verified on a real iOS device.
+      onPanResponderTerminationRequest: () => false,
     })
   ).current;
 

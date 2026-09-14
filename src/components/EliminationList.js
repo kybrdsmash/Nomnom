@@ -141,13 +141,23 @@ export default function EliminationList({ eliminationList, fullBracket, eliminat
 }
 
 const makeStyles = (colors) => StyleSheet.create({
-  eliminationWrapper: { width: '90%', alignItems: 'center', backgroundColor: colors.card, padding: 20, borderRadius: 20, elevation: 5 },
+  // ...buttonDepth adds the shadowColor/shadowOffset/shadowOpacity/shadowRadius
+  // set iOS actually needs (bare elevation renders completely flat there) -
+  // elevation re-pinned to 5 after the spread to keep this card's original
+  // Android depth unchanged.
+  eliminationWrapper: { width: '90%', alignItems: 'center', backgroundColor: colors.card, padding: 20, borderRadius: 20, ...buttonDepth, elevation: 5 },
   eliminationHeader: { color: colors.accent, fontSize: 24, fontWeight: '900', marginBottom: 4, letterSpacing: 1 },
   eliminationSubheader: { color: colors.textMuted, fontSize: 12, marginBottom: 12 },
   // maxHeight is applied inline (see scrollMaxHeight above) - computed from
   // the real screen height rather than a static value here.
   elimScroll: { width: '100%' },
-  elimCard: { flexDirection: 'row', backgroundColor: colors.cardAlt, width: '100%', padding: 10, borderRadius: 12, marginBottom: 10, alignItems: 'center' },
+  // elevation pinned constant (10, matching neonSelected's) whether selected
+  // or not - same fix as App.js's modeBtn/FilterPanel's toggleBtnSmall/
+  // ResultCard's iconBtn: Android can leave a view stuck blank after its
+  // elevation changes between renders (this row had none at rest -> 10 once
+  // selected/synced with the map pin, exactly that jump). Only the glow/
+  // border from neonSelected differs between states now.
+  elimCard: { flexDirection: 'row', backgroundColor: colors.cardAlt, width: '100%', padding: 10, borderRadius: 12, marginBottom: 10, alignItems: 'center', elevation: 10 },
   // Greyed out, not removed - the row itself stays put so the whole bracket
   // is still visible after an elimination, just visibly "crossed out".
   elimCardOut: { opacity: 0.45 },

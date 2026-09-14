@@ -91,7 +91,11 @@ export default function BrowseList({ spots, location, onRefresh, onCancel, onSho
 }
 
 const makeStyles = (colors) => StyleSheet.create({
-  wrapper: { width: '90%', maxHeight: '80%', alignItems: 'center', backgroundColor: colors.card, padding: 20, borderRadius: 20, elevation: 5 },
+  // ...buttonDepth adds the shadowColor/shadowOffset/shadowOpacity/shadowRadius
+  // set iOS actually needs (bare elevation renders completely flat there) -
+  // elevation re-pinned to 5 after the spread to keep this card's original
+  // Android depth unchanged.
+  wrapper: { width: '90%', maxHeight: '80%', alignItems: 'center', backgroundColor: colors.card, padding: 20, borderRadius: 20, ...buttonDepth, elevation: 5 },
   header: { color: colors.accent, fontSize: 24, fontWeight: '900', marginBottom: 4, letterSpacing: 1 },
   subheader: { color: colors.textMuted, fontSize: 12, marginBottom: 12 },
   scroll: { width: '100%' },

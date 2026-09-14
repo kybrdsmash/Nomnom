@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Image, ScrollView, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { joinParts } from '../utils/format';
@@ -52,7 +53,8 @@ export default function HistoryFavoritesOverlay({
   location,
 }) {
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = makeStyles(colors, insets);
   // Shared across all three lists. Resets naturally each time the overlay
   // remounts - App.js only renders it while a non-'main' view is active, and
   // the only way to switch tabs is back to 'main' and in again.
@@ -310,8 +312,13 @@ export default function HistoryFavoritesOverlay({
   );
 }
 
-const makeStyles = (colors) => StyleSheet.create({
-  overlayScreen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 100, paddingTop: 60 },
+const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) => StyleSheet.create({
+  // paddingTop was a flat 60 guess (status-bar clearance, tuned on one
+  // physical phone - core RN's SafeAreaView is an iOS-only no-op). insets.top
+  // is the real per-device measurement; +12 is a small deliberate gap above
+  // the header row, matching FriendSpin.js/JournalOverlay.js's identical
+  // full-screen-overlay headers.
+  overlayScreen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 100, paddingTop: insets.top + 12 },
   overlayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 20 },
   overlayTitle: { color: colors.accent, fontSize: 24, fontWeight: 'bold', letterSpacing: 1 },
   overlayBack: { padding: 5 },
@@ -342,8 +349,12 @@ const makeStyles = (colors) => StyleSheet.create({
   chipActive: { backgroundColor: colors.accent },
   chipText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: colors.textDark, fontWeight: 'bold' },
+  // bottom adds insets.bottom on top of the original 30 - this FAB sits
+  // absolutely positioned near the true bottom edge, so without it a
+  // home-indicator/gesture-bar inset could collide with (or sit underneath)
+  // the button on devices that have one.
   addFab: {
-    position: 'absolute', bottom: 30, right: 30, width: 52, height: 52, borderRadius: 26,
+    position: 'absolute', bottom: insets.bottom + 30, right: 30, width: 52, height: 52, borderRadius: 26,
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
     ...buttonDepth, elevation: 20,
   },

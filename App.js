@@ -6,7 +6,6 @@ import {
   Pressable,
   Animated,
   ActivityIndicator,
-  SafeAreaView,
   LayoutAnimation,
   Platform,
   UIManager,
@@ -14,6 +13,12 @@ import {
   Linking,
   useWindowDimensions,
 } from 'react-native';
+// Core RN's SafeAreaView is a documented iOS-only no-op - it silently does
+// nothing on Android, which is why every "clear the status bar/nav bar"
+// value in this app used to be a hand-tuned guess instead of a real device
+// inset. This context-based version actually measures real insets on both
+// platforms.
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as ExpoLinking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,16 +73,19 @@ const CUISINE_DROPDOWN_BOTTOM_MARGIN = 40;
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AppInner />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppInner />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
 function AppInner() {
   const { colors } = useTheme();
   const vscale = useVerticalScale();
-  const styles = makeStyles(colors, vscale);
+  const insets = useSafeAreaInsets();
+  const styles = makeStyles(colors, vscale, insets);
   const { height: screenHeight } = useWindowDimensions();
   const [result, setResult] = useState(null);
   const [eliminationList, setEliminationList] = useState([]);
@@ -650,7 +658,14 @@ function AppInner() {
     eliminationList.length === 0 && browseList.length === 0;
 
   return (
-    <SafeAreaView style={styles.container} ref={containerRef}>
+    // edges restricted to left/right only - top/bottom real insets are
+    // applied by hand below (homeScreen, pingBanner) and additively inside
+    // each full-screen overlay's own useSafeAreaInsets() usage, since each
+    // of those wants a different amount of extra breathing room stacked on
+    // top of the raw inset, not just the inset alone. Letting this outer
+    // SafeAreaView also auto-pad top/bottom would double that padding on
+    // top of homeScreen's own.
+    <SafeAreaView style={styles.container} edges={['left', 'right']} ref={containerRef}>
       {activeView === 'friend' && (
         <FriendSpin
           location={location}
@@ -1003,7 +1018,7 @@ function AppInner() {
   );
 }
 
-const makeStyles = (colors, vscale = 1) => StyleSheet.create({
+const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, right: 0 }) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // paddingBottom trimmed from 100 - topControlsScroll below is flex:1 with
   // scrolling deliberately disabled (the filter panel must stay static), so
@@ -1023,14 +1038,27 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   // fixed constant per device report doesn't scale to "many phones
   // eventually" (user request), so this now adapts to whatever device it's
   // actually running on instead.
-  // paddingTop bumped 22 -> 60 (+38, matching the ~38dp/cm conversion used
-  // elsewhere in this app - see ResultCard.js's map padding history) to
-  // push the raccoon-through-Cuisines block down ~1cm (user request). Still
-  // multiplied by vscale like the rest of this padding, so on a short
-  // screen this push-down shrinks proportionally right along with
-  // everything else instead of eating back into the exact headroom the S20
-  // fix above was reclaiming.
-  homeScreen: { flex: 1, justifyContent: 'space-between', paddingTop: 60 * vscale, paddingBottom: 70 * vscale },
+  // paddingTop used to be a flat 60 (22 guessed status-bar clearance + 38 of
+  // deliberate push-down - see below), which is why it was flagged as a
+  // notch-clearance guess tuned on one physical phone (a documented core-RN
+  // SafeAreaView no-op on Android at the time). insets.top is now the real
+  // per-device measurement for that first part; the +38 push-down (matching
+  // the ~38dp/cm conversion used elsewhere in this app - see ResultCard.js's
+  // map padding history, to push the raccoon-through-Cuisines block down
+  // ~1cm per user request) is still multiplied by vscale like the rest of
+  // this padding, so on a short screen that deliberate push-down still
+  // shrinks proportionally right along with everything else, while the real
+  // inset itself is left unscaled since it's already an accurate per-device
+  // value, not a guess that needs shrinking.
+  // paddingBottom similarly adds insets.bottom (home-indicator/gesture-bar
+  // clearance) on top of the original 70*vscale bottom-of-screen buffer -
+  // see the paddingBottom history above this style used to have, now
+  // reclaimed as pure spacing rather than notch/gesture-bar clearance.
+  homeScreen: {
+    flex: 1, justifyContent: 'space-between',
+    paddingTop: insets.top + 38 * vscale,
+    paddingBottom: insets.bottom + 70 * vscale,
+  },
   // Same ~38dp/cm conversion this file already uses elsewhere (see
   // paddingTop's history above) - pulls the strip up out of the exact
   // center of its flex gap, closer to the Cuisines trigger above it, per
@@ -1113,8 +1141,13 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
     borderRadius: 20, elevation: 8,
   },
   toastText: { color: colors.textLight, fontWeight: 'bold', fontSize: 14 },
+  // top was a flat 60 guess (this banner is absolutely positioned, so the
+  // outer SafeAreaView's own padding - restricted to left/right anyway,
+  // see the return statement's comment - never reached it). insets.top is
+  // the real clearance now; +8 is just a small breathing-room gap below
+  // the status bar/notch, not a deliberate design push like homeScreen's.
   pingBanner: {
-    position: 'absolute', top: 60, left: 16, right: 16, zIndex: 210,
+    position: 'absolute', top: insets.top + 8, left: 16, right: 16, zIndex: 210,
   },
   pingRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card,

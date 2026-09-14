@@ -3,6 +3,7 @@ import {
   Modal, View, Animated, Pressable, Text, StyleSheet, FlatList, PanResponder, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -58,6 +59,7 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
  */
 export default function FullscreenImageViewer({ visible, photos, initialIndex = 0, onClose }) {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(initialIndex);
   const [zoomed, setZoomed] = useState(false);
   const flatListRef = useRef(null);
@@ -272,11 +274,16 @@ export default function FullscreenImageViewer({ visible, photos, initialIndex = 
             </Pressable>
           )}
         />
-        <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={16}>
+        {/* top/bottom overridden inline with real insets (base styles below
+            keep the flat 50/40 guesses as the fallback default only) - a
+            flat guess here risked sitting too close to an iPhone Dynamic
+            Island/notch or a bottom gesture bar on devices with a bigger
+            inset than whatever this was tuned against. */}
+        <Pressable style={[styles.closeBtn, { top: insets.top + 10 }]} onPress={onClose} hitSlop={16}>
           <Ionicons name="close" size={30} color="#FFF" />
         </Pressable>
         {photos.length > 1 && (
-          <View style={styles.counter} pointerEvents="none">
+          <View style={[styles.counter, { bottom: insets.bottom + 10 }]} pointerEvents="none">
             <Text style={styles.counterText}>{index + 1} / {photos.length}</Text>
           </View>
         )}
@@ -288,6 +295,10 @@ export default function FullscreenImageViewer({ visible, photos, initialIndex = 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center' },
   page: { alignItems: 'center', justifyContent: 'center' },
+  // top/bottom here are just fallback defaults - the real per-device values
+  // (insets.top/insets.bottom + a small breathing-room gap) are applied
+  // inline where these are used, since a bare StyleSheet has no access to
+  // useSafeAreaInsets().
   closeBtn: { position: 'absolute', top: 50, right: 20, padding: 8 },
   counter: {
     position: 'absolute', bottom: 40, alignSelf: 'center',

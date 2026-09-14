@@ -53,7 +53,21 @@ export default function DaydreamRaccoon() {
       />
       <View style={styles.trailDotSmall} />
       <View style={styles.trailDotBig} />
-      <View style={styles.bubble}>
+      {/* Without this, Android's view-flattening optimization can drop this
+          plain View from the native tree entirely (it has nothing but
+          layout + elevation to justify its own native backing view), which
+          means the permanent elevation:10 from neonSelected silently never
+          exists as a real layer on some devices/GPU drivers once its
+          native-driven Animated.Image child gets promoted onto its own
+          compositing layer - same combination (elevation + native-driven
+          animated child + no flattening guard) as the already-fixed
+          RollingFoodStrip.js/App.js topControlsScroll bugs (see
+          RollingFoodStrip.js's own collapsable={false} comment for the
+          fuller root-cause story), just hasn't been hit here yet. This
+          bubble sits absolutely positioned near the top of a scrolling
+          container that itself has elevation:15 (App.js's
+          topControlsScroll), so it's exactly the same risk shape. */}
+      <View style={styles.bubble} collapsable={false}>
         <LinearGradient {...accentGradient(colors)} style={StyleSheet.absoluteFill} />
         <Animated.Image source={FOODS[index].image} style={[styles.foodIcon, { opacity }]} resizeMode="contain" />
       </View>

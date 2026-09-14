@@ -6,6 +6,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as ExpoLinking from 'expo-linking';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth } from '../constants';
 import { joinParts } from '../utils/format';
@@ -43,7 +44,8 @@ export default function FriendSpin({
   friends, setFriends,
 }) {
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = makeStyles(colors, insets);
   const [step, setStep] = useState('menu'); // menu | hosting | joining | playing | done | error
   const [remoteFeedPhotos, setRemoteFeedPhotos] = useState([]);
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
@@ -753,10 +755,13 @@ export default function FriendSpin({
           </ScrollView>
           {/* marginBottom clears phones' bottom gesture bar/nav buttons - this
               screen is an absolutely-positioned overlay (see `screen` style)
-              that sits outside the top-level SafeAreaView's insets entirely,
-              so without it this sat flush against the very bottom edge on
-              some phones (user feedback). */}
-          <Pressable onPress={leaveSession} style={{ alignSelf: 'center', padding: 14, marginBottom: 20 }}>
+              that sits outside the top-level SafeAreaView's insets entirely
+              (that outer SafeAreaView is now restricted to left/right edges
+              only anyway - see App.js), so without real insets.bottom this
+              sat flush against the very bottom edge on some phones (user
+              feedback). The +20 on top is the original deliberate spacing,
+              kept as-is. */}
+          <Pressable onPress={leaveSession} style={{ alignSelf: 'center', padding: 14, marginBottom: insets.bottom + 20 }}>
             <Text style={styles.leaveText}>Leave session</Text>
           </Pressable>
         </View>
@@ -836,8 +841,13 @@ function Header({ onClose, title }) {
   );
 }
 
-const makeStyles = (colors) => StyleSheet.create({
-  screen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 90, paddingTop: 60 },
+const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) => StyleSheet.create({
+  // paddingTop was a flat 60 guess (status-bar clearance, tuned on one
+  // physical phone - core RN's SafeAreaView is an iOS-only no-op, so this
+  // never got real values on Android). insets.top is the real per-device
+  // measurement; +12 is a small deliberate gap above the header row so the
+  // back arrow/title don't sit flush against the notch/status bar.
+  screen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 90, paddingTop: insets.top + 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
   headerTitle: { color: colors.accent, fontSize: 20, fontWeight: 'bold', letterSpacing: 1 },
   centerCol: { flex: 1, alignItems: 'center', paddingHorizontal: 30, paddingTop: 30 },
@@ -890,7 +900,11 @@ const makeStyles = (colors) => StyleSheet.create({
   // elevation pinned constant (10) whether selected or not, same fix as
   // every other selected/unselected toggle this session - Android can leave
   // a view stuck blank after its elevation changes between renders.
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, padding: 10, borderRadius: 12, marginBottom: 10, elevation: 10 },
+  // ...buttonDepth adds the shadowColor/shadowOffset/shadowOpacity/shadowRadius
+  // set iOS actually needs (elevation alone renders completely flat there) -
+  // elevation is re-pinned to 10 after the spread since buttonDepth's own
+  // default (4) would otherwise clobber the constant this style depends on.
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, padding: 10, borderRadius: 12, marginBottom: 10, ...buttonDepth, elevation: 10 },
   // Greyed out, not removed - same treatment as solo Elimination mode.
   cardOut: { opacity: 0.45 },
   // Mirrors the map pin's glow when this spot's details were last opened.

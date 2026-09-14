@@ -112,11 +112,18 @@ const makeStyles = (colors) => StyleSheet.create({
   fabWrapper: { position: 'absolute', bottom: 30, right: 30, alignItems: 'flex-end', zIndex: 50 },
   fabSubMenu: { marginBottom: 12, alignItems: 'flex-end' },
   priceRow: { flexDirection: 'column', alignItems: 'center', marginBottom: 8 },
-  priceBtn: { backgroundColor: colors.card, borderWidth: 2, borderColor: colors.accent, minWidth: 44, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingHorizontal: 10, ...buttonDepth },
+  // elevation pinned constant (10, matching neonSelected's) whether active or
+  // not - same fix as App.js's modeBtn/FilterPanel's toggleBtnSmall/
+  // ResultCard's iconBtn: Android can leave a view stuck blank after its
+  // elevation changes between renders (was 4 via buttonDepth -> 10 via
+  // neonSelected, exactly that jump). Only backgroundColor/border/shadowColor
+  // differ between states now.
+  priceBtn: { backgroundColor: colors.card, borderWidth: 2, borderColor: colors.accent, minWidth: 44, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingHorizontal: 10, ...buttonDepth, elevation: 10 },
   priceBtnActive: { backgroundColor: colors.accent, ...neonSelected(colors) },
   priceText: { color: colors.accent, fontWeight: 'bold', fontSize: 13 },
   priceTextActive: { color: colors.textDark },
-  fabSubBtn: { backgroundColor: colors.card, borderWidth: 2, borderColor: colors.accent, width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', ...buttonDepth },
+  // Same elevation-pin fix as priceBtn/priceBtnActive above (4 -> 10 toggle).
+  fabSubBtn: { backgroundColor: colors.card, borderWidth: 2, borderColor: colors.accent, width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', ...buttonDepth, elevation: 10 },
   fabSubBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent, ...neonSelected(colors) },
   fabSubBtnSolid: { backgroundColor: colors.accent, width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', ...buttonDepth },
   fabMainBtn: { backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', ...buttonDepth },

@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth, accentGradient } from '../constants';
 import { hexToHsl, hslToHex } from '../utils/color';
+import { isFirebaseConfigured } from '../api/firebase';
+import { submitBugReport } from '../api/bugReports';
 import SlidableSegmented from './SlidableSegmented';
 
 // Fixed saturation keeps every pick in the same soft, glowing pastel
@@ -31,10 +33,29 @@ const brightnessStops = (hue) =>
  */
 export default function SettingsPanel({
   visible, showSettingsMenu, setShowSettingsMenu,
-  profile, setProfile, preferences, setPreferences,
+  profile, setProfile, preferences, setPreferences, myUid,
 }) {
   const { colors, accentColor, setAccentColor } = useTheme();
   const styles = makeStyles(colors);
+  const [bugText, setBugText] = useState('');
+  const [bugSubmitting, setBugSubmitting] = useState(false);
+  // 'idle' | 'sent' | 'error' - resets to 'idle' as soon as the text field
+  // is edited again, so a stale "Sent!" doesn't linger through a second,
+  // unrelated report.
+  const [bugStatus, setBugStatus] = useState('idle');
+
+  const submitBug = async () => {
+    if (!bugText.trim() || bugSubmitting) return;
+    setBugSubmitting(true);
+    const ok = await submitBugReport({ uid: myUid, description: bugText, displayName: profile.displayName });
+    setBugSubmitting(false);
+    if (ok) {
+      setBugText('');
+      setBugStatus('sent');
+    } else {
+      setBugStatus('error');
+    }
+  };
   const [hue, setHue] = useState(() => hexToHsl(accentColor).h);
   const [lightness, setLightness] = useState(() => clampLight(hexToHsl(accentColor).l));
   // Tap the Color/Brightness chip (top-right of this section) to switch
@@ -235,6 +256,32 @@ export default function SettingsPanel({
                 gradientColors={accentGradient(colors).colors}
               />
             </View>
+
+            {isFirebaseConfigured && (
+              <>
+                <Text style={styles.sectionTitle}>Report a Bug</Text>
+                <TextInput
+                  style={[styles.input, styles.bugInput]}
+                  value={bugText}
+                  onChangeText={(t) => { setBugText(t); setBugStatus('idle'); }}
+                  placeholder="What went wrong? Be as specific as you can - what you tapped, what you expected..."
+                  placeholderTextColor="#777"
+                  multiline
+                  maxLength={500}
+                />
+                <View style={styles.bugSubmitRow}>
+                  <Pressable
+                    style={[styles.bugSubmitBtn, (!bugText.trim() || bugSubmitting) && { opacity: 0.4 }]}
+                    disabled={!bugText.trim() || bugSubmitting}
+                    onPress={submitBug}
+                  >
+                    <Text style={styles.bugSubmitText}>{bugSubmitting ? 'Sending...' : 'Send'}</Text>
+                  </Pressable>
+                  {bugStatus === 'sent' && <Text style={styles.bugStatusSent}>Sent - thanks!</Text>}
+                  {bugStatus === 'error' && <Text style={styles.bugStatusError}>Couldn't send - try again</Text>}
+                </View>
+              </>
+            )}
           </View>
         )}
         <Pressable style={styles.gearBtn} onPress={() => setShowSettingsMenu(!showSettingsMenu)}>
@@ -249,7 +296,11 @@ const makeStyles = (colors) => StyleSheet.create({
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 },
   wrapper: { position: 'absolute', bottom: 30, left: 30, alignItems: 'flex-start', zIndex: 50 },
   gearBtn: { backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', ...buttonDepth },
-  panel: { backgroundColor: colors.card, borderRadius: 18, padding: 16, marginBottom: 12, width: 260, elevation: 6 },
+  // ...buttonDepth adds the shadowColor/shadowOffset/shadowOpacity/shadowRadius
+  // set iOS actually needs (bare elevation renders completely flat there) -
+  // elevation re-pinned to 6 after the spread to keep this panel's original
+  // Android depth unchanged.
+  panel: { backgroundColor: colors.card, borderRadius: 18, padding: 16, marginBottom: 12, width: 260, ...buttonDepth, elevation: 6 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 8 },
   modeIndicator: { flexDirection: 'row', alignItems: 'center' },
   modeIndicatorText: { color: colors.gold, fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
@@ -270,6 +321,12 @@ const makeStyles = (colors) => StyleSheet.create({
   // used).
   pickerDial: { position: 'absolute', top: 5, width: 28, height: 28, borderRadius: 14, ...neonSelected(colors) },
   input: { backgroundColor: colors.cardAlt, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: colors.textLight, fontSize: 14 },
+  bugInput: { minHeight: 70, textAlignVertical: 'top', marginBottom: 10 },
+  bugSubmitRow: { flexDirection: 'row', alignItems: 'center' },
+  bugSubmitBtn: { backgroundColor: colors.accent, borderRadius: 16, paddingVertical: 8, paddingHorizontal: 18, ...buttonDepth },
+  bugSubmitText: { color: colors.textDark, fontWeight: 'bold', fontSize: 13 },
+  bugStatusSent: { color: colors.accent, fontSize: 12, fontWeight: '600', marginLeft: 10 },
+  bugStatusError: { color: colors.danger, fontSize: 12, fontWeight: '600', marginLeft: 10 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   rowLabel: { color: colors.textLight, fontSize: 14, fontWeight: '600' },
   // Fixed width + flex:1 segments - NOT content-driven sizing. The active

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Image, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth } from '../constants';
 import { isFirebaseConfigured } from '../api/firebase';
@@ -33,7 +34,8 @@ function relativeTime(ts) {
  */
 export default function JournalOverlay({ onBack, journal, friends, onShowDetails, location }) {
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = makeStyles(colors, insets);
   const [tab, setTab] = useState('mine'); // 'mine' | 'friends'
   const [friendRows, setFriendRows] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
@@ -189,8 +191,13 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
   );
 }
 
-const makeStyles = (colors) => StyleSheet.create({
-  overlayScreen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 100, paddingTop: 60 },
+const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) => StyleSheet.create({
+  // paddingTop was a flat 60 guess (status-bar clearance, tuned on one
+  // physical phone - core RN's SafeAreaView is an iOS-only no-op). insets.top
+  // is the real per-device measurement; +12 is a small deliberate gap above
+  // the header row, matching FriendSpin.js/HistoryFavoritesOverlay.js's
+  // identical full-screen-overlay headers.
+  overlayScreen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 100, paddingTop: insets.top + 12 },
   overlayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
   overlayTitle: { color: colors.accent, fontSize: 24, fontWeight: 'bold', letterSpacing: 1 },
   overlayBack: { padding: 5 },
