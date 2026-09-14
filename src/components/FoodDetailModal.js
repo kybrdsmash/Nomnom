@@ -34,7 +34,10 @@ export default function FoodDetailModal({ visible, food, location, travelType, o
 
   const findNearby = async () => {
     setLoadingNearby(true);
-    const results = await searchNearbyByKeyword(location, travelType, food.name);
+    // closestOnly: true (user request) - deduped by chain, closest wins
+    // unless another's within 0.1mi (then most-reviewed wins instead), and
+    // only that single winner comes back - see searchNearbyByKeyword.
+    const results = await searchNearbyByKeyword(location, travelType, food.name, { closestOnly: true });
     setNearby(results);
     setSearchedNearby(true);
     setLoadingNearby(false);

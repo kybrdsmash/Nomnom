@@ -757,6 +757,11 @@ function classifySpot(spot) {
   return { label: '', unconfirmedCuisine: null };
 }
 
+// How close two candidates' distances have to be (miles) to count as
+// "basically tied for closest" rather than one being the clear winner - see
+// closestOnly below.
+const NEARBY_TIE_THRESHOLD_MILES = 0.1;
+
 /**
  * Nearby Search for a specific dish/food item by free text - e.g. "fried
  * chicken", or a rolling-strip food's name - rather than one of the fixed
@@ -765,9 +770,11 @@ function classifySpot(spot) {
  * normal search already uses (not a new API surface), just with an
  * arbitrary keyword and no cuisine allowlist (that allowlist is keyed to
  * the known CUISINES list, not free text). Used by the Cuisines dropdown's
- * dish-search field and FoodDetailModal's "find it nearby" button.
+ * dish-search field (a real list to browse, default behavior) and
+ * FoodDetailModal's "find it nearby" button (`closestOnly: true` - see
+ * below for why that one's a different shape entirely).
  */
-export async function searchNearbyByKeyword(location, travelType, keyword, { radiusMiles = 10 } = {}) {
+export async function searchNearbyByKeyword(location, travelType, keyword, { radiusMiles = 10, closestOnly = false } = {}) {
   if (!GOOGLE_API_KEY || !location || !keyword.trim()) return [];
 
   const radiusInMeters = Math.round(radiusMiles * 1609.34);
@@ -797,6 +804,42 @@ export async function searchNearbyByKeyword(location, travelType, keyword, { rad
     if ((spot.types || []).some((t) => NON_FOOD_TYPES.has(t))) return false;
     return true;
   });
+  if (results.length === 0) return [];
+
+  // FoodDetailModal's "Find X Near Me": you paused on one specific dish and
+  // want to know where to actually go get it right now, not browse a list -
+  // so this collapses down to a single answer instead of the dish-search
+  // dropdown's normal top-8-by-reviews list (user request).
+  if (closestOnly) {
+    // Same chain at multiple nearby locations reads as a repeat, not a
+    // second real option (user request: "no repeats") - mirrors
+    // fetchLocalFood's closestByName dedup, keeping only the closest branch
+    // of each distinct name.
+    const closestByName = new Map();
+    for (const spot of results) {
+      const key = spot.name.trim().toLowerCase();
+      const dist = parseFloat(getTrueDistance(
+        location.latitude, location.longitude,
+        spot.geometry.location.lat, spot.geometry.location.lng
+      ));
+      const existing = closestByName.get(key);
+      if (!existing || dist < existing.dist) {
+        closestByName.set(key, { spot, dist });
+      }
+    }
+    const deduped = [...closestByName.values()];
+
+    // Closest wins outright, UNLESS one or more others are within
+    // NEARBY_TIE_THRESHOLD_MILES of it - close enough that "closest" is
+    // basically a coin flip, so among that tied-for-closest group, prefer
+    // whichever has the most reviews instead (user request).
+    const minDist = Math.min(...deduped.map((d) => d.dist));
+    const closestTier = deduped.filter((d) => d.dist - minDist <= NEARBY_TIE_THRESHOLD_MILES);
+    const winner = closestTier.sort(
+      (a, b) => (b.spot.user_ratings_total || 0) - (a.spot.user_ratings_total || 0)
+    )[0];
+    return [shapeSpot(winner.spot, location, travelType)];
+  }
 
   // Most-reviewed first - same "review volume beats a marginally higher
   // rating" logic fetchLocalFood uses.
