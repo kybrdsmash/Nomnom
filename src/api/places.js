@@ -770,9 +770,9 @@ const NEARBY_TIE_THRESHOLD_MILES = 0.1;
  * normal search already uses (not a new API surface), just with an
  * arbitrary keyword and no cuisine allowlist (that allowlist is keyed to
  * the known CUISINES list, not free text). Used by the Cuisines dropdown's
- * dish-search field (a real list to browse, default behavior) and
- * FoodDetailModal's "find it nearby" button (`closestOnly: true` - see
- * below for why that one's a different shape entirely).
+ * dish-search field (sorted by review count, default behavior) and
+ * FoodDetailModal's "find it nearby" button (`closestOnly: true` - sorted
+ * by distance instead, deduped by chain - see below).
  */
 export async function searchNearbyByKeyword(location, travelType, keyword, { radiusMiles = 10, closestOnly = false } = {}) {
   if (!GOOGLE_API_KEY || !location || !keyword.trim()) return [];
@@ -806,10 +806,11 @@ export async function searchNearbyByKeyword(location, travelType, keyword, { rad
   });
   if (results.length === 0) return [];
 
-  // FoodDetailModal's "Find X Near Me": you paused on one specific dish and
-  // want to know where to actually go get it right now, not browse a list -
-  // so this collapses down to a single answer instead of the dish-search
-  // dropdown's normal top-8-by-reviews list (user request).
+  // FoodDetailModal's "Find X Near Me": still a browsable list ("it should
+  // be showing many more like before" - user correction after an earlier
+  // pass collapsed this to a single result, which turned out to be more
+  // than was actually wanted), just ordered by distance instead of review
+  // count, deduped by chain, and with near-ties broken by reviews.
   if (closestOnly) {
     // Same chain at multiple nearby locations reads as a repeat, not a
     // second real option (user request: "no repeats") - mirrors
@@ -829,16 +830,20 @@ export async function searchNearbyByKeyword(location, travelType, keyword, { rad
     }
     const deduped = [...closestByName.values()];
 
-    // Closest wins outright, UNLESS one or more others are within
-    // NEARBY_TIE_THRESHOLD_MILES of it - close enough that "closest" is
-    // basically a coin flip, so among that tied-for-closest group, prefer
-    // whichever has the most reviews instead (user request).
-    const minDist = Math.min(...deduped.map((d) => d.dist));
-    const closestTier = deduped.filter((d) => d.dist - minDist <= NEARBY_TIE_THRESHOLD_MILES);
-    const winner = closestTier.sort(
-      (a, b) => (b.spot.user_ratings_total || 0) - (a.spot.user_ratings_total || 0)
-    )[0];
-    return [shapeSpot(winner.spot, location, travelType)];
+    // Closest-first overall, but two spots within NEARBY_TIE_THRESHOLD_MILES
+    // of each other are treated as tied for that position and ordered by
+    // review count instead (user request). Bucketing distance into
+    // NEARBY_TIE_THRESHOLD_MILES-wide steps first (rather than a raw
+    // epsilon comparator) keeps the sort a proper total order across the
+    // whole list, not just correct for whichever pair happens to be
+    // compared first.
+    deduped.sort((a, b) => {
+      const bucketA = Math.round(a.dist / NEARBY_TIE_THRESHOLD_MILES);
+      const bucketB = Math.round(b.dist / NEARBY_TIE_THRESHOLD_MILES);
+      if (bucketA !== bucketB) return bucketA - bucketB;
+      return (b.spot.user_ratings_total || 0) - (a.spot.user_ratings_total || 0);
+    });
+    return deduped.slice(0, 8).map(({ spot }) => shapeSpot(spot, location, travelType));
   }
 
   // Most-reviewed first - same "review volume beats a marginally higher
