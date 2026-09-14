@@ -16,44 +16,16 @@ import SpotsMap from './SpotsMap';
  * from the same cached pool for free until it runs out (see places.js's
  * `allowRepeats: false` - no padding with repeats once fresh spots run low,
  * unlike a single flip or bracket).
+ *
+ * No cuisine-grouped sections (user request: drop the "[Cuisine] Spots
+ * Nearby" banners entirely) - just one flat list in the pool's existing
+ * review-count order. The cuisine is still surfaced, just inline per card
+ * instead of as a section header - see renderCard below.
  */
-// Splits the (already review-count-sorted) pool into three buckets (user
-// request, after a ramen spot showed up headed "Brazilian Spots Nearby" -
-// a genuine fallback result, not actually Brazilian): every unconfirmed
-// spot (see places.js's `unconfirmedCuisine` - Google had zero real
-// matches for that cuisine, so this is the closest option instead) is
-// pooled together with NO cuisine-specific banner, since claiming a
-// specific cuisine for a result that isn't confirmed is exactly what
-// caused the confusion. Confirmed spots are grouped by which cuisine
-// actually matched (`confirmedCuisine`) and DO get a "[Cuisine] Spots
-// Nearby" banner - that banner is now reserved for genuine matches only.
-// Confirmed spots with no specific cuisine (no cuisine filter was active)
-// stay ungrouped too, same as before.
-function groupSpots(spots) {
-  const unconfirmed = spots.filter((s) => s.unconfirmedCuisine);
-  const confirmedUngrouped = [];
-  const confirmedGroups = [];
-  spots.forEach((s) => {
-    if (s.unconfirmedCuisine) return;
-    if (!s.confirmedCuisine) {
-      confirmedUngrouped.push(s);
-      return;
-    }
-    let group = confirmedGroups.find((g) => g.cuisine === s.confirmedCuisine);
-    if (!group) {
-      group = { cuisine: s.confirmedCuisine, spots: [] };
-      confirmedGroups.push(group);
-    }
-    group.spots.push(s);
-  });
-  return { unconfirmed, confirmedUngrouped, confirmedGroups };
-}
-
 export default function BrowseList({ spots, location, onRefresh, onCancel, onShowDetails }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
-  const { unconfirmed, confirmedUngrouped, confirmedGroups } = groupSpots(spots);
 
   const renderCard = (spot) => (
     <Pressable key={spot.id} style={styles.card} onPress={() => onShowDetails(spot)}>
@@ -70,7 +42,14 @@ export default function BrowseList({ spots, location, onRefresh, onCancel, onSho
       <View style={styles.textCol}>
         <Text style={styles.title} numberOfLines={1}>{spot.name}</Text>
         <Text style={styles.sub} numberOfLines={1}>
-          {joinParts([`⭐ ${spot.rating}`, spot.type, spot.distance])}
+          {/* Prefer the actually-confirmed cuisine (the filter that matched,
+              e.g. "Mexican") over Google's own type label when both are
+              known - it's the more meaningful/trustworthy one here, since
+              it's tied to what was actually searched for rather than
+              Google's sometimes-generic classification. Falls back to
+              `type` when no cuisine filter was active (confirmedCuisine is
+              null) or the spot's cuisine wasn't confirmed at all. */}
+          {joinParts([`⭐ ${spot.rating}`, spot.confirmedCuisine || spot.type, spot.distance])}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
@@ -89,17 +68,7 @@ export default function BrowseList({ spots, location, onRefresh, onCancel, onSho
       <SpotsMap location={location} spots={spots} onSelectSpot={onShowDetails} />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Unconfirmed spots and confirmed-but-no-active-filter spots both
-            render with no cuisine banner (see groupSpots above) - only a
-            genuinely confirmed cuisine group gets a header. */}
-        {unconfirmed.map(renderCard)}
-        {confirmedUngrouped.map(renderCard)}
-        {confirmedGroups.map((group) => (
-          <View key={group.cuisine}>
-            <Text style={styles.groupHeader}>{group.cuisine} Spots Nearby</Text>
-            {group.spots.map(renderCard)}
-          </View>
-        ))}
+        {spots.map(renderCard)}
       </ScrollView>
 
       <View style={styles.actionRow}>
@@ -125,10 +94,6 @@ const makeStyles = (colors) => StyleSheet.create({
   wrapper: { width: '90%', maxHeight: '80%', alignItems: 'center', backgroundColor: colors.card, padding: 20, borderRadius: 20, elevation: 5 },
   header: { color: colors.accent, fontSize: 24, fontWeight: '900', marginBottom: 4, letterSpacing: 1 },
   subheader: { color: colors.textMuted, fontSize: 12, marginBottom: 12 },
-  groupHeader: {
-    color: colors.textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase',
-    letterSpacing: 0.5, marginTop: 4, marginBottom: 8,
-  },
   scroll: { width: '100%' },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardAlt, width: '100%', padding: 10, borderRadius: 12, marginBottom: 10 },
   repeatDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFF', marginRight: 10 },
