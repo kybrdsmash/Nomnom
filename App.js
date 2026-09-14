@@ -55,6 +55,7 @@ import {
   loadJournal, saveJournal,
 } from './src/storage';
 import { pushJournal } from './src/api/journal';
+import { uploadJournalPhoto, deleteJournalPhoto } from './src/api/journalPhotos';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -346,7 +347,18 @@ function AppInner() {
   // known.
   useEffect(() => {
     if (!storageLoaded || !myUid || !isFirebaseConfigured) return;
-    pushJournal(myUid, journal, friends.map((f) => f.uid));
+    // photoUri is a local file:// path - meaningless (and inaccessible) on a
+    // friend's device, so it's stripped before mirroring rather than synced
+    // for no reason. sharedPhotoUrl is left as-is: it's only ever present on
+    // an entry while photoShared is true (see toggleEntryPhotoShare), so a
+    // friend querying this doc directly never sees a photo you've unshared.
+    const shareable = Object.fromEntries(
+      Object.entries(journal).map(([placeId, entries]) => [
+        placeId,
+        entries.map(({ photoUri, ...rest }) => rest),
+      ])
+    );
+    pushJournal(myUid, shareable, friends.map((f) => f.uid));
   }, [journal, friends, storageLoaded, myUid]);
 
   const estimatedMaxTime = React.useMemo(
@@ -547,11 +559,14 @@ function AppInner() {
   // trimmed snapshot (id/name/lat/lng/rating/type/blurb/photoUrl) stored
   // alongside the rating/note so the journal-browser screen can render/
   // reopen it without a fresh Places lookup, same as History/Favorites.
-  const addJournalEntry = (placeId, { rating, note, spot }) => {
+  // `photoUri` is a local file:// path a photo was copied to (see
+  // DetailModal's image picker) - stays local-only until explicitly shared,
+  // see toggleEntryPhotoShare below.
+  const addJournalEntry = (placeId, { rating, note, spot, photoUri }) => {
     const now = Date.now();
     const entry = {
       id: Math.random().toString(36).slice(2),
-      rating, note, spot,
+      rating, note, spot, photoUri,
       createdAt: now,
       updatedAt: now,
     };
@@ -563,13 +578,32 @@ function AppInner() {
 
   // Lets a late/days-later writeup get fixed up afterward (user request) -
   // mutates that one entry in place by id rather than adding another.
-  const editJournalEntry = (placeId, entryId, { rating, note }) => {
+  const editJournalEntry = (placeId, entryId, { rating, note, photoUri }) => {
     setJournal((prev) => ({
       ...prev,
       [placeId]: (prev[placeId] || []).map((e) =>
-        e.id === entryId ? { ...e, rating, note, updatedAt: Date.now() } : e
+        e.id === entryId ? { ...e, rating, note, photoUri, updatedAt: Date.now() } : e
       ),
     }));
+  };
+
+  // Turns friend-visibility for one entry's photo on/off. Off by default and
+  // whenever this hasn't been called - the photo only ever leaves the device
+  // in response to an explicit tap here. Uploads/deletes the Storage object
+  // itself (not just a client-side flag) so unsharing actually revokes
+  // access rather than just hiding it in this app's UI - see journalPhotos.js.
+  const toggleEntryPhotoShare = async (placeId, entryId) => {
+    const entry = (journal[placeId] || []).find((e) => e.id === entryId);
+    if (!entry || !entry.photoUri || !myUid) return;
+    const sharing = !entry.photoShared;
+    const patch = sharing
+      ? { photoShared: true, sharedPhotoUrl: await uploadJournalPhoto(myUid, entryId, entry.photoUri) }
+      : { photoShared: false, sharedPhotoUrl: null };
+    setJournal((prev) => ({
+      ...prev,
+      [placeId]: (prev[placeId] || []).map((e) => (e.id === entryId ? { ...e, ...patch } : e)),
+    }));
+    if (!sharing) deleteJournalPhoto(myUid, entryId);
   };
 
   // For fixing a mis-tap (rated a spot never actually visited) - user
@@ -877,6 +911,7 @@ function AppInner() {
         onAddJournalEntry={addJournalEntry}
         onEditJournalEntry={editJournalEntry}
         onDeleteJournalEntry={deleteJournalEntry}
+        onToggleEntryPhotoShare={toggleEntryPhotoShare}
         friends={friends}
       />
 

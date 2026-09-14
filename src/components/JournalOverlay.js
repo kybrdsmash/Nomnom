@@ -8,6 +8,7 @@ import { fetchFriendJournal } from '../api/journal';
 import { groupByCity } from '../utils/location';
 import SlidableSegmented from './SlidableSegmented';
 import PlaceSearchBar from './PlaceSearchBar';
+import ReviewMilestoneBadge from './ReviewMilestoneBadge'; // prototype reward-system UI, see src/api/rewards.js
 
 function relativeTime(ts) {
   const mins = Math.floor((Date.now() - ts) / 60000);
@@ -140,6 +141,7 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
                 feedback about it anyway (user request) - picking a result
                 opens its normal detail view, where "Your Feedback" already
                 handles adding/editing an entry. */}
+            <ReviewMilestoneBadge journal={journal} />
             <PlaceSearchBar
               placeholder="Search for a restaurant to review..."
               onSelect={onShowDetails}

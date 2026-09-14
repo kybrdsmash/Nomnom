@@ -25,15 +25,27 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 
 ## Feed / Feast with Friends (in progress)
 
-- [ ] Friends-first reformat of the feed strip once there are enough real friend connections to test with (see TODO comment in `FriendSpin.js`)
+- [ ] Friends-first reformat of the feed strip once there are enough real friend connections to test with (deferred - not needed until there's a real friend graph to design against; see TODO comment in `FriendSpin.js`)
 - [ ] Firestore security rules for the new `feedPhotos` collection — confirm read/write is actually allowed, or the feed silently stays empty
+
+## Journal photos (2026-09-14)
+
+- [x] User-attached photos on journal entries, local-only by default, with an explicit per-photo "share with friends" toggle. Picker: `expo-image-picker`; local persistence via `expo-file-system`'s new File/Paths API (not the deprecated function-style API — that throws at runtime on this SDK version); sharing uploads to Firebase Storage (`src/api/journalPhotos.js`) and unsharing actually deletes the remote copy, not just hides it client-side. UI lives in `DetailModal.js`'s "Your Reviews" section.
+- [ ] **Firebase Storage security rules need configuring** — same gap as the `feedPhotos` Firestore rules above, but for Storage. Default rules deny all reads/writes, so sharing a photo will silently fail until rules are set in the Firebase console allowing `journalPhotos/{uid}/{entryId}` write access to `{uid}` and read access to anyone who can already read that user's journal doc (mirror the `journals/{uid}` Firestore rule in `src/api/journal.js`'s comment).
+- [ ] Known limitation: editing a journal entry's photo while it's already shared doesn't auto-refresh the shared copy - toggling share off/on again re-uploads. Left this way deliberately (re-sharing needs an explicit tap) rather than building silent re-upload-on-edit logic.
 
 ## Someday / vision
 
-- [ ] Real user photo uploads on reviews (camera/picker + Firebase Storage) — the actual long-term feed vision, current feed is a placeholder seeded from Google Places photos
-- [ ] Rewards system for completed reviews
-- [ ] Bring back a fancier coin-spin animation (currently uses RN's built-in `Animated` API on purpose, not Reanimated, to stay Expo-Go-compatible)
+- [ ] Rewards system for completed reviews — prototyped 2026-09-14, see below.
+- [x] ~~Fancier coin-spin animation~~ — bench built 2026-09-14, see below. Not yet applied to real code.
 
 ## Industrial design opens (from SESSION_HANDOFF.md)
 
 - [ ] Button/slider edge shimmer — a highlight that reads as light catching a glossy/beveled rim along the EDGE of a button/slider, not corner dots (a corner-dot attempt was tried and fully reverted 2026-08-01 — see git history if picking this back up)
+
+## Background agent outputs to review (2026-09-14)
+
+Both dispatched via the Agent tool, not yet acted on - review and either apply, redirect, or discard.
+
+- [ ] **Coin animation bench**: https://claude.ai/code/artifact/5ed1381e-5758-433f-a6a3-26b4c6405329 — live-tunable HTML bench mirroring CoinSpinner.js's exact easing/timing, with 3 off-by-default "fancier" proposals (anticipation dip, secondary micro-bounce, impact squash/stretch). No RN code changed yet - tune by eye in the bench, then hand back the numbers to apply to `src/components/CoinSpinner.js`/`src/constants.js`.
+- [ ] **Rewards system mockup**: https://claude.ai/code/artifact/4c3a5549-6c1d-4eb1-adf0-96fca96a00dd — 3 directions mocked up (Taste Rank badge, reviewing streak, milestone celebration toast). Direction 1 (Taste Rank badge) is implemented as a real prototype: `src/api/rewards.js` (new, pure functions) + `src/components/ReviewMilestoneBadge.js` (new) + one added line in `JournalOverlay.js`. This was a best guess at an underspecified one-line idea - treat as a rough draft to react to, not a finished feature.

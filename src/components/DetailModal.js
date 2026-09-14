@@ -4,6 +4,8 @@ import {
   ActivityIndicator, StyleSheet, Linking, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { File, Paths } from 'expo-file-system';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { fetchPlaceDetails } from '../api/details';
@@ -11,6 +13,19 @@ import { isFirebaseConfigured } from '../api/firebase';
 import { fetchFriendJournal } from '../api/journal';
 import { joinParts } from '../utils/format';
 import FullscreenImageViewer from './FullscreenImageViewer';
+
+// The picker's own returned URI can sit in a cache directory the OS is free
+// to evict under storage pressure - copying it into the app's document
+// directory first means an attached photo doesn't silently go missing later.
+async function pickAndPersistPhoto() {
+  // mediaTypes omitted - 'images' is already the default, and the old
+  // MediaTypeOptions enum this SDK version shipped before is deprecated.
+  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const dest = new File(Paths.document, `journal-photo-${Date.now()}.jpg`);
+  new File(result.assets[0].uri).copy(dest);
+  return dest.uri;
+}
 
 // "3m ago" / "5h ago" / "2d ago" / a full date past a month - used for both
 // "logged" and "edited" timestamps on a journal entry.
@@ -43,6 +58,7 @@ export default function DetailModal({
   onAddJournalEntry,
   onEditJournalEntry,
   onDeleteJournalEntry,
+  onToggleEntryPhotoShare,
   friends,
 }) {
   const { colors } = useTheme();
@@ -51,6 +67,10 @@ export default function DetailModal({
   const [loading, setLoading] = useState(false);
   // Which photo (by index) is currently blown up fullscreen - null when closed.
   const [fullscreenIndex, setFullscreenIndex] = useState(null);
+  // Separate from fullscreenIndex above (which indexes into Google's
+  // details.photos array) - this is a single journal-entry photo (local or a
+  // friend's shared one), addressed directly by URI rather than by index.
+  const [fullscreenEntryPhoto, setFullscreenEntryPhoto] = useState(null);
 
   // "Your Review" compose state - editingEntryId null means composing a
   // brand-new entry, otherwise it's the id of the existing entry being fixed
@@ -60,7 +80,13 @@ export default function DetailModal({
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [draftRating, setDraftRating] = useState(0);
   const [draftNote, setDraftNote] = useState('');
+  const [draftPhotoUri, setDraftPhotoUri] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  // Per-entry "sharing/unsharing right now" state, keyed by entry id - purely
+  // to disable that entry's toggle mid-request (the upload/delete itself is
+  // a network call) rather than letting a second tap fire while one's still
+  // in flight.
+  const [sharingEntryId, setSharingEntryId] = useState(null);
   // Most recent entry per friend who's rated this exact spot, fetched fresh
   // each time this modal opens (bounded by friend count - simplest v1, not
   // a live subscription).
@@ -112,22 +138,33 @@ export default function DetailModal({
     setEditingEntryId(null);
     setDraftRating(0);
     setDraftNote('');
+    setDraftPhotoUri(null);
     setComposing(true);
   };
   const startEdit = (entry) => {
     setEditingEntryId(entry.id);
     setDraftRating(entry.rating);
     setDraftNote(entry.note);
+    setDraftPhotoUri(entry.photoUri || null);
     setComposing(true);
+  };
+  const attachPhoto = async () => {
+    const uri = await pickAndPersistPhoto();
+    if (uri) setDraftPhotoUri(uri);
   };
   const submitFeedback = () => {
     if (draftRating === 0) return;
     if (editingEntryId) {
-      onEditJournalEntry(spot.id, editingEntryId, { rating: draftRating, note: draftNote.trim() });
+      // Note: if this entry's photo is already shared and the photo changes
+      // here, the shared copy isn't auto-refreshed - toggling share off/on
+      // again re-uploads the new one. Deliberate: re-sharing needs an
+      // explicit tap rather than silently swapping what a friend sees.
+      onEditJournalEntry(spot.id, editingEntryId, { rating: draftRating, note: draftNote.trim(), photoUri: draftPhotoUri });
     } else {
       onAddJournalEntry(spot.id, {
         rating: draftRating,
         note: draftNote.trim(),
+        photoUri: draftPhotoUri,
         spot: {
           id: spot.id, name: spot.name, lat: spot.lat, lng: spot.lng,
           rating: spot.rating, type: spot.type, blurb: spot.blurb, photoUrl: spot.photoUrl,
@@ -150,8 +187,22 @@ export default function DetailModal({
     setEditingEntryId(null);
   };
 
+  const shareThisPhoto = async (entry) => {
+    setSharingEntryId(entry.id);
+    try {
+      await onToggleEntryPhotoShare(spot.id, entry.id);
+    } finally {
+      setSharingEntryId(null);
+    }
+  };
+
   const renderEntryRow = (entry) => (
     <View key={entry.id} style={styles.entryRow}>
+      {entry.photoUri && (
+        <Pressable onPress={() => setFullscreenEntryPhoto(entry.photoUri)}>
+          <Image source={{ uri: entry.photoUri }} style={styles.entryPhoto} />
+        </Pressable>
+      )}
       <View style={{ flex: 1 }}>
         <Text style={styles.entryRating}>{'★'.repeat(entry.rating)}{'☆'.repeat(5 - entry.rating)}</Text>
         {!!entry.note && <Text style={styles.entryNote}>{entry.note}</Text>}
@@ -159,6 +210,27 @@ export default function DetailModal({
           Logged {relativeTime(entry.createdAt)}
           {entry.updatedAt !== entry.createdAt ? ` · edited ${relativeTime(entry.updatedAt)}` : ''}
         </Text>
+        {entry.photoUri && (
+          <Pressable
+            style={styles.shareToggleRow}
+            onPress={() => shareThisPhoto(entry)}
+            disabled={sharingEntryId === entry.id}
+            hitSlop={4}
+          >
+            {sharingEntryId === entry.id ? (
+              <ActivityIndicator size="small" color={colors.textMuted} />
+            ) : (
+              <Ionicons
+                name={entry.photoShared ? 'people' : 'people-outline'}
+                size={14}
+                color={entry.photoShared ? colors.accent : colors.textMuted}
+              />
+            )}
+            <Text style={[styles.shareToggleText, entry.photoShared && { color: colors.accent }]}>
+              {entry.photoShared ? 'Visible to friends' : 'Only visible to you'}
+            </Text>
+          </Pressable>
+        )}
       </View>
       <Pressable onPress={() => startEdit(entry)} hitSlop={8}>
         <Ionicons name="pencil" size={16} color={colors.textMuted} />
@@ -312,6 +384,30 @@ export default function DetailModal({
                       placeholderTextColor={colors.textMuted}
                       multiline
                     />
+                    <View style={styles.photoAttachRow}>
+                      {draftPhotoUri ? (
+                        <>
+                          <Image source={{ uri: draftPhotoUri }} style={styles.draftPhotoThumb} />
+                          <Pressable style={styles.photoAttachBtn} onPress={attachPhoto}>
+                            <Text style={styles.photoAttachText}>Change photo</Text>
+                          </Pressable>
+                          <Pressable onPress={() => setDraftPhotoUri(null)} hitSlop={8} style={{ marginLeft: 8 }}>
+                            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                          </Pressable>
+                        </>
+                      ) : (
+                        <Pressable style={styles.photoAttachBtn} onPress={attachPhoto}>
+                          <Ionicons name="camera-outline" size={16} color={colors.accent} />
+                          <Text style={styles.photoAttachText}>Add a photo</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                    {/* Stays private by default - only visible to you until
+                        the "Visible to friends" toggle on the saved entry
+                        below is explicitly tapped. */}
+                    {!!draftPhotoUri && (
+                      <Text style={styles.photoPrivacyHint}>Only visible to you until you share it</Text>
+                    )}
                     <View style={styles.composeButtonRow}>
                       <View style={{ flexDirection: 'row' }}>
                         <Pressable
@@ -363,9 +459,19 @@ export default function DetailModal({
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>Friends' Feedback</Text>
                   {friendEntries.map((e, i) => (
-                    <Text key={i} style={styles.friendFeedbackLine}>
-                      {e.name} ⭐{e.rating}{e.note ? ` - "${e.note}"` : ''}
-                    </Text>
+                    <View key={i} style={styles.friendFeedbackRow}>
+                      {/* sharedPhotoUrl only - never a friend's local
+                          photoUri, which wouldn't resolve on this device
+                          anyway and is stripped before syncing (App.js). */}
+                      {e.photoShared && e.sharedPhotoUrl && (
+                        <Pressable onPress={() => setFullscreenEntryPhoto(e.sharedPhotoUrl)}>
+                          <Image source={{ uri: e.sharedPhotoUrl }} style={styles.entryPhoto} />
+                        </Pressable>
+                      )}
+                      <Text style={styles.friendFeedbackLine}>
+                        {e.name} ⭐{e.rating}{e.note ? ` - "${e.note}"` : ''}
+                      </Text>
+                    </View>
                   ))}
                 </View>
               )}
@@ -393,6 +499,11 @@ export default function DetailModal({
         photos={details?.photos || []}
         initialIndex={fullscreenIndex || 0}
         onClose={() => setFullscreenIndex(null)}
+      />
+      <FullscreenImageViewer
+        visible={fullscreenEntryPhoto !== null}
+        photos={fullscreenEntryPhoto ? [fullscreenEntryPhoto] : []}
+        onClose={() => setFullscreenEntryPhoto(null)}
       />
     </Modal>
   );
@@ -427,11 +538,20 @@ const makeStyles = (colors) => StyleSheet.create({
     color: colors.textLight, fontSize: 13, backgroundColor: colors.cardAlt, borderRadius: 10,
     padding: 10, minHeight: 60, textAlignVertical: 'top',
   },
+  photoAttachRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  photoAttachBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardAlt, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16 },
+  photoAttachText: { color: colors.accent, fontSize: 12, fontWeight: '600', marginLeft: 6 },
+  draftPhotoThumb: { width: 44, height: 44, borderRadius: 8, marginRight: 8, backgroundColor: '#333' },
+  photoPrivacyHint: { color: colors.textMuted, fontSize: 11, fontStyle: 'italic', marginTop: 6 },
   entryRow: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
+  entryPhoto: { width: 48, height: 48, borderRadius: 8, marginRight: 10, backgroundColor: '#333' },
   entryRating: { color: colors.gold, fontSize: 14, fontWeight: 'bold', marginBottom: 2 },
   entryNote: { color: '#DDD', fontSize: 13, lineHeight: 18, marginBottom: 4 },
   entryDate: { color: colors.textMuted, fontSize: 11 },
+  shareToggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  shareToggleText: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginLeft: 5 },
   expandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   expandText: { color: colors.accent, fontSize: 12, fontWeight: '600', marginRight: 4 },
-  friendFeedbackLine: { color: '#DDD', fontSize: 13, lineHeight: 20 },
+  friendFeedbackRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  friendFeedbackLine: { color: '#DDD', fontSize: 13, lineHeight: 20, flex: 1 },
 });

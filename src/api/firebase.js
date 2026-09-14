@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import { initializeAuth, getReactNativePersistence, getAuth, signInAnonymously } from 'firebase/auth';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -20,6 +21,11 @@ export const isFirebaseConfigured = !!firebaseConfig.projectId;
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+// Used only for journal photos a user explicitly opts to share with friends
+// (see journalPhotos.js) - same Firebase project as everything else here,
+// not a separate service. Storage's default rules deny all reads/writes
+// until configured in the Firebase console (see TODO.md).
+export const storage = getStorage(app);
 
 // Without an explicit persistence store, RN Firebase Auth defaults to
 // memory-only - every app restart mints a brand new anonymous uid, which

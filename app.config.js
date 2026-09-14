@@ -62,6 +62,17 @@ module.exports = {
           locationWhenInUsePermission: 'Nomnom uses your location to find nearby restaurants and estimate travel time to them.',
         },
       ],
+      [
+        'expo-image-picker',
+        {
+          // Same store-review reasoning as expo-location above - both
+          // permission strings need to explain WHY, not just exist. Photo
+          // library access is for attaching a photo to a journal entry;
+          // camera is offered as the other picker option in the same flow.
+          photosPermission: 'Nomnom uses your photos to let you attach a picture to a food journal entry.',
+          cameraPermission: 'Nomnom uses your camera to let you attach a picture to a food journal entry.',
+        },
+      ],
     ],
   },
 };
