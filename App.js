@@ -740,8 +740,18 @@ function AppInner() {
             leaving it visible (relying purely on elevation to stay behind
             the dropdown) brought back a version of the same gap/sliver
             problem, so it goes back to fully unmounting instead of trying
-            to out-stack it. */}
-        {!showCuisines && <RollingFoodStrip onLongPressFood={(food) => setFoodDetailFood(food)} />}
+            to out-stack it. Wrapped with a small upward nudge (user
+            report: sitting as a plain flex item in this gap read as too
+            far down, not actually centered between the Cuisines trigger
+            above and the mode toggle below) - RollingFoodStrip itself
+            stays layout-agnostic about its neighbors; this is App.js's
+            call to make since it's the one that knows what's on either
+            side of the gap. */}
+        {!showCuisines && (
+          <View style={styles.rollingFoodWrap}>
+            <RollingFoodStrip onLongPressFood={(food) => setFoodDetailFood(food)} />
+          </View>
+        )}
 
         <View style={styles.bottomControls}>
           <SlidableSegmented
@@ -1021,6 +1031,11 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   // everything else instead of eating back into the exact headroom the S20
   // fix above was reclaiming.
   homeScreen: { flex: 1, justifyContent: 'space-between', paddingTop: 60 * vscale, paddingBottom: 70 * vscale },
+  // Same ~38dp/cm conversion this file already uses elsewhere (see
+  // paddingTop's history above) - pulls the strip up out of the exact
+  // center of its flex gap, closer to the Cuisines trigger above it, per
+  // user feedback that centered-by-flex still read as sitting too low.
+  rollingFoodWrap: { marginTop: -38 * vscale },
   // elevation here (not just document order) is what makes this reliably
   // paint above RollingFoodStrip on Android - same reasoning as
   // CuisineDropdown's wrapper: RollingFoodStrip's native-driven icon
