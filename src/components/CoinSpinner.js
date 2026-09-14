@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, PanResponder, Text, StyleSheet } from 'react-native';
+import { Animated, Easing, PanResponder, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../ThemeContext';
@@ -40,10 +40,17 @@ const ROTATION_AT_CONTACT = quartOut(CONTACT_PCT / 100) * 1260;
 const contactEasing = (t) => quartOut(t * (CONTACT_PCT / 100)) / quartOut(CONTACT_PCT / 100);
 
 // Minimum release speed (magnitude of PanResponder's vx/vy, roughly
-// px/ms) for a "flick" to count as a spin request in flick mode - low
-// enough to feel responsive, high enough that an accidental drag/tap
-// doesn't fire it.
+// px/ms) for a release to count as a "flick" spin request - low enough to
+// feel responsive, high enough that a slow aimless drag doesn't fire it.
 const FLICK_VELOCITY_THRESHOLD = 0.5;
+// Total movement (px) under which a release counts as a plain "tap" spin
+// request instead, regardless of speed - same DRAG_CANCEL_PX convention
+// used elsewhere in this codebase (FaveCuisineButton, RollingFoodStrip) for
+// "did this gesture actually move, or was it basically a tap." A release
+// that's neither a tap (barely moved) nor a fast flick - i.e. a slow drag -
+// does nothing, so aimlessly dragging across the coin can't accidentally
+// spin it.
+const TAP_MOVEMENT_THRESHOLD_PX = 10;
 
 // Anticipation: a brief downward squat-and-recoil on `lift`/`scale` BEFORE
 // the toss launches (a classic wind-up-before-the-throw weight cue), tuned
@@ -141,11 +148,16 @@ const TOTAL_ANIMATION_MS = ANTIC_MS + CONTACT_MS + BOUNCE_MS + MICRO_BOUNCE_MS +
  * around its horizontal axis (rotateX), not side-to-side around a vertical
  * one (user feedback: wanted it to flip "like a real coin toss").
  *
- * `interaction` ('tap' | 'flick', from Settings > Preferences) switches
- * between a plain Pressable and a PanResponder-based flick gesture - also
- * built into core React Native, no new native dependency either.
+ * Both a plain tap AND a flick spin the coin (used to be a Settings toggle
+ * forcing a choice between the two - user request: "lets just get rid of
+ * the option to swipe or tap" and have both always work). Resolved by a
+ * SINGLE PanResponder rather than a Pressable+PanResponder combo - this
+ * codebase has a standing bug class where the two fight over touch
+ * ownership (see SlidableSegmented/FaveCuisineButton/RollingFoodStrip's
+ * history with that exact problem) - so tap-vs-flick is decided by hand in
+ * one responder below instead.
  */
-const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, interaction = 'tap', hapticsEnabled = true, disabled = false, selectedCuisines = [] }, ref) {
+const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, hapticsEnabled = true, disabled = false, selectedCuisines = [] }, ref) {
   const { colors } = useTheme();
   // A flat solid-color circle reads as a sticker, not an object with volume.
   // Deriving a lighter tint of the same accent hue (same trick ThemeContext
@@ -172,8 +184,8 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
   // whatever cuisine filter is active then, rather than fixed once here at
   // mount - the filter can change between spins.
   const pickFoodRef = useRef(createFoodPicker());
-  // Reassigned every render (same pattern as interactionRef/disabledRef
-  // below) so spin() - called from a PanResponder/imperative-handle callback
+  // Reassigned every render (same pattern as disabledRef below) so spin() -
+  // called from a PanResponder/imperative-handle callback
   // that closed over an old render - always reads the CURRENT filter.
   const selectedCuisinesRef = useRef(selectedCuisines);
   selectedCuisinesRef.current = selectedCuisines;
@@ -182,11 +194,9 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
   const [backFood, setBackFood] = useState(() => pickFoodRef.current());
 
   // PanResponder's handlers are created once (via the outer useRef) but need
-  // the LATEST interaction/isSearching/disabled/hapticsEnabled on every
-  // release, so read those off refs kept in sync every render rather than
-  // closing over the values from whichever render first built the responder.
-  const interactionRef = useRef(interaction);
-  interactionRef.current = interaction;
+  // the LATEST isSearching/disabled/hapticsEnabled on every release, so read
+  // those off refs kept in sync every render rather than closing over the
+  // values from whichever render first built the responder.
   // `disabled` (e.g. GPS not locked yet) blocks a spin exactly like
   // isSearching does - without this, a flick fired before location resolves
   // would call onPress and hit App.js's "still locking onto your GPS
@@ -504,12 +514,18 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => interactionRef.current === 'flick' && !disabledRef.current,
-      onMoveShouldSetPanResponder: () => interactionRef.current === 'flick' && !disabledRef.current,
+      onStartShouldSetPanResponder: () => !disabledRef.current,
+      onMoveShouldSetPanResponder: () => !disabledRef.current,
       onPanResponderRelease: (_evt, gestureState) => {
         if (disabledRef.current) return;
+        const moved = Math.sqrt(gestureState.dx ** 2 + gestureState.dy ** 2);
         const speed = Math.sqrt(gestureState.vx ** 2 + gestureState.vy ** 2);
-        if (speed > FLICK_VELOCITY_THRESHOLD) handlePressRef.current();
+        // Either a plain tap (barely moved) or a fast flick (regardless of
+        // distance) spins the coin - see TAP_MOVEMENT_THRESHOLD_PX/
+        // FLICK_VELOCITY_THRESHOLD above for why a slow drag does neither.
+        if (moved <= TAP_MOVEMENT_THRESHOLD_PX || speed > FLICK_VELOCITY_THRESHOLD) {
+          handlePressRef.current();
+        }
       },
     })
   ).current;
@@ -597,16 +613,11 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
   // there's no real downside to leaving it always on.
   const wrapperStyle = styles.wrapper;
 
-  return interaction === 'flick' ? (
+  return (
     <Animated.View style={wrapperStyle} {...panResponder.panHandlers}>
       {groundShadow}
       {coin}
     </Animated.View>
-  ) : (
-    <Pressable style={wrapperStyle} onPress={handlePress} disabled={isSearching || disabled}>
-      {groundShadow}
-      {coin}
-    </Pressable>
   );
 });
 
@@ -656,9 +667,8 @@ const makeStyles = (colors) => StyleSheet.create({
   buttonText: { fontWeight: '900', fontSize: 20, color: colors.textDark, letterSpacing: 1 },
   // Positioned under the coin's resting footprint (flipContainer is 160x160)
   // rather than centered via flex, since it's an absolutely-positioned
-  // sibling of the coin and needs to land at a fixed spot regardless of
-  // whichever interaction-mode wrapper (Pressable/PanResponder View) it's
-  // rendered inside.
+  // sibling of the coin inside the wrapping PanResponder View and needs to
+  // land at a fixed spot regardless.
   groundShadow: {
     position: 'absolute',
     top: 150,

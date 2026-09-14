@@ -134,7 +134,7 @@ function AppInner() {
   const [maxPrice, setMaxPrice] = useState(null);
 
   const [profile, setProfile] = useState({ displayName: '' });
-  const [preferences, setPreferences] = useState({ haptics: true, coinInteraction: 'tap', units: 'mi' });
+  const [preferences, setPreferences] = useState({ haptics: true, units: 'mi' });
 
   // InviteFriendModal for the current solo result (ResultCard's paper-plane
   // icon) - a one-way "here's where/when" share to one friend, distinct
@@ -767,7 +767,6 @@ function AppInner() {
               ref={coinRef}
               isSearching={isSearching}
               onPress={startRandomizer}
-              interaction={preferences.coinInteraction}
               hapticsEnabled={preferences.haptics}
               disabled={!location}
               selectedCuisines={selectedCuisines}

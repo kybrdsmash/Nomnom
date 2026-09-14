@@ -226,17 +226,6 @@ export default function SettingsPanel({
             </View>
 
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Coin gesture</Text>
-              <SlidableSegmented
-                options={[{ value: 'tap', label: 'Tap' }, { value: 'flick', label: 'Flick' }]}
-                value={preferences.coinInteraction}
-                onChange={(coinInteraction) => setPreferences((prev) => ({ ...prev, coinInteraction }))}
-                styles={styles}
-                gradientColors={accentGradient(colors).colors}
-              />
-            </View>
-
-            <View style={styles.row}>
               <Text style={styles.rowLabel}>Units</Text>
               <SlidableSegmented
                 options={[{ value: 'mi', label: 'mi' }, { value: 'km', label: 'km' }]}

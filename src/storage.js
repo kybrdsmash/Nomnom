@@ -83,7 +83,6 @@ export const saveProfile = (profile) => save(KEYS.profile, profile);
 
 export const loadPreferences = () => load(KEYS.preferences, {
   haptics: true,
-  coinInteraction: 'tap', // 'tap' | 'flick'
   units: 'mi', // 'mi' | 'km'
 });
 export const savePreferences = (prefs) => save(KEYS.preferences, prefs);
