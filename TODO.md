@@ -42,7 +42,7 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 ## Someday / vision
 
 - [ ] Rewards system for completed reviews — prototyped 2026-09-14, see below.
-- [x] ~~Fancier coin-spin animation~~ — bench built 2026-09-14, see below. Not yet applied to real code.
+- [x] Fancier coin-spin animation — bench built and tuned values applied 2026-09-14 (anticipation dip + micro-bounce enabled, impact squash/stretch left off). See `src/components/CoinSpinner.js`.
 
 ## Industrial design opens (from SESSION_HANDOFF.md)
 
@@ -50,7 +50,5 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 
 ## Background agent outputs to review (2026-09-14)
 
-Both dispatched via the Agent tool, not yet acted on - review and either apply, redirect, or discard.
-
-- [ ] **Coin animation bench**: https://claude.ai/code/artifact/5ed1381e-5758-433f-a6a3-26b4c6405329 — live-tunable HTML bench mirroring CoinSpinner.js's exact easing/timing, with 3 off-by-default "fancier" proposals (anticipation dip, secondary micro-bounce, impact squash/stretch). No RN code changed yet - tune by eye in the bench, then hand back the numbers to apply to `src/components/CoinSpinner.js`/`src/constants.js`.
+- [x] **Coin animation bench**: https://claude.ai/code/artifact/5ed1381e-5758-433f-a6a3-26b4c6405329 — tuned by eye and applied to `src/components/CoinSpinner.js`/`src/constants.js` same day. Anticipation dip + secondary micro-bounce enabled; impact squash/stretch left off.
 - [ ] **Rewards system mockup**: https://claude.ai/code/artifact/4c3a5549-6c1d-4eb1-adf0-96fca96a00dd — 3 directions mocked up (Taste Rank badge, reviewing streak, milestone celebration toast). Direction 1 (Taste Rank badge) is implemented as a real prototype: `src/api/rewards.js` (new, pure functions) + `src/components/ReviewMilestoneBadge.js` (new) + one added line in `JournalOverlay.js`. This was a best guess at an underspecified one-line idea - treat as a rough draft to react to, not a finished feature.
