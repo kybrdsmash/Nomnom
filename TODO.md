@@ -9,8 +9,9 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 - [x] EAS environment variables set (all 7 `EXPO_PUBLIC_*` vars pushed into both `production` and `preview` EAS environments; project linked to the `isaacfinger` account as `@isaacfinger/Nomnom_App`, ID `95d6c302-0f94-4e28-9ae7-c30723db7544` — see `extra.eas.projectId` in `app.config.js`)
 - [x] `eas build --profile production --platform android` — first successful build. Logs: https://expo.dev/accounts/isaacfinger/projects/Nomnom_App/builds/7dd7c5ee-4dc6-48c1-9751-888a0a770fa9 · .aab: https://expo.dev/artifacts/eas/HciA0pF_Rtu8xtXs9US9iJhVH1W-oYOeaL_ZXgByT7Y.aab (versionCode 2 — EAS auto-incremented since eas.json now uses `appVersionSource: "remote"`; see git history for why)
 - [ ] Play Store listing: screenshots, description, privacy policy URL, Data Safety form — location + friend/journal data need disclosing (policy Section 2), and explicitly declare no Advertising ID / no ad SDK to match Section 4 of the policy
-- [ ] Closed testing track (Google requires 12+ testers for 14+ continuous days on new developer accounts before allowing production release)
-- [ ] `eas submit --platform android` (needs a Play Console service-account JSON key)
+- [ ] Closed testing track — set up in Play Console (Testing → Closed testing), add 12+ testers via an email list, share the opt-in link. Google requires 12+ testers opted in for 14+ continuous days on new developer accounts before allowing Production access. Start this ASAP since it's a clock, not just effort - recruit the 12 testers before finishing the rest of this list.
+- [ ] Google Cloud service-account key for `eas submit` — create in GCP Console → IAM & Admin → Service Accounts, link it in Play Console → Setup → API access, download the JSON, point `eas.json`'s `submit.production.android.serviceAccountKeyPath` at it (currently empty: `"submit": { "production": {} }`)
+- [ ] `eas submit --platform android` (blocked on the service-account key above; also don't bother until the 14-day closed-testing clock has cleared and Production access is actually unlocked)
 
 ## Apple App Store launch (deferred — revisit once Android feels stable)
 
@@ -38,6 +39,24 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
   }
   ```
 - [ ] Known limitation: editing a journal entry's photo while it's already shared doesn't auto-refresh the shared copy - toggling share off/on again re-uploads. Left this way deliberately (re-sharing needs an explicit tap) rather than building silent re-upload-on-edit logic.
+
+## Fullscreen photo viewer (2026-09-14)
+
+- [x] Pinch-to-zoom (1x-4x), zoom maintained until explicitly pinched back down, pan-vs-swipe-to-next-photo disambiguated by speed + edge-proximity per user spec. See `src/components/FullscreenImageViewer.js`. **Needs real on-device testing** - velocity/edge thresholds are reused from CoinSpinner's already-tuned flick threshold as a starting point, not verified against this specific gesture feel.
+
+## Cross-device audit (2026-09-14, code review only - not yet acted on)
+
+Full agent report has the file/line detail for every item below; this is just the priority list to work through.
+
+**High risk (likely to visibly break/clip on other devices):**
+- No real safe-area handling on Android at all (`SafeAreaView` imported from core `react-native`, not `react-native-safe-area-context` - the latter isn't even installed) - every "clears the status bar/nav bar" padding value is a guess tuned on one test phone. `FriendSpin.js` already needed one manual patch for this exact problem.
+- Same unpatched hardcoded top/bottom padding in `FriendSpin.js`, `HistoryFavoritesOverlay.js`, `JournalOverlay.js` (all `paddingTop: 60`), plus the Add-Favorite FAB in `HistoryFavoritesOverlay.js` (`bottom: 30`, no clearance fix) - real risk of colliding with a taller gesture-bar/home-indicator inset than the test device has.
+- Two components still have the *un-fixed* version of this app's own documented "Android elevation-change makes a view vanish" bug: `FabMenu.js` (price buttons, Open Now toggle) and `EliminationList.js` (selected bracket row, the more dangerous 0→10 jump variant).
+- `FaveCuisineButton.js`'s vertical-swipe PanResponder lives inside a real vertical `ScrollView` (`CuisineDropdown.js`) with no `onPanResponderTerminationRequest` - untested on iOS, where the native scroll view's gesture recognizer is more aggressive about stealing child gestures than Android.
+
+**Medium risk (cramped/off, not broken):** `ResultCard.js` stacks ~300px of fixed (non-`vscale`-scaled) vertical chrome; `FullscreenImageViewer.js`'s close button/counter aren't safe-area-aware (risk near an iPhone Dynamic Island); `DaydreamRaccoon.js`'s bubble has the same elevation+native-driven-child+no-`collapsable` risk profile as the already-fixed RollingFoodStrip/CoinSpinner bugs, just hasn't been hit yet; shadow-only-via-`elevation` (flat on iOS) in `BrowseList.js`, `EliminationList.js`, `SettingsPanel.js`, `FriendSpin.js`; no tablet-specific layout despite `ios.supportsTablet: true` being set; no `maxFontSizeMultiplier` guard anywhere (mostly low-risk since most text sits in flexible containers).
+
+**Clean:** no stale `Dimensions.get()` calls anywhere (consistently uses `useWindowDimensions()`); `buttonDepth`/`neonSelected` helpers already ship correct cross-platform shadow properties, so the shadow gaps above are the exception, not the rule.
 
 ## Someday / vision
 
