@@ -256,7 +256,19 @@ export default function RollingFoodStrip({ onLongPressFood }) {
       // (not just the rotation) on a quick pause-then-resume.
       r.translateX.stopAnimation();
       r.translateX.setValue(r.currentXRef.current);
+      // `rotate`'s fix above was itself incomplete - it synced the JS-side
+      // value but never called stopAnimation() on the value or .stop() on
+      // the `rotateAnim` loop wrapping it (stripPan's grant handler below
+      // does both, and doesn't have this bug). Without those two calls, the
+      // Animated.loop instance's own internal restart bookkeeping never
+      // learns it was interrupted, so a later tap-to-resume's
+      // `rotateAnim.start()` can race against a stray in-flight native
+      // completion from the OLD loop iteration - looked like the icon
+      // resuming, spinning a fraction of a turn (~15-30deg), then stuttering
+      // and freezing as the two competed for the same value (user report).
+      r.rotate.stopAnimation();
       r.rotate.setValue(r.currentRotateRef.current);
+      r.rotateAnim.stop();
     });
     const pausedIds = new Set(toPause.map((r) => r.id));
     setRollersBoth(rollersRef.current.map((r) => (pausedIds.has(r.id) ? { ...r, paused: true } : r)));
