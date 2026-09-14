@@ -60,12 +60,12 @@ export const CUISINES = [
 
 export const SPEEDS_MPH = { walk: 3, bike: 10, transit: 12, drive: 25 };
 
-// Total time (ms) the coin animation takes: toss/spin to contact, bounce,
-// precession roll, then falling flat. App.js waits at least this long before
-// revealing the result, so a fast API response can never cut the animation
-// short. Change the coin's timings in CoinSpinner.js (TOTAL_ANIMATION_MS)
-// and update this to match.
-export const COIN_ANIMATION_MS = 2050;
+// Total time (ms) the coin animation takes: anticipation dip, toss/spin to
+// contact, bounce, micro-bounce, precession roll, then falling flat. App.js
+// waits at least this long before revealing the result, so a fast API
+// response can never cut the animation short. Change the coin's timings in
+// CoinSpinner.js (TOTAL_ANIMATION_MS) and update this to match.
+export const COIN_ANIMATION_MS = 2400;
 
 // Absolute review-count floor - a hard backstop below which a place is never
 // shown. The real quality gate is statistical (see filterByReviewStats in

@@ -8,10 +8,10 @@ import { hexToHsl, hslToHex } from '../utils/color';
 
 // The notional full spin-down curve, in ms - see CONTACT_PCT below for why
 // the coin doesn't actually ride this curve all the way to its end. Total
-// animation length (CONTACT_MS + BOUNCE_MS + PRECESSION_MS + FALL_MS) must
-// stay in sync with COIN_ANIMATION_MS in constants.js - App.js waits that
-// long before revealing the result, so a fast API response can never cut
-// the animation short.
+// animation length (TOTAL_ANIMATION_MS below) must stay in sync with
+// COIN_ANIMATION_MS in constants.js - App.js waits that long before
+// revealing the result, so a fast API response can never cut the
+// animation short.
 const SPIN_MS = 1500;
 
 // What fraction of the SPIN_MS curve plays out before the coin actually
@@ -45,6 +45,15 @@ const contactEasing = (t) => quartOut(t * (CONTACT_PCT / 100)) / quartOut(CONTAC
 // doesn't fire it.
 const FLICK_VELOCITY_THRESHOLD = 0.5;
 
+// Anticipation: a brief downward squat-and-recoil on `lift`/`scale` BEFORE
+// the toss launches (a classic wind-up-before-the-throw weight cue), tuned
+// in the same browser bench as the landing sequence further down. Prepending
+// this delays everything after it by ANTIC_MS, including when rotation
+// actually starts moving - see FLIP_CROSSINGS_MS's +ANTIC_MS shift below.
+const ANTIC_MS = 80;
+const ANTIC_DIP = 8; // px, downward (positive `lift` = down, see toss below)
+const ANTIC_SQUASH = 0.09; // scale shrinks by this much at the dip's bottom
+
 // The coin is a real two-sided object: a "front" and "back" face, each
 // showing one food icon, composited with `perspective` + `rotateX` +
 // `backfaceVisibility: hidden` (the standard 3D flip-card technique) so
@@ -65,7 +74,12 @@ const FLICK_VELOCITY_THRESHOLD = 0.5;
 // contactEasing above), not the elapsed-to-degree relationship along the
 // way, so these are still evaluated against the plain SPIN_MS curve.
 // Recomputed whenever SPIN_MS or the easing curve changes.
-const FLIP_CROSSINGS_MS = [28, 88, 157, 239, 340, 479, 725];
+//
+// Shifted +ANTIC_MS from the raw curve-crossing times below (rotation.timing
+// doesn't actually start until the anticipation dip finishes - see ANTIC_MS)
+// - the crossings themselves are still evaluated against the plain SPIN_MS
+// curve starting from ITS OWN t=0, just offset later in wall-clock time.
+const FLIP_CROSSINGS_MS = [28, 88, 157, 239, 340, 479, 725].map((ms) => ms + ANTIC_MS);
 
 // How far up the coin rises during the toss, and back down. Tuned to reach
 // roughly up to the Cuisines section header - the last item in the filter
@@ -73,7 +87,7 @@ const FLIP_CROSSINGS_MS = [28, 88, 157, 239, 340, 479, 725];
 // high as cuisine"). This is a tuned estimate for a typical phone screen,
 // not a live measurement of the actual Cuisines header position - dial it
 // up/down if it over/undershoots on-device.
-const LIFT_DISTANCE = 210;
+const LIFT_DISTANCE = 240;
 
 // How much the coin shrinks at the peak of its toss, mimicking it flying
 // further from the "camera" the higher it goes - back to full size by the
@@ -89,17 +103,24 @@ const APEX_SCALE = 0.75;
 //    completing), a small vertical hop back up (BOUNCE_HEIGHT/BOUNCE_MS on
 //    `lift`) while ALSO completing one more half-rotation in the air (the
 //    second `rotation.timing` step) - not a scale squish, an actual hop.
-// 2. ROLL: once the hop lands, the coin leans onto its edge (LEAN_DEG) and
-//    that lean sweeps around in a circle (PRECESSION_SWEEP_DEG over
-//    PRECESSION_MS) - like a dropped coin rattling/precessing before it
-//    settles, not rocking side-to-side in place. Built from two composed
-//    rotations on the same container: rotateZ (which direction the lean
-//    currently points) then rotateX (how far it's leaned) - sweeping the
-//    rotateZ value is what makes the lean's direction orbit in a circle.
-// 3. FALL FLAT: the lean drops back to 0 over FALL_MS and the coin is at
+// 2. MICRO-BOUNCE: a second, smaller hop right after the main bounce lands -
+//    a real dropped coin rarely settles on exactly one bounce. `rotation`
+//    holds steady through this (no timing call touches it here) since the
+//    flip itself is already done; only `lift` moves.
+// 3. ROLL: once the micro-bounce lands, the coin leans onto its edge
+//    (LEAN_DEG) and that lean sweeps around in a circle
+//    (PRECESSION_SWEEP_DEG over PRECESSION_MS) - like a dropped coin
+//    rattling/precessing before it settles, not rocking side-to-side in
+//    place. Built from two composed rotations on the same container:
+//    rotateZ (which direction the lean currently points) then rotateX (how
+//    far it's leaned) - sweeping the rotateZ value is what makes the lean's
+//    direction orbit in a circle.
+// 4. FALL FLAT: the lean drops back to 0 over FALL_MS and the coin is at
 //    rest - App.js reveals the result immediately after (no added pause).
 const BOUNCE_HEIGHT = 60;
 const BOUNCE_MS = 500;
+const MICRO_BOUNCE_HEIGHT = 13;
+const MICRO_BOUNCE_MS = 270;
 const LEAN_DEG = 19;
 const PRECESSION_SWEEP_DEG = 30;
 const PRECESSION_MS = 400;
@@ -109,7 +130,7 @@ const FALL_MS = 100;
 // this is that ramp's share of PRECESSION_MS.
 const LEAN_RAMP_MS = Math.round(PRECESSION_MS * 0.18);
 
-const TOTAL_ANIMATION_MS = CONTACT_MS + BOUNCE_MS + PRECESSION_MS + FALL_MS;
+const TOTAL_ANIMATION_MS = ANTIC_MS + CONTACT_MS + BOUNCE_MS + MICRO_BOUNCE_MS + PRECESSION_MS + FALL_MS;
 
 /**
  * The "NOM | NOM" / food coin. Uses React Native's built-in Animated API
@@ -214,6 +235,9 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
       rotation.stopAnimation(() => {
         rotation.setValue(0);
         Animated.sequence([
+          // Doesn't actually start moving until the anticipation dip (on
+          // lift/scale below) finishes - see ANTIC_MS.
+          Animated.delay(ANTIC_MS),
           // Ease-out quartic, cut short at CONTACT_MS - see contactEasing
           // above for why this isn't just a shorter version of the same
           // curve stretched to fill CONTACT_MS (that would still decelerate
@@ -232,12 +256,29 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
             easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
           }),
+          // No timing() call for the micro-bounce below on purpose - rotation
+          // just holds at ROTATION_AT_CONTACT+180 through it, per the landing
+          // sequence comment above (the flip itself is already done).
         ]).start();
       });
 
       lift.stopAnimation(() => {
         lift.setValue(0);
         Animated.sequence([
+          // Anticipation: a brief downward squat (positive = down) right
+          // before the toss launches, then recoil back to 0 - see ANTIC_MS.
+          Animated.timing(lift, {
+            toValue: ANTIC_DIP,
+            duration: ANTIC_MS / 2,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(lift, {
+            toValue: 0,
+            duration: ANTIC_MS / 2,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
           // The toss: up during the first half of CONTACT_MS, back down for
           // the second half.
           Animated.timing(lift, {
@@ -266,6 +307,21 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
             easing: Easing.in(Easing.quad),
             useNativeDriver: true,
           }),
+          // The micro-bounce: a smaller second hop, since a dropped coin
+          // rarely settles on exactly one bounce. rotation holds steady
+          // through this (see above) - only lift moves.
+          Animated.timing(lift, {
+            toValue: -MICRO_BOUNCE_HEIGHT,
+            duration: MICRO_BOUNCE_MS / 2,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(lift, {
+            toValue: 0,
+            duration: MICRO_BOUNCE_MS / 2,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
         ]).start();
       });
 
@@ -274,9 +330,23 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
         // Shrinks to APEX_SCALE in lockstep with the rise and grows back on
         // the way down - the coin visually gets smaller the higher it goes,
         // like it's flying further from the camera. Nothing further happens
-        // to scale after this - the old landing squish-bounce is gone,
+        // to scale after the apex - the old landing squish-bounce is gone,
         // replaced by the hop on `lift` above.
         Animated.sequence([
+          // Anticipation squash: a small dip in scale at the bottom of the
+          // squat, recoiling back to 1 right as the toss launches.
+          Animated.timing(scale, {
+            toValue: 1 - ANTIC_SQUASH,
+            duration: ANTIC_MS / 2,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: ANTIC_MS / 2,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
           Animated.timing(scale, {
             toValue: APEX_SCALE,
             duration: CONTACT_MS / 2,
@@ -294,12 +364,13 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
 
       precession.stopAnimation(() => {
         precession.setValue(0);
-        // Starts right as the bounce lands, sweeps through the whole roll,
-        // then simply stops - it doesn't need to unwind, it just holds
+        // Starts right as the micro-bounce lands (not the main bounce - the
+        // roll waits for both hops to finish), sweeps through the whole
+        // roll, then simply stops - it doesn't need to unwind, it just holds
         // wherever it ended up (a real dropped coin doesn't return to its
         // starting heading either).
         Animated.sequence([
-          Animated.delay(CONTACT_MS + BOUNCE_MS),
+          Animated.delay(ANTIC_MS + CONTACT_MS + BOUNCE_MS + MICRO_BOUNCE_MS),
           Animated.timing(precession, {
             toValue: PRECESSION_SWEEP_DEG,
             duration: PRECESSION_MS,
@@ -311,11 +382,11 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, inte
 
       lean.stopAnimation(() => {
         lean.setValue(0);
-        // Ramps up to LEAN_DEG right as the bounce lands (same moment
+        // Ramps up to LEAN_DEG right as the micro-bounce lands (same moment
         // precession starts sweeping), holds through the rest of the roll,
         // then drops back to 0 (falls flat) over FALL_MS.
         Animated.sequence([
-          Animated.delay(CONTACT_MS + BOUNCE_MS),
+          Animated.delay(ANTIC_MS + CONTACT_MS + BOUNCE_MS + MICRO_BOUNCE_MS),
           Animated.timing(lean, {
             toValue: LEAN_DEG,
             duration: LEAN_RAMP_MS,

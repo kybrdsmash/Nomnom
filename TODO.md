@@ -31,7 +31,12 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 ## Journal photos (2026-09-14)
 
 - [x] User-attached photos on journal entries, local-only by default, with an explicit per-photo "share with friends" toggle. Picker: `expo-image-picker`; local persistence via `expo-file-system`'s new File/Paths API (not the deprecated function-style API — that throws at runtime on this SDK version); sharing uploads to Firebase Storage (`src/api/journalPhotos.js`) and unsharing actually deletes the remote copy, not just hides it client-side. UI lives in `DetailModal.js`'s "Your Reviews" section.
-- [ ] **Firebase Storage security rules need configuring** — same gap as the `feedPhotos` Firestore rules above, but for Storage. Default rules deny all reads/writes, so sharing a photo will silently fail until rules are set in the Firebase console allowing `journalPhotos/{uid}/{entryId}` write access to `{uid}` and read access to anyone who can already read that user's journal doc (mirror the `journals/{uid}` Firestore rule in `src/api/journal.js`'s comment).
+- [ ] Firebase Storage security rules — simpler than first thought: a Storage download URL carries its own access token once generated, so it works for anyone who has the URL regardless of Storage rules. Friends never need direct Storage read access at all - they just load the token-bearing `sharedPhotoUrl` already gated by the existing `journals/{uid}` Firestore rule. Storage rules only need to cover the owner's own read/write - instructions given 2026-09-14, awaiting confirmation it's published in the Firebase console:
+  ```
+  match /journalPhotos/{uid}/{entryId} {
+    allow read, write: if request.auth != null && request.auth.uid == uid;
+  }
+  ```
 - [ ] Known limitation: editing a journal entry's photo while it's already shared doesn't auto-refresh the shared copy - toggling share off/on again re-uploads. Left this way deliberately (re-sharing needs an explicit tap) rather than building silent re-upload-on-edit logic.
 
 ## Someday / vision
