@@ -23,6 +23,13 @@ let cacheShownIds = new Set();
 // report: "tons of repeats") instead of rotating fairly through the whole
 // pool. Reset only when the pool itself is rebuilt (filters changed).
 let cacheShowCounts = new Map();
+// Which cuisines were selected as of the last fetchLocalFood call (any
+// mode/cache outcome) - compared against the CURRENT selection on every
+// call to detect a just-added cuisine (see forceCuisine in
+// fetchLocalFood/pickFromPool below). Independent of the cache above on
+// purpose: this needs to track "did the selection change" even across
+// calls that hit the cache for other reasons.
+let lastSelectedCuisines = [];
 
 function makeFilterKey({ location, distance, minRating, selectedCuisines, travelType, openNowOnly, maxPrice }) {
   // Location rounded to ~100m so tiny GPS drift doesn't nuke the cache.
@@ -133,6 +140,22 @@ export async function fetchLocalFood({
     return [];
   }
 
+  // A cuisine that's newly selected since the LAST call (any outcome, cache
+  // hit or miss) gets guaranteed into the very first pick below - switching
+  // filters should give immediate, visible confirmation it actually took
+  // effect (user request), rather than possibly waiting several spins
+  // before that cuisine's turn comes up in the normal rotation. Picked at
+  // random when more than one cuisine was added since the last call (e.g.
+  // several toggled before spinning again). Computed once per call, before
+  // any cache branch below, and only ever applied to each branch's FIRST
+  // pickFromPool call - a second call in the same branch (repeat top-up) is
+  // filling leftover slots, not confirming a new filter.
+  const newlyAddedCuisines = selectedCuisines.filter((c) => !lastSelectedCuisines.includes(c));
+  lastSelectedCuisines = [...selectedCuisines];
+  const forceCuisine = newlyAddedCuisines.length > 0
+    ? newlyAddedCuisines[Math.floor(Math.random() * newlyAddedCuisines.length)]
+    : null;
+
   // Serve from cache when filters haven't changed. Fresh (never-shown) spots
   // are ALWAYS used first; repeats only fill the remainder once fresh ones
   // run short, and only then does shown-tracking reset.
@@ -140,7 +163,7 @@ export async function fetchLocalFood({
   if (filterKey === cachedKey && cachedPool.length > 0) {
     const unshown = cachedPool.filter((s) => !cacheShownIds.has(s.id));
     if (unshown.length >= count) {
-      return pickFromPool(unshown, count);
+      return pickFromPool(unshown, count, { forceCuisine });
     }
     if (!allowRepeats) {
       // Whole pool already shown this cycle: starting the no-repeat cycle
@@ -148,13 +171,13 @@ export async function fetchLocalFood({
       // permanently blank on every spin after the pool's first pass.
       if (unshown.length === 0) {
         cacheShownIds = new Set();
-        return pickFromPool(cachedPool, Math.min(count, cachedPool.length));
+        return pickFromPool(cachedPool, Math.min(count, cachedPool.length), { forceCuisine });
       }
-      return pickFromPool(unshown, unshown.length);
+      return pickFromPool(unshown, unshown.length, { forceCuisine });
     }
     // Not enough fresh spots for a full set: use every fresh one, then top up
     // with repeats. Reset shown-tracking so the cycle starts over after this.
-    const freshPicks = pickFromPool(unshown, unshown.length);
+    const freshPicks = pickFromPool(unshown, unshown.length, { forceCuisine });
     const repeatCandidates = cachedPool.filter(
       (s) => !freshPicks.find((f) => f.id === s.id)
     );
@@ -312,38 +335,85 @@ export async function fetchLocalFood({
   cacheShowCounts = new Map();
   recordFeedPhotos(cachedPool);
 
-  return pickFromPool(cachedPool, count);
+  return pickFromPool(cachedPool, count, { forceCuisine });
 }
 
-/**
- * Picks `count` spots from a pool, preferring least-shown-overall first
- * (see cacheShowCounts above) and cuisine-label diversity, and records them
- * as shown so the next flip serves fresh options.
- */
-function pickFromPool(pool, count) {
-  // Least-shown first, randomized within each show-count tier (so it's not
-  // always the exact same order among spots tied at the same count) - this
-  // is what makes repeats rotate fairly through the whole pool instead of
-  // pure random chance re-picking the same handful of spots.
-  const shuffled = [...pool].sort((a, b) => {
+// Groups a pool by which cuisine filter it's confirmed to match
+// (spot.confirmedCuisine, see shapeSpot), or a shared "other" bucket for
+// unconfirmed-cuisine spots and anything found with no cuisine filter
+// active. This is what lets pickFromPool treat each ACTIVE FILTER as an
+// equally-likely draw regardless of how many raw results Google happened
+// to return for it - a flat pick across the combined pool silently favored
+// whichever cuisine had the most (or best-reviewed) spots (user report:
+// "kept only getting options from the first filter" once a second cuisine
+// was added). With no cuisine filter selected, every spot shares the same
+// bucket and this is identical to a plain flat pick, same as before.
+function groupByCuisine(pool) {
+  const groups = new Map();
+  for (const spot of pool) {
+    const key = spot.confirmedCuisine || '__other__';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(spot);
+  }
+  return groups;
+}
+
+// Least-shown first within one cuisine group, randomized within each tied
+// show-count tier - same fairness rule pickFromPool always used, just
+// scoped to one cuisine's slice of the pool now instead of the whole thing.
+function leastShownFirst(candidates) {
+  return [...candidates].sort((a, b) => {
     const diff = (cacheShowCounts.get(a.id) || 0) - (cacheShowCounts.get(b.id) || 0);
     return diff !== 0 ? diff : Math.random() - 0.5;
   });
+}
+
+/**
+ * Picks `count` spots from a pool and records them as shown so the next
+ * flip serves fresh options.
+ *
+ * Each pick independently draws a uniformly-random ACTIVE cuisine (from
+ * whichever cuisines are still represented among not-yet-picked spots),
+ * then takes the least-shown spot within it - so representation stays
+ * roughly 1/N per active filter as more filters stack up, rather than
+ * degrading toward whichever cuisine returned the most results (user
+ * request). `forceCuisine`, when given, guarantees the FIRST pick is that
+ * cuisine specifically - used to confirm a just-added filter actually took
+ * effect on the very next spin, rather than waiting for its turn in the
+ * normal random rotation (user request).
+ */
+function pickFromPool(pool, count, { forceCuisine } = {}) {
+  const groups = groupByCuisine(pool);
+  const cuisineKeys = [...groups.keys()];
   const picked = [];
-  const seenTypes = new Set();
-  for (const spot of shuffled) {
-    if (!seenTypes.has(spot.type)) {
-      seenTypes.add(spot.type);
-      picked.push(spot);
-    }
-    if (picked.length === count) break;
+  const pickedIds = new Set();
+
+  const pickOneFrom = (key) => {
+    const candidates = (groups.get(key) || []).filter((s) => !pickedIds.has(s.id));
+    if (candidates.length === 0) return null;
+    return leastShownFirst(candidates)[0];
+  };
+
+  if (forceCuisine && groups.has(forceCuisine)) {
+    const spot = pickOneFrom(forceCuisine);
+    if (spot) { picked.push(spot); pickedIds.add(spot.id); }
   }
-  if (picked.length < count) {
-    for (const spot of shuffled) {
-      if (!picked.find((s) => s.id === spot.id)) picked.push(spot);
-      if (picked.length === count) break;
-    }
+
+  // Bounded by cuisineKeys.length * count (worst case: every remaining pick
+  // needs to cycle through every group once before finding one with a spot
+  // left) rather than an unbounded while - a plain safety margin, not a
+  // tuned value.
+  const maxAttempts = count * (cuisineKeys.length + 1) + 10;
+  for (let attempts = 0; picked.length < count && attempts < maxAttempts; attempts++) {
+    const availableKeys = cuisineKeys.filter((k) =>
+      (groups.get(k) || []).some((s) => !pickedIds.has(s.id))
+    );
+    if (availableKeys.length === 0) break;
+    const key = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+    const spot = pickOneFrom(key);
+    if (spot) { picked.push(spot); pickedIds.add(spot.id); }
   }
+
   picked.forEach((s) => {
     cacheShownIds.add(s.id);
     cacheShowCounts.set(s.id, (cacheShowCounts.get(s.id) || 0) + 1);
@@ -423,11 +493,38 @@ function shapeSpot(spot, location, travelType) {
 
 /**
  * Statistical review-count filter. Computes mean and std deviation of
- * log(review count) across the candidate pool and drops anything more than
- * STATS_FILTER_SIGMA below the mean. Only runs when the pool is big enough
- * for the stats to mean something; otherwise passes everything through.
+ * log(review count) and drops anything more than STATS_FILTER_SIGMA below
+ * the mean. Only runs when the pool is big enough for the stats to mean
+ * something; otherwise passes everything through.
+ *
+ * Run PER CUISINE (grouped by `_searchCuisine`, still present on these raw
+ * results - see searchOnce), not once across the whole combined pool - a
+ * single global mean/stddev meant one cuisine's typically-higher review
+ * counts could pull the cutoff up past what's normal for a DIFFERENT,
+ * legitimately-lower-review-count cuisine also in the mix, silently
+ * wiping out that second cuisine's entire result set (user report: "used
+ * one filter, worked well... used one more filter, kept only getting
+ * options from the first filter"). Each cuisine's own local distribution
+ * now sets its own bar, same self-calibration the filter was always meant
+ * to do, just correctly scoped. With no cuisine filter active (or only
+ * one), every spot shares the same `_searchCuisine` and this is identical
+ * to the old single-group behavior.
  */
 function filterByReviewStats(spots) {
+  const groups = new Map();
+  for (const spot of spots) {
+    const key = spot._searchCuisine || 'food';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(spot);
+  }
+  const result = [];
+  for (const group of groups.values()) {
+    result.push(...filterGroupByReviewStats(group));
+  }
+  return result;
+}
+
+function filterGroupByReviewStats(spots) {
   if (spots.length < STATS_FILTER_MIN_POOL) return spots;
 
   const logs = spots.map((s) => Math.log(s.user_ratings_total || 1));
@@ -443,7 +540,7 @@ function filterByReviewStats(spots) {
     (s) => Math.log(s.user_ratings_total || 1) >= cutoff
   );
 
-  // Safety: never let the filter empty the pool below a usable size.
+  // Safety: never let the filter empty this cuisine's slice below a usable size.
   return filtered.length >= 5 ? filtered : spots;
 }
 
