@@ -41,8 +41,15 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 
 ## Someday / vision
 
-- [ ] Rewards system for completed reviews — prototyped 2026-09-14, see below.
+- [x] Rewards system for completed reviews — v1 shipped 2026-09-14: per-city tier label (🥄 New Taster → 🍴 Regular → 🍜 Local Regular → 🗺️ Food Explorer → 🏆 Local Legend), inline next to each city header in JournalOverlay's "My Reviews" screen. Deliberately per-city, not global - see `src/api/rewards.js`.
 - [x] Fancier coin-spin animation — bench built and tuned values applied 2026-09-14 (anticipation dip + micro-bounce enabled, impact squash/stretch left off). See `src/components/CoinSpinner.js`.
+
+### Rewards: region strategy (background thinking, not blocking)
+
+City is the v1 grouping (free, already computed everywhere via `groupByCity`/`cityFromAddress`). Two things flagged 2026-09-14 as worth continuing to think about, since the user travels for food and expects the app's core audience to as well:
+
+- **State/country tagging for each city, without a paid API call.** Most journal entries only carry Google's Nearby Search "vicinity" address (`"{street}, {city}"` - no state/country at all); only manually-searched favorites get the fuller address. But every entry already has raw `lat`/`lng` regardless of source, so a bundled *offline* country/state boundary dataset (simplified GeoJSON, roughly 100KB-1MB) could do a local point-in-polygon lookup with zero network cost and zero per-lookup fee - distinct from Google's paid reverse-geocoding API, which was the wrong comparison to make the first time this came up. Not yet sourced/bundled - real but bounded scope of work whenever this becomes a priority.
+- **Keeping it "seamless, not busy" as travel history grows.** The chosen v1 shape (a label riding along on each city's existing header, not a separate summary widget) was specifically picked because it doesn't need a redesign as the number of cities grows - no new list, no new scroll surface, no compressed cross-city number to keep legible. Worth deliberately re-testing this assumption once there's a data point for someone with a genuinely large multi-city/multi-country journal, rather than assuming it holds.
 
 ## Industrial design opens (from SESSION_HANDOFF.md)
 
