@@ -21,7 +21,7 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 
 ## Known outstanding (from SESSION_HANDOFF.md, still true unless re-checked)
 
-- [ ] Firebase Auth has no persistence configured — anonymous sign-in won't survive app restarts. Fix: wire `getReactNativePersistence` (already a dependency) into `initializeAuth` in `src/api/firebase.js`.
+- [x] ~~Firebase Auth has no persistence configured~~ — false alarm, carried over from a stale handoff note. Checked `src/api/firebase.js` (2026-09-14): `getReactNativePersistence` is already wired into `initializeAuth`. Anonymous sign-in already survives restarts.
 
 ## Feed / Feast with Friends (in progress)
 
