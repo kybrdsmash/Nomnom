@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, TextInput, Switch, PanResponder, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
@@ -167,6 +167,15 @@ export default function SettingsPanel({
       )}
       <View style={styles.wrapper}>
         {showSettingsMenu && (
+          // 'position' behavior (not 'padding'/'height') is the right fit
+          // for a floating, absolutely-positioned panel like this one rather
+          // than a full-screen layout - it shifts the panel itself up above
+          // the keyboard instead of trying to resize/pad a parent that isn't
+          // meant to grow. Without this, the newest section (Report a Bug,
+          // last/lowest in the panel, closest to the screen edge this panel
+          // is already anchored to) sat directly under the keyboard with no
+          // way to see what you were typing (user report).
+          <KeyboardAvoidingView behavior="position">
           <View style={styles.panel}>
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitleInline}>Appearance</Text>
@@ -283,6 +292,7 @@ export default function SettingsPanel({
               </>
             )}
           </View>
+          </KeyboardAvoidingView>
         )}
         <Pressable style={styles.gearBtn} onPress={() => setShowSettingsMenu(!showSettingsMenu)}>
           <Ionicons name="settings-sharp" size={22} color={colors.textDark} />
