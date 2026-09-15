@@ -291,6 +291,8 @@ export async function fetchLocalFood({
       closestByName.set(key, { ...spot, _chainDistance: distance });
     }
   }
+  const deduped = [...closestByName.values()];
+
   // Belt-and-suspenders on top of Google's own radius param above (which
   // should already bound everything, but isn't always perfectly precise at
   // the edge) - reuses _chainDistance (already computed above, same

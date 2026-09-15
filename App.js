@@ -436,24 +436,41 @@ function AppInner() {
     // response can never cut the coin animation short. The reveal always waits
     // for whichever takes longer - usually the animation, occasionally the API
     // on a slow connection.
-    const [selectedFoods] = await Promise.all([
-      favoritesOnly
-        ? Promise.resolve(pickFromFavorites({ favorites, location, distance, travelType, count: targetCount }))
-        : fetchLocalFood({
-            location,
-            distance,
-            minRating,
-            selectedCuisines,
-            travelType,
-            count: targetCount,
-            openNowOnly,
-            maxPrice,
-            // List mode's "Refresh" should show whatever's left in the pool, not
-            // pad out to 12 with repeats the way a flip/bracket pads to its count.
-            allowRepeats: gameMode !== 'list',
-          }),
-      new Promise((resolve) => setTimeout(resolve, COIN_ANIMATION_MS)),
-    ]);
+    //
+    // try/catch around this specific await, not just relying on fetchLocalFood's
+    // own internal error handling - a bug anywhere in that pipeline throwing
+    // instead of resolving left isSearching stuck true forever (coin frozen
+    // mid-spin, no way back in, user report) since nothing downstream of an
+    // unhandled rejection here ever ran. This is a safety net for a FUTURE
+    // bug of the same shape, not a fix for the one that already happened
+    // (that one's root-caused and fixed in places.js).
+    let selectedFoods;
+    try {
+      [selectedFoods] = await Promise.all([
+        favoritesOnly
+          ? Promise.resolve(pickFromFavorites({ favorites, location, distance, travelType, count: targetCount }))
+          : fetchLocalFood({
+              location,
+              distance,
+              minRating,
+              selectedCuisines,
+              travelType,
+              count: targetCount,
+              openNowOnly,
+              maxPrice,
+              // List mode's "Refresh" should show whatever's left in the pool, not
+              // pad out to 12 with repeats the way a flip/bracket pads to its count.
+              allowRepeats: gameMode !== 'list',
+            }),
+        new Promise((resolve) => setTimeout(resolve, COIN_ANIMATION_MS)),
+      ]);
+    } catch (error) {
+      console.error('startRandomizer failed:', error);
+      setIsSearching(false);
+      coinRef.current?.reset();
+      alert('Something went wrong finding a spot. Please try again.');
+      return;
+    }
 
     setIsSearching(false);
 
