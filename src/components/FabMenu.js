@@ -6,7 +6,8 @@ import { useTheme } from '../ThemeContext';
 
 /**
  * Floating action button that expands into: price filter ($-$$$$),
- * "Open now" toggle, and History / Favorites shortcuts.
+ * "Open now" toggle, "Favorites only" toggle, and History / Favorites
+ * shortcuts.
  */
 export default function FabMenu({
   visible,
@@ -18,6 +19,8 @@ export default function FabMenu({
   onOpenJournal,
   openNowOnly,
   onToggleOpenNow,
+  favoritesOnly,
+  onToggleFavoritesOnly,
   maxPrice,
   setMaxPrice,
 }) {
@@ -75,6 +78,20 @@ export default function FabMenu({
                 color={openNowOnly ? colors.textDark : colors.accent}
               />
             </Pressable>
+            {/* Distinct icon (heart-circle, not the plain heart below) so it
+                doesn't read as a second "open Favorites" button - this one
+                changes what a SPIN searches, the plain heart just opens the
+                list (user request, placed with the other quick filters). */}
+            <Pressable
+              style={[styles.fabSubBtn, favoritesOnly && styles.fabSubBtnActive, { marginTop: 10 }]}
+              onPress={onToggleFavoritesOnly}
+            >
+              <Ionicons
+                name={favoritesOnly ? 'heart-circle' : 'heart-circle-outline'}
+                size={24}
+                color={favoritesOnly ? colors.textDark : colors.accent}
+              />
+            </Pressable>
             <Pressable style={[styles.fabSubBtnSolid, { marginTop: 10 }]} onPress={onOpenHistory}>
               <Ionicons name="book" size={22} color={colors.textDark} />
             </Pressable>
@@ -84,7 +101,7 @@ export default function FabMenu({
             <Pressable style={[styles.fabSubBtnSolid, { marginTop: 10 }]} onPress={onOpenFavorites}>
               <Ionicons name="heart" size={22} color={colors.textDark} />
             </Pressable>
-            {/* "My Reviews" - the food journal (your own ratings/notes plus
+            {/* "Journal" - the food journal (your own ratings/notes plus
                 friends'), pen-and-paper icon so it reads as "notes" at a
                 glance. */}
             <Pressable style={[styles.fabSubBtnSolid, { marginTop: 10 }]} onPress={onOpenJournal}>

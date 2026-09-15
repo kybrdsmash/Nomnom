@@ -47,6 +47,32 @@ export function hslToHex(h, s, l) {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+/**
+ * `steps` unique colors, all the same hue/saturation as `accentHex`, spread
+ * across lightness from near-black to near-white (index 0 darkest, last
+ * index lightest) - used to color-code multiple simultaneously-highlighted
+ * map pins (SpotsMap.js's BrowseList usage) so each one is visually distinct
+ * without introducing unrelated hues. Clamped short of true 0/100 lightness
+ * (6/94) so even the two extremes keep a whisper of the actual accent hue,
+ * rather than landing on plain black/white that reads as unthemed.
+ */
+export function accentRamp(accentHex, steps) {
+  const { h, s } = hexToHsl(accentHex);
+  const n = Math.max(1, steps);
+  return Array.from({ length: n }, (_, i) => {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const l = 6 + t * (94 - 6);
+    return hslToHex(h, s, l);
+  });
+}
+
+/** Black or white, whichever reads legibly on top of `hex` - for a label
+ * drawn over one of accentRamp's colors, which spans from very dark to very
+ * light. */
+export function contrastTextColor(hex) {
+  return hexToHsl(hex).l < 55 ? '#FFFFFF' : '#1A222C';
+}
+
 /** Derives the full accent family (dark/deep/neon glow) from one picked hex. */
 export function deriveAccentShades(accentHex) {
   const { h, s, l } = hexToHsl(accentHex);

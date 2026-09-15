@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { neonSelected, buttonDepth } from '../constants';
 import { useTheme } from '../ThemeContext';
+import { contrastTextColor } from '../utils/color';
 
 /** Bounding region around every given {latitude, longitude} point, with padding. */
 function regionForPoints(points) {
@@ -35,13 +36,13 @@ function regionForPoints(points) {
  * than shared - FriendMap is two-person-specific and this is the general
  * single-user version used everywhere else).
  */
-function FoodMarker({ spot, isEliminated, isSelected, colors, styles, onSelectSpot }) {
+function FoodMarker({ spot, isEliminated, isSelected, highlight, colors, styles, onSelectSpot }) {
   const [trackChanges, setTrackChanges] = useState(true);
   useEffect(() => {
     setTrackChanges(true);
     const t = setTimeout(() => setTrackChanges(false), 300);
     return () => clearTimeout(t);
-  }, [isEliminated, isSelected]);
+  }, [isEliminated, isSelected, highlight?.color]);
 
   return (
     <Marker
@@ -51,8 +52,26 @@ function FoodMarker({ spot, isEliminated, isSelected, colors, styles, onSelectSp
       tracksViewChanges={trackChanges}
       onPress={() => onSelectSpot?.(spot)}
     >
-      <View style={[styles.foodPin, isEliminated && styles.foodPinOut, isSelected && styles.foodPinGlow]}>
-        <Ionicons name="restaurant" size={14} color={isSelected ? colors.textDark : colors.textLight} />
+      <View
+        style={[
+          styles.foodPin,
+          isEliminated && styles.foodPinOut,
+          isSelected && styles.foodPinGlow,
+          // Flat fill only, no neonSelected ring - the ring's own color
+          // (colors.neon, itself derived from the user's accent) fought with
+          // each pin's own assigned ramp color and made it harder to read,
+          // not easier (user report). The base foodPin border is enough to
+          // keep the pin's shape defined.
+          highlight && { backgroundColor: highlight.color },
+        ]}
+      >
+        {highlight ? (
+          <Text style={[styles.foodPinLabel, { color: contrastTextColor(highlight.color) }]}>
+            {highlight.label}
+          </Text>
+        ) : (
+          <Ionicons name="restaurant" size={14} color={isSelected ? colors.textDark : colors.textLight} />
+        )}
       </View>
     </Marker>
   );
@@ -95,7 +114,9 @@ function PersonMarker({ location, colors, styles }) {
  * than re-fitting on every render. Renders nothing at all if there isn't at
  * least one valid point - callers don't need to guard for that themselves.
  */
-export default function SpotsMap({ location, spots, eliminatedIds = [], selectedSpotId, onSelectSpot }) {
+export default function SpotsMap({
+  location, spots, eliminatedIds = [], selectedSpotId, highlights, onSelectSpot,
+}) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
@@ -123,6 +144,7 @@ export default function SpotsMap({ location, spots, eliminatedIds = [], selected
               spot={spot}
               isEliminated={eliminatedIds.includes(spot.id)}
               isSelected={spot.id === selectedSpotId}
+              highlight={highlights ? highlights[spot.id] : undefined}
               colors={colors}
               styles={styles}
               onSelectSpot={onSelectSpot}
@@ -151,4 +173,5 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   foodPinOut: { opacity: 0.45 },
   foodPinGlow: { backgroundColor: colors.accent, ...neonSelected(colors) },
+  foodPinLabel: { fontSize: 12, fontWeight: 'bold' },
 });

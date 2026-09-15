@@ -8,7 +8,7 @@ module.exports = {
   expo: {
     name: 'Nomnom_App',
     slug: 'Nomnom_App',
-    version: '1.0.0',
+    version: '1.1.0',
     scheme: 'nomnom',
     orientation: 'portrait',
     icon: './assets/icon.png',
@@ -67,10 +67,20 @@ module.exports = {
         {
           // Same store-review reasoning as expo-location above - both
           // permission strings need to explain WHY, not just exist. Photo
-          // library access is for attaching a photo to a journal entry;
+          // library access is for attaching a picture to a journal entry;
           // camera is offered as the other picker option in the same flow.
           photosPermission: 'Nomnom uses your photos to let you attach a picture to a food journal entry.',
           cameraPermission: 'Nomnom uses your camera to let you attach a picture to a food journal entry.',
+        },
+      ],
+      [
+        'expo-audio',
+        {
+          // Same store-review reasoning as expo-location/expo-image-picker
+          // above. Microphone access is only ever for the "At the Table"
+          // journal note's voice-to-text button - never used in the
+          // background, never recorded without the user tapping to start.
+          microphonePermission: 'Nomnom uses your microphone to turn a spoken note into text for your food journal.',
         },
       ],
     ],

@@ -42,7 +42,7 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 
 ## Fullscreen photo viewer (2026-09-14)
 
-- [x] Pinch-to-zoom (1x-4x), zoom maintained until explicitly pinched back down, pan-vs-swipe-to-next-photo disambiguated by speed + edge-proximity per user spec. See `src/components/FullscreenImageViewer.js`. **Needs real on-device testing** - velocity/edge thresholds are reused from CoinSpinner's already-tuned flick threshold as a starting point, not verified against this specific gesture feel.
+- [x] Pinch-to-zoom (1x-4x), zoom maintained until explicitly pinched back down, pan-vs-swipe-to-next-photo disambiguated by speed + edge-proximity per user spec. See `src/components/FullscreenImageViewer.js`. Confirmed working on-device 2026-09-14 after two real bugs found via live testing: (1) an outer Pressable was eating the first finger of every pinch before a second finger could join it - consolidated tap/pinch/pan/swipe into one PanResponder that claims every touch itself; (2) FlatList's native ScrollView recognizer could still interrupt mid-pinch despite `scrollEnabled={false}`, and sequential (not simultaneous) two-finger lift-off produced a phantom trailing "tap" that dismissed the viewer right after a successful zoom - fixed with `onPanResponderTerminationRequest: () => false` (same pattern as FaveCuisineButton.js) plus a short cooldown that ignores a stray tap-like release immediately after a real pinch/pan.
 
 ## Cross-device audit (2026-09-14)
 
@@ -63,7 +63,7 @@ Full agent report has the file/line detail for every item below.
 
 ## In-app bug reporting (2026-09-14, in progress)
 
-- [x] "Report a Bug" text field in Settings, submits to a new Firestore `bugReports` collection (`src/api/bugReports.js`). One-way mailbox - the app never reads it back.
+- [x] "Report a Bug" in Settings, submits to a new Firestore `bugReports` collection (`src/api/bugReports.js`). One-way mailbox - the app never reads it back. Originally an inline text field in the floating Settings panel; moved 2026-09-14 to its own popup modal (`src/components/ReportBugModal.js`) after the keyboard kept covering the inline field - root-caused to RN's `KeyboardAvoidingView` "position" behavior measuring its shift relative to its immediate parent, which came out wrong nested that deep inside the panel's absolutely-positioned wrapper. A `Modal` renders at the screen root, so the same keyboard-avoidance works correctly there instead.
 - [ ] **Firestore security rules for `bugReports`** — need write-only access for any signed-in (anonymous) user, no read/update/delete from the client at all (only the scheduled daily check, running server-side, needs to read/update status):
   ```
   match /bugReports/{reportId} {
@@ -71,11 +71,111 @@ Full agent report has the file/line detail for every item below.
     allow read, update, delete: if false;
   }
   ```
-- [ ] Push the repo to a private GitHub remote — required before the daily scheduled cloud agent can clone/access the code at all. In progress 2026-09-14.
-- [ ] Set up the daily scheduled cloud routine (via Claude's `/schedule`) — reads new `bugReports` since last run, investigates, attempts real fixes on a branch (not pushed - user explicitly chose "attempt real fixes unattended" over "propose only"), and produces a daily digest split into: done/awaiting your approval to push, vs. needs your feedback before proceeding. Blocked on the GitHub push above.
+- [x] Push the repo to GitHub — done 2026-09-14, `https://github.com/kybrdsmash/Nomnom`.
+- [x] Daily scheduled cloud routine created 2026-09-14: https://claude.ai/code/routines/trig_01MujHHJv6VsPvHunoYzNLak — 9am PT daily, reads new `bugReports`, attempts real fixes on a pushed branch (not merged), or flags `needs-feedback`; ends with one digest message. Firebase Admin credential lives as environment variables on the `Default` cloud environment (`FIREBASE_ADMIN_PROJECT_ID`/`FIREBASE_ADMIN_CLIENT_EMAIL`/`FIREBASE_ADMIN_PRIVATE_KEY`), not embedded in the routine prompt.
+- [ ] Confirm the `bugReports` Firestore security rule (write-only for clients, below) is actually published in the Firebase console — given as text 2026-09-14, not yet confirmed applied:
+  ```
+  match /bugReports/{reportId} {
+    allow create: if request.auth != null;
+    allow read, update, delete: if false;
+  }
+  ```
+
+## Play Store submission loose ends (2026-09-14)
+
+- [ ] Data Safety form's "Do you provide a way for users to request that their data is deleted?" question didn't save (confirmed via the exported CSV - all three options came back blank). Should be **Yes** (privacy policy Section 13 already commits to deleting data on request via email). Re-enter Data safety editing from the main App content page (not in-flow back navigation) and re-answer it, in the "Data collection and security" step alongside the account-creation-methods question.
+
+## Play Store content rating / UGC gap (2026-09-14)
+
+- [ ] **No block/report/moderation on the schedule-a-meal chat** (`sendChatMessage` in `src/api/friendSession.js`) — Play Console's content rating questionnaire was answered honestly: no ability to block users, no ability to report users/content, no chat moderation. Chat is scoped to matched friend-spin players only (never strangers), which is why we're submitting as-is rather than blocking the initial closed-testing release on this - but if Google comes back requiring it before approval, or before any wider/public release, build at minimum: a "remove friend" action that also cuts off their chat/shared-photo access. Decided 2026-09-14 to prioritize getting the testing link out over building this preemptively.
+
+## Sign-in (2026-09-14, planned fast-follow after initial closed-testing release)
+
+- [ ] Google Sign-In — realistic near-term add, Firebase has first-class support. **Must be implemented via Firebase account *linking* (`linkWithCredential`), not a separate fresh sign-in** - this upgrades the existing anonymous user's UID to also carry a Google identity rather than creating a new one, so a tester's existing journal/history/friends (all keyed by that same anonymous UID already) carry over invisibly instead of being lost. Confirmed with the user this is the hard requirement before building it.
+- [ ] Facebook Login — also realistic (Firebase-native), but needs a Facebook Developer app + Meta's app review process first, more setup overhead than Google.
+- Instagram — not viable as a consumer "sign in with Instagram" option; Instagram's API is scoped to Business/Creator use cases, not general user login. Ruled out.
+- TikTok — possible but meaningfully more work: not a built-in Firebase Auth provider, would need TikTok's own Login Kit plus a small backend (cloud function minting a Firebase custom token). Deferred, not ruled out.
+- Play Console's "App access" declaration reflects the SUBMITTED BUILD, not future plans - answered "No, all functionality available without special access" for the initial closed-testing release since sign-in isn't built yet; update this declaration on whichever future release actually adds it.
+- [ ] Ads - user wants to enable eventually; answered "No" on Play Console's Ads declaration for now (accurate for the current build). **When ads are actually added**, update three things together, not just the Play Console toggle: the Ads declaration, the Data Safety form, and `docs/privacy-policy.html` (Section 4 currently states plainly "Nomnom includes no advertising or analytics SDK of any kind" - that becomes false the moment ads ship and needs a real rewrite, not just a date bump).
+
+## Randomizer experience packs (2026-09-15, big vision item, not started)
+
+The subscription's actual value proposition, per the user: not gating the app's core function, but selling *how the reveal feels*. Same odds/result underneath, always - purely cosmetic, so this is an honest monetization model, not a gambling-adjacent manipulation of outcomes.
+
+- [ ] **Current coin stays the free default** experience - what's live today after the 2026-09-15 bug fix (blank-coin-during-spin issue, food icons now render throughout the flip) is the baseline everyone gets free.
+- [ ] **Additional themed "reveal" animations as real, distinct content** - not palette-swaps of the same coin physics. User's own examples, verbatim: a coin shooting sparks and landing perfectly "like a ballerina," a coin that lands "like a boulder crashing into soft dirt," a coin that flips and lands into a puddle like water. Each needs its own genuinely different motion/impact language, not just a new skin on the current bounce/roll/precession curve.
+- [ ] **Not coin-specific long-term** - user explicitly said "dice rolling experience, or whatever odds-determining method they prefer" - the architecture should treat "how the result gets revealed" as a swappable/pluggable thing (a registry of reveal animations with a common interface: trigger, duration, done-callback), not something hardcoded to CoinSpinner.js the way it is today. Building the SECOND reveal type is the point where this abstraction actually needs to exist - don't build it speculatively before then.
+- [ ] **Unlock model**: sample/preview other packs for free, pay to unlock. Exact mechanism (subscription-gated vs. one-off per-pack purchase) not decided - revisit once [[sign-in]] (needed for purchases to follow a person across devices) and Play Billing are actually being built.
+- [ ] User's stated emotional target for ALL of these: "like opening a present - can't wait to see what's inside." This is the bar each reveal animation needs to clear, not just "looks nice."
+- Building approach when this gets picked up: use the same live-tunable browser Artifact bench pattern already proven for the current coin (see the 2026-09-14 coin animation bench entry above) rather than blind iterate-and-rebuild-on-device - this scales especially well here since MULTIPLE distinct animations need tuning, not just one.
+
+## Unified journaling / "At the Table" (2026-09-15)
+
+Both the spot-detail "Journal" compose box and the new live-at-the-meal
+capture flow now share one format instead of DetailModal's old single-photo/
+single-note form.
+
+- [x] **`src/components/MomentsEditor.js`** — shared, controlled (`moments`/
+  `onChangeMoments`) editor: a leading text-only note, then any number of
+  photo-on-top/text-below blocks, two separate "+" controls (Add a photo /
+  Add more text — deliberately not one combined control, per user spec), a
+  mic button per block (OpenAI Whisper, `src/api/transcribe.js`, needs
+  `EXPO_PUBLIC_OPENAI_API_KEY` — cheapest-tier `whisper-1` today,
+  `gpt-4o-mini-transcribe` is a same-endpoint drop-in at half the price if
+  worth the swap later). Used by both `AtTheTableCompose.js` and
+  `DetailModal.js`'s own compose box.
+- [x] **"At the Table"** — third Journal tab (Mine / Friends / At the Table),
+  quick capture while still at the meal: geolocation-assisted place lookup
+  (tight 0.15mi radius) or manual search, an optional low-key occasion
+  dropdown (tag icon, not an always-visible field — no guilt for skipping
+  it), autosaves a single local draft (`storage.js`) so closing/reopening
+  the app resumes exactly where it left off. Deliberately no star rating —
+  see the new rating request below, not yet decided whether that changes
+  this.
+- [x] Fullscreen viewer extended (`noteTexts` array, not a single `noteText`)
+  to swipe through an entry's whole photo set together, each photo paired
+  with its own text — falls back to the last real blurb when a later photo
+  has none (carry-forward fill), per user spec.
+- [x] `KeyboardAvoidingView` added to both compose surfaces — text inputs
+  were getting covered by the keyboard when scrolled low (same root cause
+  class as `ReportBugModal`'s earlier fix: needs to be a Modal or otherwise
+  not nested deep inside an offset container for the shift math to work).
+- [x] Renames: "Your Reviews" → "My Journal" → just **"Journal"** (has
+  Mine/Friends/At the Table tabs already, "My" was redundant per user).
+- [x] Detail-page action row (Favorite/Try later/Share/Send) is icon-only
+  now, one row, no text labels/wrapping.
+- [x] Defensive fix: `useAudioRecorder` creates a real native object on
+  mount (not lazily on first tap) — wrapped each `MicButton` in a small
+  error boundary (`MicButtonBoundary`) after this crashed the ENTIRE
+  compose form in one report. If expo-audio's native module isn't actually
+  available (stale Metro/Expo Go cache right after adding the dependency is
+  the leading suspect, not confirmed), voice-to-text just silently
+  disappears instead of blocking text/photo entries.
+- [ ] **Known gap**: friend photo-sharing (the "visible to friends" toggle)
+  only works on the OLD single-photo entry shape — not wired up for
+  multi-moment entries yet (would need per-moment share state, doesn't
+  exist).
+- [ ] **Per-photo/moment star rating** (2026-09-15, requested, not started)
+  — each moment should carry its own optional 1-5 rating (quality of that
+  specific dish/item), and the entry's overall rating should default to the
+  average of whichever moments have one set, while still being manually
+  overridable. Needs: a `rating` field added to the moment shape (`newMoment`
+  in `MomentsEditor.js`), a small star row per moment (behind a `showRatings`
+  prop so `AtTheTableCompose` can keep opting out, since a rating pressures
+  against its "fast note, not a formal review" intent — flagged for the user
+  to confirm whether they actually want it there too), and an auto-vs-manual
+  toggle on the overall rating (recompute from the average unless the user
+  has directly touched the overall stars themselves, with some way back to
+  "auto" if they want it).
 
 ## Someday / vision
 
+- [ ] **Slogan** (2026-09-15) — user is leaning toward "A better food app"
+  but still deciding; flagged as vague/comparative (better than what?)
+  versus the feature-graphic line already in use ("Can't decide where to
+  eat?"), which names the actual problem solved. Alternatives floated: "The
+  food app that actually picks for you" / "No more scrolling. Just eat."
+  Revisit once the user has thought on it more - not applied anywhere yet.
 - [x] Rewards system for completed reviews — v1 shipped 2026-09-14: per-city tier label (🥄 New Taster → 🍴 Regular → 🍜 Local Regular → 🗺️ Food Explorer → 🏆 Local Legend), inline next to each city header in JournalOverlay's "My Reviews" screen. Deliberately per-city, not global - see `src/api/rewards.js`.
 - [x] Fancier coin-spin animation — bench built and tuned values applied 2026-09-14 (anticipation dip + micro-bounce enabled, impact squash/stretch left off). See `src/components/CoinSpinner.js`.
 

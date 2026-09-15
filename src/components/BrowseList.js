@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, Image, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { joinParts } from '../utils/format';
+import { accentRamp, contrastTextColor } from '../utils/color';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import SpotsMap from './SpotsMap';
+
+// Cap on how many simultaneous "kept" pins get their own ramp step - matches
+// list mode's own target count (see App.js's targetCount for gameMode
+// 'list'), so every spot that can ever appear here gets a distinct color.
+const MAX_HIGHLIGHTS = 12;
 
 /**
  * "List" mode: browse the best-ranked spots from the current pool (already
@@ -26,35 +33,93 @@ export default function BrowseList({ spots, location, onRefresh, onCancel, onSho
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
+  // Most recently tapped spot - always exactly one (or none), replaced by
+  // whichever row was viewed last (user request: highlight the most
+  // recently selected spot on the mini map, which wasn't wired up at all
+  // for this screen before).
+  const [selectedId, setSelectedId] = useState(null);
+  // Long-pressed spots stay highlighted regardless of what's since been
+  // tapped/viewed (user request: "a long press should keep a place
+  // highlighted") - toggled on/off by long-pressing the same row again.
+  const [keptIds, setKeptIds] = useState(() => new Set());
 
-  const renderCard = (spot) => (
-    <Pressable key={spot.id} style={styles.card} onPress={() => onShowDetails(spot)}>
-      {spot.isRepeat && <View style={styles.repeatDot} />}
-      {spot.photoUrl ? (
-        <Pressable onPress={() => setFullscreenPhoto(spot.photoUrl)}>
-          <Image source={{ uri: spot.photoUrl }} style={styles.image} />
-        </Pressable>
-      ) : (
-        <View style={styles.imagePlaceholder}>
-          <Ionicons name="restaurant" size={20} color={colors.textMuted} />
-        </View>
-      )}
-      <View style={styles.textCol}>
-        <Text style={styles.title} numberOfLines={1}>{spot.name}</Text>
-        <Text style={styles.sub} numberOfLines={1}>
-          {/* Prefer the actually-confirmed cuisine (the filter that matched,
-              e.g. "Mexican") over Google's own type label when both are
-              known - it's the more meaningful/trustworthy one here, since
-              it's tied to what was actually searched for rather than
-              Google's sometimes-generic classification. Falls back to
-              `type` when no cuisine filter was active (confirmedCuisine is
-              null) or the spot's cuisine wasn't confirmed at all. */}
-          {joinParts([`⭐ ${spot.rating}`, spot.confirmedCuisine || spot.type, spot.distance])}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-    </Pressable>
+  // One color per LIST POSITION (not per selection order), so a spot's color
+  // stays stable no matter when it was tapped/kept - dark to light across
+  // the user's own accent color (user request), capped at MAX_HIGHLIGHTS
+  // steps since that's the most spots this screen ever shows at once.
+  const ramp = useMemo(
+    () => accentRamp(colors.accent, Math.min(MAX_HIGHLIGHTS, Math.max(1, spots.length))),
+    [colors.accent, spots.length]
   );
+  const highlights = useMemo(() => {
+    const map = {};
+    spots.forEach((spot, i) => {
+      if (spot.id === selectedId || keptIds.has(spot.id)) {
+        map[spot.id] = { color: ramp[i % ramp.length], label: i + 1 };
+      }
+    });
+    return map;
+  }, [spots, selectedId, keptIds, ramp]);
+
+  const toggleKept = (id) => {
+    Haptics.selectionAsync();
+    setKeptIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderCard = (spot) => {
+    // Whole-card tint instead of a small side dot (user request: "make the
+    // whole bar that color instead of just a dot") - contrastTextColor picks
+    // black/white per row since accentRamp spans very dark to very light.
+    const highlight = highlights[spot.id];
+    const onTint = highlight ? contrastTextColor(highlight.color) : null;
+
+    return (
+      <Pressable
+        key={spot.id}
+        style={[styles.card, highlight && { backgroundColor: highlight.color }]}
+        onPress={() => { setSelectedId(spot.id); onShowDetails(spot); }}
+        onLongPress={() => toggleKept(spot.id)}
+        delayLongPress={500}
+      >
+        {spot.photoUrl ? (
+          <Pressable onPress={() => setFullscreenPhoto(spot.photoUrl)}>
+            <Image source={{ uri: spot.photoUrl }} style={styles.image} />
+          </Pressable>
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Ionicons name="restaurant" size={20} color={colors.textMuted} />
+          </View>
+        )}
+        <View style={styles.textCol}>
+          <Text style={[styles.title, onTint && { color: onTint }]} numberOfLines={1}>{spot.name}</Text>
+          <Text style={[styles.sub, onTint && { color: onTint, opacity: 0.75 }]} numberOfLines={1}>
+            {/* Prefer the actually-confirmed cuisine (the filter that matched,
+                e.g. "Mexican") over Google's own type label when both are
+                known - it's the more meaningful/trustworthy one here, since
+                it's tied to what was actually searched for rather than
+                Google's sometimes-generic classification. Falls back to
+                `type` when no cuisine filter was active (confirmedCuisine is
+                null) or the spot's cuisine wasn't confirmed at all. */}
+            {joinParts([`⭐ ${spot.rating}`, spot.confirmedCuisine || spot.type, spot.distance])}
+          </Text>
+          {/* Favorites-only mode reaching past the distance setting for this
+              one (see places.js's pickFromFavorites) - user request: always
+              say so, never serve it silently. */}
+          {spot.beyondLimit && (
+            <Text style={[styles.beyondLimitText, onTint && { color: onTint, opacity: 0.75 }]} numberOfLines={1}>
+              Beyond your set travel limit
+            </Text>
+          )}
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={onTint || colors.textMuted} />
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.wrapper}>
@@ -65,7 +130,15 @@ export default function BrowseList({ spots, location, onRefresh, onCancel, onSho
 
       {/* User request: every results screen should show a map with the
           user's own location and the spots showing on that screen. */}
-      <SpotsMap location={location} spots={spots} onSelectSpot={onShowDetails} />
+      {/* No separate selectedSpotId - the currently-selected spot is already
+          folded into `highlights` below (see the useMemo above), with its
+          own ramp-position color instead of the older flat accent glow. */}
+      <SpotsMap
+        location={location}
+        spots={spots}
+        highlights={highlights}
+        onSelectSpot={(spot) => { setSelectedId(spot.id); onShowDetails(spot); }}
+      />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {spots.map(renderCard)}
@@ -100,12 +173,12 @@ const makeStyles = (colors) => StyleSheet.create({
   subheader: { color: colors.textMuted, fontSize: 12, marginBottom: 12 },
   scroll: { width: '100%' },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardAlt, width: '100%', padding: 10, borderRadius: 12, marginBottom: 10 },
-  repeatDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFF', marginRight: 10 },
   image: { width: 46, height: 46, borderRadius: 23, marginRight: 15 },
   imagePlaceholder: { width: 46, height: 46, borderRadius: 23, marginRight: 15, backgroundColor: '#555', alignItems: 'center', justifyContent: 'center' },
   textCol: { flex: 1, justifyContent: 'center', paddingRight: 10 },
   title: { color: colors.textLight, fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   sub: { color: colors.textMuted, fontSize: 12 },
+  beyondLimitText: { color: colors.textMuted, fontSize: 11, fontStyle: 'italic', marginTop: 1 },
   actionRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 15 },
   refreshBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 22, borderRadius: 25, marginRight: 12, ...buttonDepth },
   refreshText: { color: colors.textDark, fontWeight: 'bold', marginLeft: 8, fontSize: 15 },

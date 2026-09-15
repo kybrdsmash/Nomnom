@@ -20,6 +20,7 @@ const KEYS = {
   scheduleArchive: '@nomnom/scheduleArchive',
   faveCuisines: '@nomnom/faveCuisines',
   journal: '@nomnom/journal',
+  atTheTableDraft: '@nomnom/atTheTableDraft',
 };
 
 async function load(key, fallback) {
@@ -115,3 +116,11 @@ export const saveFaveCuisines = (slots) => save(KEYS.faveCuisines, slots);
 // mirror that makes this visible to friends.
 export const loadJournal = () => load(KEYS.journal, {});
 export const saveJournal = (journal) => save(KEYS.journal, journal);
+
+// One in-progress "At the Table" note at a time - saved on every change so
+// closing/reopening the app resumes exactly where it left off (user
+// request: it should feel like the note never closed, even though nothing
+// can literally stay on screen once the app itself is closed).
+export const loadAtTheTableDraft = () => load(KEYS.atTheTableDraft, null);
+export const saveAtTheTableDraft = (draft) => save(KEYS.atTheTableDraft, draft);
+export const clearAtTheTableDraft = () => save(KEYS.atTheTableDraft, null);

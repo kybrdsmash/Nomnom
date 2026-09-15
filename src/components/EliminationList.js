@@ -77,7 +77,6 @@ export default function EliminationList({ eliminationList, fullBracket, eliminat
               ]}
               onPress={() => { setSelectedSpotId(spot.id); onShowDetails(spot); }}
             >
-              {spot.isRepeat && <View style={styles.repeatDot} />}
               {spot.photoUrl ? (
                 <Pressable onPress={() => setFullscreenPhoto(spot.photoUrl)}>
                   <Image source={{ uri: spot.photoUrl }} style={styles.elimImage} />
@@ -91,7 +90,9 @@ export default function EliminationList({ eliminationList, fullBracket, eliminat
                 <Text style={[styles.elimTitle, isEliminated && styles.elimTitleOut]} numberOfLines={1}>
                   {spot.name}
                 </Text>
-                <Text style={styles.elimSub} numberOfLines={1}>{joinParts([`⭐ ${spot.rating}`, spot.type])}</Text>
+                <Text style={styles.elimSub} numberOfLines={1}>
+                  {joinParts([`⭐ ${spot.rating}`, spot.type, spot.distance && spot.time ? `${spot.distance} (${spot.time})` : null])}
+                </Text>
                 {/* Only set when this slot wasn't a genuine match for the
                     selected cuisine (see places.js's unconfirmedCuisine) -
                     a bracket gives the least context of any result screen
@@ -100,6 +101,14 @@ export default function EliminationList({ eliminationList, fullBracket, eliminat
                 {spot.unconfirmedCuisine && (
                   <Text style={styles.elimUnconfirmed} numberOfLines={1}>
                     {spot.unconfirmedCuisine} Spots Nearby
+                  </Text>
+                )}
+                {/* Favorites-only mode reaching past the distance setting
+                    for this one (see places.js's pickFromFavorites) - user
+                    request: always say so, never serve it silently. */}
+                {spot.beyondLimit && (
+                  <Text style={styles.elimUnconfirmed} numberOfLines={1}>
+                    Beyond your set travel limit
                   </Text>
                 )}
               </View>
@@ -169,7 +178,6 @@ const makeStyles = (colors) => StyleSheet.create({
   elimTitle: { color: colors.textLight, fontSize: 17, fontWeight: 'bold', marginBottom: 2 },
   elimSub: { color: colors.textMuted, fontSize: 13 },
   elimUnconfirmed: { color: colors.textMuted, fontSize: 11, fontStyle: 'italic', marginTop: 2 },
-  repeatDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFF', marginRight: 10 },
   eliminateBtn: {
     width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.cardAlt, borderWidth: 1.5, borderColor: colors.danger, ...buttonDepth,

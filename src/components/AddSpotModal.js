@@ -7,30 +7,64 @@ import { joinParts } from '../utils/format';
 import SlidableSegmented from './SlidableSegmented';
 import PlaceSearchBar from './PlaceSearchBar';
 
+// Which source tabs to offer, per target mode - deliberately excludes
+// whichever list IS the target (browsing "Try Later" as a source while
+// adding TO Try Later would just be circular).
+const SOURCE_TABS = {
+  favorites: [
+    { value: 'tryLater', label: 'Try Later' },
+    { value: 'history', label: 'History' },
+    { value: 'reviewed', label: 'Journal' },
+  ],
+  tryLater: [
+    { value: 'favorites', label: 'Favorites' },
+    { value: 'history', label: 'History' },
+    { value: 'reviewed', label: 'Journal' },
+  ],
+};
+
 /**
- * Everything needed to add a new favorite lives behind the "+" button on
- * the Favorites screen (moved out of an always-visible search bar - user
- * request): search for any restaurant by name, or pick straight from
- * spots already sitting in Try Later, History, or your food journal
- * ("Reviewed"), each shown with a heart that's filled if it's already a
- * favorite so this doubles as a quick toggle. `onToggleFavorite` is the
- * same bidirectional toggle (App.js's toggleFavorite) used everywhere else
- * favoriting happens.
+ * Add-by-search, shared by both the Favorites and Try Later screens (user
+ * request - Try Later had no way to add a spot that was never surfaced by a
+ * spin, e.g. one a friend just mentioned, without ALSO marking it a
+ * favorite first, which was the only add-by-search flow that existed).
+ * `mode` picks which list this instance targets: search results and every
+ * row's toggle both act on `onToggle` (the matching list's own bidirectional
+ * toggle - App.js's toggleFavorite/toggleTryLater), and the OTHER three
+ * lists (favorites/tryLater minus whichever is the target, plus history and
+ * the food journal) are all still browsable as quick-pick sources.
  */
-export default function AddFavoriteModal({
-  visible, onClose, onToggleFavorite, favorites, tryLater, history, recentlyReviewed,
+export default function AddSpotModal({
+  visible, onClose, mode, onToggle, favorites, tryLater, history, recentlyReviewed,
 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
-  const [tab, setTab] = useState('tryLater');
+  const tabs = SOURCE_TABS[mode];
+  const [tab, setTab] = useState(tabs[0].value);
 
-  const sourceMap = { tryLater, history, reviewed: recentlyReviewed };
+  const sourceMap = { favorites, tryLater, history, reviewed: recentlyReviewed };
   const emptyMap = {
+    favorites: 'No favorites yet.',
     tryLater: 'Nothing on your try list yet.',
     history: 'Nothing seen yet.',
-    reviewed: 'No reviews logged yet.',
+    reviewed: 'Nothing in your Journal yet.',
   };
   const list = sourceMap[tab] || [];
+  const targetList = mode === 'favorites' ? favorites : tryLater;
+  const icon = mode === 'favorites' ? 'heart' : 'bookmark';
+  const iconOutline = mode === 'favorites' ? 'heart-outline' : 'bookmark-outline';
+  const iconColor = mode === 'favorites' ? colors.danger : colors.gold;
+  const title = mode === 'favorites' ? 'Add to Favorites' : 'Add to Try Later';
+
+  // Closes right after toggling, instead of staying open - otherwise there
+  // was no visible confirmation a search result actually got added (user
+  // report: "tough to tell that the new restaurant just got added"). This
+  // way the user lands straight back on the list they were adding to and
+  // can see the new row appear.
+  const handleToggle = (spot) => {
+    onToggle(spot);
+    onClose();
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -38,20 +72,16 @@ export default function AddFavoriteModal({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
           <View style={styles.headerRow}>
-            <Text style={styles.title}>Add to Favorites</Text>
+            <Text style={styles.title}>{title}</Text>
             <Pressable onPress={onClose} style={{ padding: 6 }} hitSlop={8}>
               <Ionicons name="close" size={24} color={colors.accent} />
             </Pressable>
           </View>
 
-          <PlaceSearchBar placeholder="Search for a restaurant..." onSelect={onToggleFavorite} />
+          <PlaceSearchBar placeholder="Search for a restaurant..." onSelect={handleToggle} />
 
           <SlidableSegmented
-            options={[
-              { value: 'tryLater', label: 'Try Later' },
-              { value: 'history', label: 'History' },
-              { value: 'reviewed', label: 'Reviewed' },
-            ]}
+            options={tabs}
             value={tab}
             onChange={setTab}
             styles={{
@@ -68,12 +98,12 @@ export default function AddFavoriteModal({
               <Text style={styles.emptyText}>{emptyMap[tab]}</Text>
             ) : (
               list.map((spot, i) => {
-                const isFav = favorites.some((f) => f.id === spot.id);
+                const isOnTarget = targetList.some((s) => s.id === spot.id);
                 return (
                   <Pressable
                     key={`${spot.id}-${i}`}
                     style={styles.row}
-                    onPress={() => onToggleFavorite(spot)}
+                    onPress={() => handleToggle(spot)}
                   >
                     {spot.photoUrl ? (
                       <Image source={{ uri: spot.photoUrl }} style={styles.rowImage} />
@@ -88,7 +118,7 @@ export default function AddFavoriteModal({
                         {joinParts([`⭐ ${spot.rating}`, spot.type])}
                       </Text>
                     </View>
-                    <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={colors.danger} />
+                    <Ionicons name={isOnTarget ? icon : iconOutline} size={20} color={iconColor} />
                   </Pressable>
                 );
               })

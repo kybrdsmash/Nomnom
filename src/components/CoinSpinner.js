@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
-import { Animated, Easing, PanResponder, Text, StyleSheet } from 'react-native';
+import { Animated, Easing, Image, PanResponder, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../ThemeContext';
@@ -545,14 +545,6 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, hapt
         },
       ]}
     >
-      {/* Food images deliberately pulled out of render for now (user
-          request) so the coin's own shape/shading/motion can be judged on
-          its own, without icon content distracting from it. frontFood/
-          backFood state and the pick/randomize-on-crossing logic above are
-          untouched - this is just a render-layer cut, trivial to restore by
-          putting the two <Image> elements (source={frontFood.image} /
-          backFood.image, style={styles.foodIcon}) back as children of the
-          faces below. */}
       {isSearching ? (
         <>
           <Animated.View style={[styles.face, { transform: [{ rotateX: rotateXFront }] }]}>
@@ -562,6 +554,7 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, hapt
               end={{ x: 0.85, y: 0.95 }}
               style={styles.faceGradient}
             />
+            <Image source={frontFood.image} style={styles.foodIcon} resizeMode="contain" />
           </Animated.View>
           <Animated.View style={[styles.face, { transform: [{ rotateX: rotateXBack }] }]}>
             <LinearGradient
@@ -570,6 +563,7 @@ const CoinSpinner = forwardRef(function CoinSpinner({ isSearching, onPress, hapt
               end={{ x: 0.85, y: 0.95 }}
               style={styles.faceGradient}
             />
+            <Image source={backFood.image} style={styles.foodIcon} resizeMode="contain" />
           </Animated.View>
         </>
       ) : (

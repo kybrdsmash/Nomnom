@@ -1,20 +1,33 @@
-import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, Image, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { Modal, View, Text, Image, Pressable, ScrollView, ActivityIndicator, Linking, StyleSheet } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { getFoodInfo, ALLERGEN_TAGS } from '../foodInfo';
 import { searchNearbyByKeyword } from '../api/places';
 import { joinParts } from '../utils/format';
 
+// Plain search-URL redirects, not a recipe API/curated database - works for
+// every dish in the app's food list without per-dish content work, at the
+// cost of not knowing whether a given site actually has a good match before
+// opening it (user request: "a chef/mixing bowls icon... redirects you to a
+// bunch of links that can provide recipes").
+const RECIPE_SOURCES = [
+  { label: 'Google Search', url: (name) => `https://www.google.com/search?q=${encodeURIComponent(`${name} recipe`)}` },
+  { label: 'YouTube (video recipes)', url: (name) => `https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} recipe`)}` },
+  { label: 'AllRecipes', url: (name) => `https://www.allrecipes.com/search?q=${encodeURIComponent(name)}` },
+  { label: 'Food Network', url: (name) => `https://www.foodnetwork.com/search/${encodeURIComponent(name)}-` },
+];
+
 /**
  * Long-press detail view for a single rolling food icon - a description,
- * standard allergen/dietary symbols, a cultural background note, and a
- * button to search nearby restaurants that serve it (reuses the same
- * Nearby Search endpoint the main randomizer already uses, just with the
- * dish's name as the keyword instead of a cuisine). Description/allergen/
- * cultural content comes from src/foodInfo.js's curated batch - not every
- * dish has an entry yet, so this degrades gracefully when one's missing.
+ * standard allergen/dietary symbols, a cultural background note, a button
+ * to search nearby restaurants that serve it (reuses the same Nearby Search
+ * endpoint the main randomizer already uses, just with the dish's name as
+ * the keyword instead of a cuisine), and a "[food] Recipes" recipe-links
+ * shortcut (RECIPE_SOURCES above). Description/allergen/cultural content
+ * comes from src/foodInfo.js's curated batch - not every dish has an entry
+ * yet, so this degrades gracefully when one's missing.
  */
 export default function FoodDetailModal({ visible, food, location, travelType, onClose, onShowSpotDetails }) {
   const { colors } = useTheme();
@@ -22,12 +35,24 @@ export default function FoodDetailModal({ visible, food, location, travelType, o
   const [nearby, setNearby] = useState([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [searchedNearby, setSearchedNearby] = useState(false);
+  const [showRecipeMenu, setShowRecipeMenu] = useState(false);
 
+  // App.js nulls out `food` to hide this modal while a spot's detail view
+  // (opened from the nearby list below) is on top, then restores the same
+  // food object when that closes - so food?.name round-trips through
+  // undefined and back to the SAME name on that return trip, not just on a
+  // genuinely new food. Resetting on every food?.name change would wipe the
+  // nearby list right as we're navigating back to it. This ref tracks which
+  // food the current nearby/searchedNearby state actually belongs to, so a
+  // return to the same food is recognized as a no-op instead of a reset.
+  const loadedForRef = useRef(null);
   useEffect(() => {
+    if (!food || loadedForRef.current === food.name) return;
+    loadedForRef.current = food.name;
     setNearby([]);
     setSearchedNearby(false);
     setLoadingNearby(false);
-  }, [visible, food?.name]);
+  }, [food]);
 
   if (!food) return null;
   const info = getFoodInfo(food.name);
@@ -45,7 +70,19 @@ export default function FoodDetailModal({ visible, food, location, travelType, o
     setLoadingNearby(false);
   };
 
+  // A custom Modal, not Alert.alert - Android's native alert dialog only
+  // reliably renders up to 3 buttons, and this needed 4 recipe sources PLUS
+  // a way to back out (user report: with all 5 passed to Alert.alert, there
+  // was no way to dismiss it - the extra buttons, very likely Cancel among
+  // them, silently never rendered on Android). A real Modal has no such
+  // limit and always has an explicit close button + backdrop-tap dismiss.
+  const pickRecipeSource = (source) => {
+    setShowRecipeMenu(false);
+    Linking.openURL(source.url(food.name));
+  };
+
   return (
+    <>
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
@@ -105,6 +142,13 @@ export default function FoodDetailModal({ visible, food, location, travelType, o
                 )}
               </Pressable>
             )}
+            {/* Always visible regardless of the nearby search's own state -
+                recipes is an independent path, not conditional
+                on whether a nearby spot search happened (user request). */}
+            <Pressable style={styles.recipeBtn} onPress={() => setShowRecipeMenu(true)}>
+              <MaterialCommunityIcons name="chef-hat" size={18} color={colors.accent} />
+              <Text style={styles.recipeBtnText}>{food.name} Recipes</Text>
+            </Pressable>
             {searchedNearby && nearby.length === 0 && (
               <Text style={styles.emptyText}>Nothing serving this nearby right now.</Text>
             )}
@@ -123,6 +167,28 @@ export default function FoodDetailModal({ visible, food, location, travelType, o
         </View>
       </View>
     </Modal>
+
+    <Modal visible={showRecipeMenu} animationType="fade" transparent onRequestClose={() => setShowRecipeMenu(false)}>
+      <View style={styles.recipeMenuBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowRecipeMenu(false)} />
+        <View style={styles.recipeMenuSheet}>
+          <View style={styles.recipeMenuHeaderRow}>
+            <Text style={styles.recipeMenuTitle} numberOfLines={1}>{food.name} Recipes</Text>
+            <Pressable onPress={() => setShowRecipeMenu(false)} hitSlop={8}>
+              <Ionicons name="close" size={22} color={colors.accent} />
+            </Pressable>
+          </View>
+          <Text style={styles.recipeMenuSubtitle}>Pick where to look for a recipe</Text>
+          {RECIPE_SOURCES.map((source) => (
+            <Pressable key={source.label} style={styles.recipeMenuItem} onPress={() => pickRecipeSource(source)}>
+              <Text style={styles.recipeMenuItemText}>{source.label}</Text>
+              <Ionicons name="open-outline" size={16} color={colors.textMuted} />
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -151,10 +217,33 @@ const makeStyles = (colors) => StyleSheet.create({
     alignItems: 'center', marginBottom: 10, ...buttonDepth,
   },
   findBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 13 },
+  // Secondary to findBtn above (a card fill + accent text/icon, not a solid
+  // accent button) - this is an alternative path, not the primary action.
+  recipeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.card, borderRadius: 20, paddingVertical: 10, marginBottom: 10,
+  },
+  recipeBtnText: { color: colors.accent, fontWeight: 'bold', fontSize: 13, marginLeft: 6 },
   nearbyRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card,
     borderRadius: 12, padding: 10, marginBottom: 8,
   },
   nearbyTitle: { color: colors.textLight, fontSize: 14, fontWeight: '600' },
   nearbySub: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
+  // Recipe-source picker - a real Modal, not Alert.alert (see
+  // pickRecipeSource's own comment for why), same backdrop/sheet chrome
+  // convention as this file's own outer Modal and ReportBugModal.
+  recipeMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  recipeMenuSheet: {
+    backgroundColor: colors.background, borderRadius: 24, padding: 20,
+    width: '85%', ...buttonDepth, elevation: 20,
+  },
+  recipeMenuHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  recipeMenuTitle: { flex: 1, color: colors.textLight, fontSize: 17, fontWeight: 'bold', marginRight: 10 },
+  recipeMenuSubtitle: { color: colors.textMuted, fontSize: 12, marginBottom: 14 },
+  recipeMenuItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.card, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8,
+  },
+  recipeMenuItemText: { color: colors.textLight, fontSize: 14, fontWeight: '600' },
 });

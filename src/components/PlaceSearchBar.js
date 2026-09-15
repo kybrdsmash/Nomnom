@@ -17,8 +17,19 @@ const DEBOUNCE_MS = 450;
  * that was never surfaced by a spin. Purely a search+pick UI; what happens
  * on a pick (add to favorites vs. open its detail view to leave feedback)
  * is entirely up to the caller via `onSelect`.
+ *
+ * `trailingIcon`/`onTrailingPress`/`trailingLoading` add an optional icon
+ * button at the end of the search row itself - AtTheTableCompose uses this
+ * for "auto-fill from my location," so it's one persistent search bar
+ * instead of two mutually-exclusive modes to switch between (user request:
+ * "weird switching back and forth... keeping the live search window open as
+ * well"). Omit all three for the plain search-only bar every other caller
+ * still uses.
  */
-export default function PlaceSearchBar({ placeholder = 'Search for a restaurant...', onSelect }) {
+export default function PlaceSearchBar({
+  placeholder = 'Search for a restaurant...', onSelect,
+  trailingIcon, onTrailingPress, trailingLoading,
+}) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [query, setQuery] = useState('');
@@ -66,6 +77,15 @@ export default function PlaceSearchBar({ placeholder = 'Search for a restaurant.
           placeholderTextColor={colors.textMuted}
         />
         {searching && <ActivityIndicator size="small" color={colors.accent} />}
+        {!!trailingIcon && (
+          <Pressable onPress={onTrailingPress} hitSlop={8} disabled={trailingLoading} style={styles.trailingBtn}>
+            {trailingLoading ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Ionicons name={trailingIcon} size={18} color={colors.accent} />
+            )}
+          </Pressable>
+        )}
       </View>
 
       {results.length > 0 && (
@@ -100,6 +120,7 @@ const makeStyles = (colors) => StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
   },
   input: { flex: 1, color: colors.textLight, fontSize: 14, marginLeft: 8, padding: 0 },
+  trailingBtn: { marginLeft: 8, padding: 2 },
   resultsBox: { backgroundColor: colors.card, borderRadius: 12, marginTop: 6, overflow: 'hidden' },
   resultRow: { flexDirection: 'row', alignItems: 'center', padding: 10, ...buttonDepth },
   resultImage: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },

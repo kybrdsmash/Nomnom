@@ -7,7 +7,7 @@ import { buttonDepth } from '../constants';
 import { joinParts } from '../utils/format';
 import { cityFromAddress, groupByCity } from '../utils/location';
 import FullscreenImageViewer from './FullscreenImageViewer';
-import AddFavoriteModal from './AddFavoriteModal';
+import AddSpotModal from './AddSpotModal';
 
 // First letter of up to the first two words, e.g. "Isaac Rivera" -> "IR",
 // "Sam" -> "S". Used for the friend-spin token badge - there's no custom
@@ -66,16 +66,18 @@ export default function HistoryFavoritesOverlay({
   // travel-spanning favorites collection navigable (user request).
   const [cityFilter, setCityFilter] = useState(null); // null = All
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
-  // Everything needed to add a new favorite now lives behind the "+"
-  // button (see AddFavoriteModal) instead of an always-visible search bar
-  // at the top of the screen (user request).
+  // Shared by both Favorites and Try Later - everything needed to add a
+  // spot by search lives behind the "+" button (see AddSpotModal) instead
+  // of an always-visible search bar at the top of the screen (user
+  // request). One flag works for both since only one of the two screens is
+  // ever showing at a time.
   const [showAddModal, setShowAddModal] = useState(false);
 
   const titles = { history: 'History', favorites: 'Favorites', tryLater: 'Try Later' };
   const emptyMessages = {
     history: 'Nothing seen yet - flip or run a bracket to populate this.',
     favorites: 'No favorites saved yet.',
-    tryLater: 'Nothing on your try list yet. Add spots from their detail view.',
+    tryLater: 'Nothing on your try list yet - tap + to search for a place, or add one from its detail view.',
   };
   const searchPlaceholders = {
     history: 'Search history…',
@@ -85,7 +87,7 @@ export default function HistoryFavoritesOverlay({
 
   // History can contain the same spot more than once (seen again on a
   // different day) - deduped here (keep the first/most-recent occurrence,
-  // since history is already newest-first) for the AddFavoriteModal picker,
+  // since history is already newest-first) for the AddSpotModal picker,
   // where seeing the same place 3 times would just be noise.
   const dedupedHistory = [];
   const seenHistoryIds = new Set();
@@ -98,7 +100,7 @@ export default function HistoryFavoritesOverlay({
 
   // Most recent journal entry's spot per place, newest first - same
   // "recently reviewed" data JournalOverlay's Mine tab shows, just reduced
-  // to the spot snapshots for the AddFavoriteModal picker.
+  // to the spot snapshots for the AddSpotModal picker.
   const recentlyReviewed = Object.values(journal || {})
     .filter((entries) => entries.length > 0)
     .map((entries) => entries.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0])
@@ -284,19 +286,23 @@ export default function HistoryFavoritesOverlay({
         {listContent}
       </ScrollView>
 
-      {/* Favorites-only - opens AddFavoriteModal: search any restaurant by
-          name, or pick straight from Try Later/History/Reviewed (user
-          request - moved out of an always-visible search bar). */}
-      {activeView === 'favorites' && (
+      {/* Opens AddSpotModal: search any restaurant by name, or pick straight
+          from the other lists/History/Reviewed (user request - Favorites
+          already had this, moved out of an always-visible search bar; Try
+          Later didn't have it at all, so a friend-mentioned place could
+          only be added by first marking it a favorite - not what "try
+          later" should require). */}
+      {(activeView === 'favorites' || activeView === 'tryLater') && (
         <Pressable style={styles.addFab} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add" size={28} color={colors.textDark} />
         </Pressable>
       )}
 
-      <AddFavoriteModal
+      <AddSpotModal
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onToggleFavorite={onAddFavorite}
+        mode={activeView === 'tryLater' ? 'tryLater' : 'favorites'}
+        onToggle={activeView === 'tryLater' ? onRemoveTryLater : onAddFavorite}
         favorites={favorites}
         tryLater={tryLater}
         history={dedupedHistory}

@@ -99,10 +99,7 @@ export default function ResultCard({
       >
         {gameMode === 'friend' && <Text style={styles.winnerHeader}>YOU BOTH GOT…</Text>}
 
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {result.isRepeat && <View style={styles.repeatDot} />}
-          <Text style={styles.foodName}>{result.name}</Text>
-        </View>
+        <Text style={styles.foodName}>{result.name}</Text>
         <Text style={styles.details}>{joinParts([`⭐ ${result.rating}`, result.type])}</Text>
         <Text style={styles.blurbText}>{result.blurb}</Text>
         {/* Only set when this spot was NOT a genuine match for the selected
@@ -113,6 +110,16 @@ export default function ResultCard({
           <View style={styles.unconfirmedBadge}>
             <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
             <Text style={styles.unconfirmedText}>{result.unconfirmedCuisine} Spots Nearby</Text>
+          </View>
+        )}
+        {/* Favorites-only mode reaching past the distance setting to still
+            offer a real choice (see places.js's pickFromFavorites) - always
+            says so, rather than quietly serving something outside the
+            limit the user actually set (user request). */}
+        {result.beyondLimit && (
+          <View style={styles.unconfirmedBadge}>
+            <Ionicons name="navigate-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.unconfirmedText}>Beyond your set travel limit</Text>
           </View>
         )}
 
@@ -232,7 +239,6 @@ const makeStyles = (colors) => StyleSheet.create({
   },
   foodName: { fontSize: 32, fontWeight: 'bold', color: colors.textLight, textAlign: 'center' },
   details: { fontSize: 18, color: '#CCC', marginTop: 4 },
-  repeatDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFF', marginRight: 10 },
   blurbText: { color: colors.accent, fontStyle: 'italic', textAlign: 'center', marginTop: 6, paddingHorizontal: 10, fontSize: 15 },
   unconfirmedBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingHorizontal: 10 },
   unconfirmedText: { color: colors.textMuted, fontSize: 12, marginLeft: 4, textAlign: 'center' },

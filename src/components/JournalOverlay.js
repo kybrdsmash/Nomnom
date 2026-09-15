@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, Image, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Image, ScrollView, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
@@ -8,7 +8,7 @@ import { isFirebaseConfigured } from '../api/firebase';
 import { fetchFriendJournal } from '../api/journal';
 import { groupByCity } from '../utils/location';
 import SlidableSegmented from './SlidableSegmented';
-import PlaceSearchBar from './PlaceSearchBar';
+import AtTheTableCompose from './AtTheTableCompose';
 import ReviewMilestoneBadge from './ReviewMilestoneBadge'; // prototype reward-system UI, see src/api/rewards.js
 
 function relativeTime(ts) {
@@ -23,7 +23,9 @@ function relativeTime(ts) {
 }
 
 /**
- * "My Reviews" - browse the whole food journal, off the hamburger menu.
+ * "Journal" - browse the whole food journal, off the hamburger menu. Has its
+ * own Mine/Friends/At the Table tabs, so the header doesn't need "My" in
+ * front of it too (user request).
  * Mine: every place you've left feedback on, most recent entry per place.
  * Friends: every entry any mutual friend (from the friends list, built from
  * completed friend-spin sessions) has left, fetched fresh each time this
@@ -32,13 +34,22 @@ function relativeTime(ts) {
  * normal DetailModal (via that entry's stored spot snapshot) where feedback
  * is actually added/edited - this screen is purely for browsing.
  */
-export default function JournalOverlay({ onBack, journal, friends, onShowDetails, location }) {
+export default function JournalOverlay({
+  onBack, journal, friends, onShowDetails, location, travelType, onSaveAtTheTable,
+}) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors, insets);
-  const [tab, setTab] = useState('mine'); // 'mine' | 'friends'
+  const [tab, setTab] = useState('mine'); // 'mine' | 'friends' | 'atTable'
   const [friendRows, setFriendRows] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  // Mine-tab-only, plain client-side filter over places already reviewed -
+  // NOT a live Google search for a new place, which is what this used to be
+  // (PlaceSearchBar) and read as confusing (user report: a "search" box on
+  // an already-reviewed list that actually searched all of Google). Starting
+  // a brand-new review now lives behind the + button below instead, which
+  // routes to At the Table.
+  const [mineQuery, setMineQuery] = useState('');
 
   useEffect(() => {
     if (tab !== 'friends' || !isFirebaseConfigured || !friends || friends.length === 0) return;
@@ -68,7 +79,10 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
       return { ...latest.spot, latest, count: entries.length };
     })
     .sort((a, b) => b.latest.updatedAt - a.latest.updatedAt);
-  const mineByCity = groupByCity(mineRows, location);
+  const filteredMineRows = mineQuery.trim()
+    ? mineRows.filter((r) => r.name?.toLowerCase().includes(mineQuery.trim().toLowerCase()))
+    : mineRows;
+  const mineByCity = groupByCity(filteredMineRows, location);
 
   const renderMineRow = ({ latest, count }) => (
     <Pressable key={latest.spot.id} style={styles.row} onPress={() => onShowDetails(latest.spot)}>
@@ -81,8 +95,19 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
       )}
       <View style={styles.rowTextCol}>
         <Text style={styles.rowTitle} numberOfLines={1}>{latest.spot.name}</Text>
-        <Text style={styles.rowRating}>{'★'.repeat(latest.rating)}{'☆'.repeat(5 - latest.rating)}</Text>
+        {/* "At the Table" entries (AtTheTableCompose) have no star rating by
+            design - a fast in-the-moment note, not a formal review - so this
+            only renders when one actually exists. Bare `.repeat(undefined)`
+            throws (coerces to NaN), which is exactly what an At-the-Table
+            entry surfacing here as `latest` used to hit. */}
+        {typeof latest.rating === 'number' && (
+          <Text style={styles.rowRating}>{'★'.repeat(latest.rating)}{'☆'.repeat(5 - latest.rating)}</Text>
+        )}
+        {!!latest.occasion && <Text style={styles.rowOccasion}>{latest.occasion}</Text>}
         {!!latest.note && <Text style={styles.rowNote} numberOfLines={2}>{latest.note}</Text>}
+        {!latest.note && !!latest.moments?.[0]?.text && (
+          <Text style={styles.rowNote} numberOfLines={2}>{latest.moments[0].text}</Text>
+        )}
         <Text style={styles.rowDate}>
           {relativeTime(latest.updatedAt)}{count > 1 ? ` · ${count} visits logged` : ''}
         </Text>
@@ -114,7 +139,7 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
         <Pressable onPress={onBack} style={styles.overlayBack}>
           <Ionicons name="arrow-back" size={28} color={colors.accent} />
         </Pressable>
-        <Text style={styles.overlayTitle}>My Reviews</Text>
+        <Text style={styles.overlayTitle}>Journal</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -123,6 +148,7 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
           options={[
             { value: 'mine', label: 'Mine' },
             { value: 'friends', label: 'Friends' },
+            { value: 'atTable', label: 'At the Table' },
           ]}
           value={tab}
           onChange={setTab}
@@ -136,21 +162,38 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
         />
       </View>
 
-      <ScrollView style={{ width: '100%', paddingHorizontal: 20 }}>
+      {/* Its own component (with its own ScrollView) rather than another
+          branch inside the ScrollView below - a MapView-in-a-ScrollView
+          style nesting issue, just with a ScrollView instead (same reasoning
+          documented elsewhere in this codebase, e.g. SpotsMap's callers). */}
+      {tab === 'atTable' && (
+        <AtTheTableCompose location={location} travelType={travelType} onSave={onSaveAtTheTable} />
+      )}
+
+      <ScrollView style={{ width: '100%', paddingHorizontal: 20, display: tab === 'atTable' ? 'none' : 'flex' }}>
         {tab === 'mine' && (
           <>
-            {/* Search for a spot that's never come up in a spin, to leave
-                feedback about it anyway (user request) - picking a result
-                opens its normal detail view, where "Your Feedback" already
-                handles adding/editing an entry. */}
-            <PlaceSearchBar
-              placeholder="Search for a restaurant to review..."
-              onSelect={onShowDetails}
-            />
+            {/* Filters places already reviewed - NOT a live search for a new
+                one (see mineQuery's own comment above for why that changed).
+                Only shown once there's something to filter. */}
+            {mineRows.length > 0 && (
+              <View style={styles.searchRow}>
+                <Ionicons name="search" size={16} color={colors.textMuted} />
+                <TextInput
+                  style={styles.searchInput}
+                  value={mineQuery}
+                  onChangeText={setMineQuery}
+                  placeholder="Filter your reviews..."
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+            )}
             {mineRows.length === 0 ? (
               <Text style={styles.emptyText}>
-                No reviews yet - open any spot's details and tap the pencil to add one.
+                No reviews yet - tap + to add one, or open any spot's details and tap the pencil.
               </Text>
+            ) : mineByCity.length === 0 ? (
+              <Text style={styles.emptyText}>No reviews match "{mineQuery.trim()}".</Text>
             ) : (
               // Grouped by place (nearest-first) rather than one flat list -
               // same reasoning as Favorites: a journal collected across many
@@ -187,6 +230,18 @@ export default function JournalOverlay({ onBack, journal, friends, onShowDetails
           </>
         )}
       </ScrollView>
+
+      {/* Starting a brand-new review now routes to At the Table instead of
+          the old live-search-any-restaurant box that used to sit above the
+          Mine list (user request) - it already has both a search-by-name
+          field and a geolocation lookup (one merged bar, see
+          AtTheTableCompose's own note), so nothing is actually lost, just
+          consolidated into one place. */}
+      {tab === 'mine' && (
+        <Pressable style={styles.addFab} onPress={() => setTab('atTable')}>
+          <Ionicons name="add" size={28} color={colors.textDark} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -198,6 +253,13 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   // the header row, matching FriendSpin.js/HistoryFavoritesOverlay.js's
   // identical full-screen-overlay headers.
   overlayScreen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 100, paddingTop: insets.top + 12 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginBottom: 10 },
+  searchInput: { flex: 1, color: colors.textLight, fontSize: 14, marginLeft: 8, padding: 0 },
+  addFab: {
+    position: 'absolute', bottom: insets.bottom + 30, right: 30, width: 52, height: 52, borderRadius: 26,
+    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+    ...buttonDepth, elevation: 20,
+  },
   overlayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
   overlayTitle: { color: colors.accent, fontSize: 24, fontWeight: 'bold', letterSpacing: 1 },
   overlayBack: { padding: 5 },
@@ -221,6 +283,7 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   rowTextCol: { flex: 1, justifyContent: 'center' },
   rowTitle: { color: colors.textLight, fontSize: 16, fontWeight: 'bold' },
   rowRating: { color: colors.gold, fontSize: 13, fontWeight: 'bold', marginTop: 1 },
+  rowOccasion: { color: colors.accent, fontSize: 11, fontWeight: '700', marginTop: 1 },
   rowNote: { color: '#CCC', fontSize: 12, lineHeight: 16, marginTop: 2 },
   rowDate: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
 });

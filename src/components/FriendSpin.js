@@ -606,13 +606,35 @@ export default function FriendSpin({
               <Text style={styles.friendsHeader}>Feed</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feedStripRow}>
                 {feedPhotos.map((p) => (
-                  <Pressable key={p.placeId} style={styles.feedStripCard} onPress={() => setFullscreenPhoto(p.photoUrl)}>
-                    <Image source={{ uri: p.photoUrl }} style={styles.feedStripTile} />
-                    <Text style={styles.feedStripName} numberOfLines={1}>{p.name}</Text>
-                    {!!p.cuisine && (
-                      <Text style={styles.feedStripCuisine} numberOfLines={1}>{p.cuisine}</Text>
-                    )}
-                  </Pressable>
+                  <View key={p.placeId} style={styles.feedStripCard}>
+                    <Pressable onPress={() => setFullscreenPhoto(p.photoUrl)}>
+                      <Image source={{ uri: p.photoUrl }} style={styles.feedStripTile} />
+                    </Pressable>
+                    {/* Sibling of the image's own Pressable, not nested
+                        inside it - tapping the name opens the spot's real
+                        details view instead of the fullscreen photo (user
+                        request). Feed items only ever carry a trimmed
+                        shape (placeId/name/photoUrl/cuisine[/rating]), not
+                        the full spot record - fetchPlaceDetails inside
+                        DetailModal still fills in photos/hours/reviews live
+                        off just the id, so this degrades gracefully. */}
+                    <Pressable
+                      onPress={() => onShowDetails({
+                        id: p.placeId,
+                        name: p.name,
+                        rating: p.rating || 'N/A',
+                        type: p.cuisine || '',
+                        blurb: '',
+                        photoUrl: p.photoUrl,
+                        address: '',
+                      })}
+                    >
+                      <Text style={styles.feedStripName} numberOfLines={1}>{p.name}</Text>
+                      {!!p.cuisine && (
+                        <Text style={styles.feedStripCuisine} numberOfLines={1}>{p.cuisine}</Text>
+                      )}
+                    </Pressable>
+                  </View>
                 ))}
               </ScrollView>
             </View>

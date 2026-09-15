@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SPEEDS_MPH, neonSelected, buttonDepth, accentGradient, useVerticalScale } from '../constants';
 import { useTheme } from '../ThemeContext';
 import SlidableSegmented from './SlidableSegmented';
+import HelpModal from './HelpModal';
 
 const DIST_MIN = 0.5;
 const DIST_MAX = 20;
@@ -53,6 +54,7 @@ export default function FilterPanel({
   const styles = makeStyles(colors, vscale);
   const [editingTime, setEditingTime] = useState(false);
   const [timeText, setTimeText] = useState('');
+  const [showCuisinesHelp, setShowCuisinesHelp] = useState(false);
 
   // Distance and star-rating both use the same tap-or-drag-directly-on-it
   // pattern (no separate @react-native-community/slider) - one interactive
@@ -290,15 +292,41 @@ export default function FilterPanel({
             if (opening) onCuisinesExpanded?.();
           }}
         >
-          <Text style={styles.cuisineHeaderText}>
-            Cuisines{' '}
-            <Text style={styles.cuisineHeaderCount}>
-              {selectedCuisines.length > 0 ? `(${selectedCuisines.length})` : '(Any)'}
+          <View style={styles.cuisineHeaderLeft}>
+            <Text style={styles.cuisineHeaderText}>
+              Cuisines{' '}
+              <Text style={styles.cuisineHeaderCount}>
+                {selectedCuisines.length > 0 ? `(${selectedCuisines.length})` : '(Any)'}
+              </Text>
             </Text>
-          </Text>
+            {/* Only shown once the dropdown is actually open (user request) -
+                collapsed, this row is just the toggle; the icon would have
+                nothing to explain yet. A plain nested Pressable here is safe
+                - unlike the PanResponder-claimed rows elsewhere in this
+                codebase (FaveCuisineButton, CoinSpinner, RollingFoodStrip's
+                strip), this parent is an ordinary Pressable, and RN resolves
+                nested Pressables correctly (the deeper one wins a touch
+                landing on it, the outer only ever sees what lands outside
+                it) - no responder fight, no need for a sibling workaround. */}
+            {showCuisines && (
+              <Pressable
+                onPress={() => setShowCuisinesHelp(true)}
+                hitSlop={10}
+                style={styles.cuisineHelpBtn}
+              >
+                <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
           <Ionicons name={showCuisines ? 'chevron-up' : 'chevron-down'} size={24} color={colors.accent} />
         </Pressable>
       </View>
+
+      <HelpModal
+        visible={showCuisinesHelp}
+        onClose={() => setShowCuisinesHelp(false)}
+        sectionId="filters"
+      />
     </>
   );
 }
@@ -378,6 +406,8 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   cuisineContainer: { width: '85%', backgroundColor: colors.card, borderRadius: 15, overflow: 'hidden', marginBottom: 15 * vscale },
   cuisineContainerOpen: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   cuisineHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
+  cuisineHeaderLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   cuisineHeaderText: { color: colors.textLight, fontSize: 18, fontWeight: 'bold' },
   cuisineHeaderCount: { color: colors.textMuted, fontSize: 15, fontWeight: '400' },
+  cuisineHelpBtn: { marginLeft: 6, padding: 2 },
 });

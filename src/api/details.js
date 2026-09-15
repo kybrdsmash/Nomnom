@@ -80,7 +80,7 @@ export async function fetchPlaceDetails(placeId) {
 
   const fields = [
     'photo', 'review', 'opening_hours', 'website',
-    'formatted_phone_number', 'url',
+    'formatted_phone_number', 'url', 'editorial_summary',
   ].join(',');
 
   const url =
@@ -114,6 +114,12 @@ export async function fetchPlaceDetails(placeId) {
       website: r.website || null,
       phone: r.formatted_phone_number || null,
       mapsUrl: r.url || null,
+      // Google's own written blurb, when it has one - NOT a Michelin/award
+      // field (Google Places has no such structured data at all, see the
+      // conversation this shipped from). Genuinely hit-or-miss: sometimes a
+      // real distinction gets mentioned in passing, often it's just a plain
+      // description, and plenty of places have none of this at all.
+      editorialSummary: r.editorial_summary?.overview || null,
     };
     detailsCache.set(placeId, { data: shaped, cachedAt: Date.now() });
     persistDetailsCache();

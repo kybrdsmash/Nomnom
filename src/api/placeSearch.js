@@ -5,7 +5,7 @@ const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY;
  * finding and adding a specific place by name - independent of
  * fetchLocalFood in places.js, which only ever searches by cuisine keyword
  * within a radius around the user. Used by PlaceSearchBar.js, shared by the
- * Favorites tab and the Journal ("My Reviews") screen, so a spot that was
+ * Favorites tab and the Journal screen, so a spot that was
  * never surfaced by a spin can still be favorited or reviewed.
  *
  * NOTE: this is a distinct Places API call (Text Search) this app didn't

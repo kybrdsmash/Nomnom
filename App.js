@@ -27,7 +27,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COIN_ANIMATION_MS, CUISINES, neonSelected, accentGradient, useVerticalScale } from './src/constants';
 import { ThemeProvider, useTheme } from './src/ThemeContext';
 import { estimateMaxTimeMinutes } from './src/utils/geo';
-import { fetchLocalFood } from './src/api/places';
+import { fetchLocalFood, pickFromFavorites } from './src/api/places';
 
 import CoinSpinner from './src/components/CoinSpinner';
 import DaydreamRaccoon from './src/components/DaydreamRaccoon';
@@ -46,6 +46,8 @@ import RollingFoodStrip from './src/components/RollingFoodStrip';
 import CuisineDropdown from './src/components/CuisineDropdown';
 import JournalOverlay from './src/components/JournalOverlay';
 import FoodDetailModal from './src/components/FoodDetailModal';
+import ReportBugModal from './src/components/ReportBugModal';
+import HelpModal from './src/components/HelpModal';
 import { isFirebaseConfigured, ensureSignedIn } from './src/api/firebase';
 import { watchPings, dismissPing } from './src/api/friendSession';
 import {
@@ -121,9 +123,16 @@ function AppInner() {
   const [history, setHistory] = useState([]);
   const [tryLater, setTryLater] = useState([]);
   const [detailSpot, setDetailSpot] = useState(null);
+  const [showBugReport, setShowBugReport] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   // Which rolling-strip food (long-pressed) is showing its detail view -
   // { image, name } or null when closed. See FoodDetailModal.js.
   const [foodDetailFood, setFoodDetailFood] = useState(null);
+  // When a spot's DetailModal was opened from FoodDetailModal's "Find Near
+  // Me" list, this holds the food to reopen on close - so the X on that
+  // spot goes back to the nearby list, not straight home. Null for every
+  // other DetailModal entry point (those close straight to their screen).
+  const [detailSpotReturnsTo, setDetailSpotReturnsTo] = useState(null);
   const [storageLoaded, setStorageLoaded] = useState(false);
   // People previously played a friend-spin session with, keyed by their
   // persisted anonymous auth uid - lives here (not FriendSpin.js, its
@@ -140,14 +149,21 @@ function AppInner() {
   const [openNowOnly, setOpenNowOnly] = useState(false);
   // null = any price; otherwise 1-4 matching Google's price_level scale ($-$$$$)
   const [maxPrice, setMaxPrice] = useState(null);
+  // Rolls only from the user's own saved Favorites (pickFromFavorites in
+  // places.js), no Google API call - user request. Same slot in the ☰ menu
+  // as the other quick filters.
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const [profile, setProfile] = useState({ displayName: '' });
   const [preferences, setPreferences] = useState({ haptics: true, units: 'mi' });
 
-  // InviteFriendModal for the current solo result (ResultCard's paper-plane
-  // icon) - a one-way "here's where/when" share to one friend, distinct
-  // from the live joint Feast with Friends session flow.
+  // InviteFriendModal - a one-way "here's where/when" share to one friend,
+  // distinct from the live joint Feast with Friends session flow. Opened
+  // from ResultCard's paper-plane icon (inviteSpot = result) AND from
+  // DetailModal's Send button (inviteSpot = whatever spot that sheet is
+  // showing, which isn't always the active result - user request).
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteSpot, setInviteSpot] = useState(null);
 
   // A friend-spin join code arrived via a tapped share link OR a tapped
   // in-app ping (see below), waiting to be consumed once FriendSpin mounts.
@@ -291,6 +307,27 @@ function AppInner() {
     })();
   }, []);
 
+  // Warm places.js's pool cache with whatever the filters are the instant we
+  // have a GPS fix - fires once, on the location null->value transition
+  // right after app open. If the user leaves everything on default and taps
+  // "Surprise Me" immediately, that first flip then serves from this
+  // already-in-flight (or already-finished) fetch instead of waiting out a
+  // fresh Google Places round trip on top of the coin animation (user
+  // report: "the first flip on opening takes too long"). Later flips were
+  // already fast via this same cache - this just starts the fetch earlier
+  // instead of waiting for the button press to kick it off. Deliberately
+  // depends on [location] only (not the filter values) - this is meant to
+  // fire exactly once for whatever the filters are at that moment, not
+  // re-fire on every filter tweak before the user has even searched.
+  useEffect(() => {
+    if (!location) return;
+    fetchLocalFood({
+      location, distance, minRating, selectedCuisines, travelType,
+      count: 1, openNowOnly, maxPrice, allowRepeats: true,
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
+
   // Catch a "join my friend-spin session" link, whether the app was launched
   // fresh by tapping it (getInitialURL) or was already running in the
   // background (the 'url' event). expo-linking's parse() understands both
@@ -379,6 +416,10 @@ function AppInner() {
       alert('Still locking onto your GPS coordinate...');
       return;
     }
+    if (favoritesOnly && favorites.length === 0) {
+      alert("You haven't saved any favorites yet - heart a spot's details to add one.");
+      return;
+    }
 
     setResult(null);
     setEliminationList([]);
@@ -396,30 +437,34 @@ function AppInner() {
     // for whichever takes longer - usually the animation, occasionally the API
     // on a slow connection.
     const [selectedFoods] = await Promise.all([
-      fetchLocalFood({
-        location,
-        distance,
-        minRating,
-        selectedCuisines,
-        travelType,
-        count: targetCount,
-        openNowOnly,
-        maxPrice,
-        // List mode's "Refresh" should show whatever's left in the pool, not
-        // pad out to 12 with repeats the way a flip/bracket pads to its count.
-        allowRepeats: gameMode !== 'list',
-      }),
+      favoritesOnly
+        ? Promise.resolve(pickFromFavorites({ favorites, location, distance, travelType, count: targetCount }))
+        : fetchLocalFood({
+            location,
+            distance,
+            minRating,
+            selectedCuisines,
+            travelType,
+            count: targetCount,
+            openNowOnly,
+            maxPrice,
+            // List mode's "Refresh" should show whatever's left in the pool, not
+            // pad out to 12 with repeats the way a flip/bracket pads to its count.
+            allowRepeats: gameMode !== 'list',
+          }),
       new Promise((resolve) => setTimeout(resolve, COIN_ANIMATION_MS)),
     ]);
 
     setIsSearching(false);
 
     if (selectedFoods.length > 0) {
-      // Flag repeats from earlier this session, then record everything shown.
-      const marked = selectedFoods.map((s) => ({
-        ...s,
-        isRepeat: seenIdsRef.current.has(s.id),
-      }));
+      // Still recorded (seenIdsRef/saveSeenIds) even though nothing surfaces
+      // it visually anymore - the "repeat" dot got removed (user feedback:
+      // shifted layout around, and repeats are inevitable over a long enough
+      // history anyway; the real fix is showing them less often, not
+      // flagging every one that slips through). This tracking stays because
+      // it's exactly what that real fix would build on.
+      const marked = [...selectedFoods];
       marked.forEach((s) => seenIdsRef.current.add(s.id));
       saveSeenIds(seenIdsRef.current);
       addToHistory(marked);
@@ -567,14 +612,16 @@ function AppInner() {
   // trimmed snapshot (id/name/lat/lng/rating/type/blurb/photoUrl) stored
   // alongside the rating/note so the journal-browser screen can render/
   // reopen it without a fresh Places lookup, same as History/Favorites.
-  // `photoUri` is a local file:// path a photo was copied to (see
-  // DetailModal's image picker) - stays local-only until explicitly shared,
-  // see toggleEntryPhotoShare below.
-  const addJournalEntry = (placeId, { rating, note, spot, photoUri }) => {
+  // `moments` (an ordered [{ text, photoUri }]) is what DetailModal's own
+  // compose box now saves via its shared MomentsEditor (user request: same
+  // multi-photo/multi-text format as "At the Table") - `note`/`photoUri`
+  // stick around only so an entry saved before this change still round-trips
+  // through startEdit/renderEntryRow unmodified.
+  const addJournalEntry = (placeId, { rating, note, spot, photoUri, moments }) => {
     const now = Date.now();
     const entry = {
       id: Math.random().toString(36).slice(2),
-      rating, note, spot, photoUri,
+      rating, note, spot, photoUri, moments,
       createdAt: now,
       updatedAt: now,
     };
@@ -584,13 +631,39 @@ function AppInner() {
     }));
   };
 
+  // "At the Table" (AtTheTableCompose) saves into this SAME journal store,
+  // just with `moments` (an ordered [{ text, photoUri }]) instead of a flat
+  // note/photoUri - a normal entry made via DetailModal's pencil never has
+  // `moments`, so the two shapes coexist without conflict. No `rating` here
+  // (deliberately optional/absent) - the point of this flow is a fast note
+  // in the moment, not a formal review.
+  const addAtTheTableEntry = ({ spot, occasion, moments }) => {
+    const now = Date.now();
+    const entry = {
+      id: Math.random().toString(36).slice(2),
+      spot, occasion, moments,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setJournal((prev) => ({
+      ...prev,
+      [spot.id]: [entry, ...(prev[spot.id] || [])],
+    }));
+  };
+
   // Lets a late/days-later writeup get fixed up afterward (user request) -
-  // mutates that one entry in place by id rather than adding another.
-  const editJournalEntry = (placeId, entryId, { rating, note, photoUri }) => {
+  // mutates that one entry in place by id rather than adding another. `note`/
+  // `photoUri` explicitly cleared to undefined on a moments edit (spreading
+  // `...e` first would otherwise leave a stale flat note/photo sitting
+  // alongside the new moments on an entry that started out in the old shape,
+  // see startEdit's own note/photoUri->moments conversion).
+  const editJournalEntry = (placeId, entryId, { rating, note, photoUri, moments }) => {
     setJournal((prev) => ({
       ...prev,
       [placeId]: (prev[placeId] || []).map((e) =>
-        e.id === entryId ? { ...e, rating, note, photoUri, updatedAt: Date.now() } : e
+        e.id === entryId
+          ? { ...e, rating, note: moments ? undefined : note, photoUri: moments ? undefined : photoUri, moments, updatedAt: Date.now() }
+          : e
       ),
     }));
   };
@@ -714,6 +787,8 @@ function AppInner() {
           friends={friends}
           onShowDetails={(spot) => setDetailSpot(spot)}
           location={location}
+          travelType={travelType}
+          onSaveAtTheTable={addAtTheTableEntry}
         />
       )}
 
@@ -732,7 +807,10 @@ function AppInner() {
           showsVerticalScrollIndicator={false}
           scrollEnabled={false}
         >
-          <DaydreamRaccoon />
+          <DaydreamRaccoon
+            onLongPressFood={(food) => setFoodDetailFood(food)}
+            foodDetailOpen={foodDetailFood !== null}
+          />
           <FilterPanel
             travelType={travelType}
             setTravelType={setTravelType}
@@ -771,7 +849,7 @@ function AppInner() {
         <View style={styles.bottomControls}>
           <SlidableSegmented
             options={[
-              { value: 'dontcare', label: 'Pick 4 Me' },
+              { value: 'dontcare', label: 'Surprise Me' },
               { value: 'elimination', label: 'Eliminate' },
               { value: 'list', label: 'Curated' },
             ]}
@@ -866,7 +944,7 @@ function AppInner() {
             onReset={resetApp}
             onShowDetails={() => setDetailSpot(result)}
             onBackToBracket={handleBackToBracket}
-            onOpenInvite={isFirebaseConfigured ? () => setShowInviteModal(true) : undefined}
+            onOpenInvite={isFirebaseConfigured ? () => { setInviteSpot(result); setShowInviteModal(true); } : undefined}
           />
         )}
       </Animated.View>
@@ -874,7 +952,7 @@ function AppInner() {
       <InviteFriendModal
         visible={showInviteModal}
         onClose={() => setShowInviteModal(false)}
-        spot={result}
+        spot={inviteSpot}
         location={location}
         displayName={profile.displayName}
         friends={friends}
@@ -889,7 +967,18 @@ function AppInner() {
         preferences={preferences}
         setPreferences={setPreferences}
         myUid={myUid}
+        onOpenBugReport={() => setShowBugReport(true)}
+        onOpenHelp={() => setShowHelp(true)}
       />
+
+      <ReportBugModal
+        visible={showBugReport}
+        onClose={() => setShowBugReport(false)}
+        myUid={myUid}
+        displayName={profile.displayName}
+      />
+
+      <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
 
       <FabMenu
         visible={showFab}
@@ -905,6 +994,14 @@ function AppInner() {
         }}
         maxPrice={maxPrice}
         setMaxPrice={setMaxPrice}
+        favoritesOnly={favoritesOnly}
+        onToggleFavoritesOnly={() => {
+          setFavoritesOnly((prev) => {
+            const next = !prev;
+            showToast(next ? 'Favorites Only' : 'Favorites Only Off');
+            return next;
+          });
+        }}
         onOpenHistory={() => {
           setActiveView('history');
           setShowFabMenu(false);
@@ -926,12 +1023,26 @@ function AppInner() {
       <DetailModal
         spot={detailSpot}
         visible={detailSpot != null}
-        onClose={() => setDetailSpot(null)}
+        onClose={() => {
+          setDetailSpot(null);
+          if (detailSpotReturnsTo) {
+            // Staggered, not simultaneous - each Modal is its own native
+            // show/hide transition, and flipping both visible flags in the
+            // same tick ran them concurrently (this one sliding out while
+            // FoodDetailModal faded in), which read as a glitchy flash (user
+            // report). Waiting out this modal's own close animation first
+            // keeps the two transitions sequential instead.
+            const returnTo = detailSpotReturnsTo;
+            setDetailSpotReturnsTo(null);
+            setTimeout(() => setFoodDetailFood(returnTo), 300);
+          }
+        }}
         isFavorite={detailSpot ? favorites.some((f) => f.id === detailSpot.id) : false}
         onToggleFavorite={() => detailSpot && toggleFavorite(detailSpot)}
         isTryLater={detailSpot ? tryLater.some((t) => t.id === detailSpot.id) : false}
         onToggleTryLater={() => detailSpot && toggleTryLater(detailSpot)}
         onOpenDirections={() => detailSpot && openMaps(detailSpot)}
+        onOpenInvite={isFirebaseConfigured ? () => { setInviteSpot(detailSpot); setShowInviteModal(true); } : undefined}
         journal={journal}
         onAddJournalEntry={addJournalEntry}
         onEditJournalEntry={editJournalEntry}
@@ -945,10 +1056,17 @@ function AppInner() {
         food={foodDetailFood}
         location={location}
         travelType={travelType}
-        onClose={() => setFoodDetailFood(null)}
-        onShowSpotDetails={(spot) => {
+        onClose={() => {
           setFoodDetailFood(null);
-          setDetailSpot(spot);
+          setDetailSpotReturnsTo(null);
+        }}
+        onShowSpotDetails={(spot) => {
+          // Staggered for the same reason as DetailModal's onClose above -
+          // let this modal's own close animation finish before the next one
+          // starts its own open animation.
+          setDetailSpotReturnsTo(foodDetailFood);
+          setFoodDetailFood(null);
+          setTimeout(() => setDetailSpot(spot), 300);
         }}
       />
 

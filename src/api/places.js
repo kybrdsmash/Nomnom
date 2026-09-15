@@ -61,12 +61,27 @@ async function fetchPlacesPage(url) {
 }
 
 /** Runs ONE nearbysearch request for a single keyword, following pagination
- * up to Google's cap, and returns raw results. */
-async function searchOnce({ location, radiusInMeters, keyword, openNowOnly }) {
+ * up to Google's cap, and returns raw results.
+ *
+ * rankby=distance, not radius+default prominence ranking (user report:
+ * "adjusted my travel distance significantly, still only getting stuff
+ * close to me"). Google's default ranking within a `radius` is prominence,
+ * not an even geographic spread - in a dense area, the ~60-result cap
+ * (Google's own hard limit, MAX_PAGES above) can fill up entirely with the
+ * most prominent/popular places clustered near the center, so a bigger
+ * radius parameter often changed nothing: the response was already
+ * saturated with close-in results before Google ever got to farther ones.
+ * rankby=distance instead returns closest-first, uncapped by any radius (the
+ * Places API forbids combining the two) - the actual mile ceiling now has
+ * to be enforced client-side afterward (see fetchLocalFood's new distance
+ * cutoff, right after chain-dedup where the true distance is already
+ * computed), but this way farther spots genuinely become reachable as the
+ * closer 60 run out, instead of never appearing in the response at all. */
+async function searchOnce({ location, keyword, openNowOnly, maxDistanceMiles }) {
   const baseUrl =
     `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
     `?location=${location.latitude},${location.longitude}` +
-    `&radius=${radiusInMeters}` +
+    `&rankby=distance` +
     `&type=restaurant` +
     `&keyword=${encodeURIComponent(keyword)}` +
     (openNowOnly ? `&opennow=true` : '') +
@@ -79,8 +94,25 @@ async function searchOnce({ location, radiusInMeters, keyword, openNowOnly }) {
   }
   let allRaw = data.results || [];
 
+  // Since results are now distance-sorted (not prominence), the farthest
+  // result on a page is a real signal - once it's already past the user's
+  // selected radius, every result on any LATER page will be too, so there's
+  // no reason to spend two more paid API calls fetching them just to have
+  // fetchLocalFood's own distance cutoff throw them straight out. Purely a
+  // cost/latency optimization - fetchLocalFood's client-side filter is the
+  // actual enforcement either way.
+  const pastRadius = (page) => {
+    if (!maxDistanceMiles || page.length === 0) return false;
+    const farthest = page[page.length - 1];
+    const d = getTrueDistance(
+      location.latitude, location.longitude,
+      farthest.geometry.location.lat, farthest.geometry.location.lng
+    );
+    return parseFloat(d) > maxDistanceMiles;
+  };
+
   let pagesFetched = 1;
-  while (data.next_page_token && pagesFetched < MAX_PAGES) {
+  while (data.next_page_token && pagesFetched < MAX_PAGES && !pastRadius(data.results || [])) {
     await new Promise((resolve) => setTimeout(resolve, NEXT_PAGE_DELAY_MS));
     // Per Google's docs, supplying pagetoken makes every other param
     // (including opennow) redundant - the token already encodes the
@@ -187,8 +219,6 @@ export async function fetchLocalFood({
   }
 
   // Cache miss (first search, or a filter changed): do the real fetch.
-  const radiusInMeters = Math.round(distance * 1609.34);
-
   // One search per selected cuisine (capped at 5 parallel calls), or a single
   // generic search if none selected. We fetch ALL cuisines even in randomizer
   // mode - it costs more up front but fills the pool so later flips are free.
@@ -204,7 +234,7 @@ export async function fetchLocalFood({
   try {
     const resultsPerKeyword = await Promise.all(
       keywords.map((keyword) =>
-        searchOnce({ location, radiusInMeters, keyword, openNowOnly }).catch(() => [])
+        searchOnce({ location, keyword, openNowOnly, maxDistanceMiles: distance }).catch(() => [])
       )
     );
     // Interleave results round-robin (first result of each cuisine, then
@@ -282,7 +312,12 @@ export async function fetchLocalFood({
       closestByName.set(key, { ...spot, _chainDistance: distance });
     }
   }
-  const deduped = [...closestByName.values()];
+  // Google's own distance ceiling is gone now that searchOnce uses
+  // rankby=distance instead of radius (see that function's own comment) -
+  // this is what actually enforces the user's selected mile setting now.
+  // Reuses _chainDistance (already computed above, same true-distance calc
+  // shapeSpot uses) rather than recomputing it.
+  const withinDistance = deduped.filter((spot) => parseFloat(spot._chainDistance) <= distance);
 
   // Basic quality filter: minimum star rating + hard review floor backstop.
   // Price is also filtered here (client-side) rather than via Google's own
@@ -300,12 +335,20 @@ export async function fetchLocalFood({
   // "stricter" into "broken". Unpriced spots pass through again, same
   // reasoning as the original ceiling filter: don't punish a legitimate
   // place for data Google never recorded.
-  const basicValid = deduped.filter(
+  //
+  // $$$$ is the one exception to that unpriced-passes-through leniency
+  // (user report: rerolling with $$$$ on returned places that clearly
+  // weren't). Tapping "$$$$" is a strong, specific ask ("show me upscale"),
+  // and an unknown-price spot slipping through reads as the filter just not
+  // working - the opposite risk from $/$$/$$$, where an unpriced spot
+  // silently being affordable is a safe bet. $$$$ now requires a real,
+  // Google-confirmed price_level of 4, no unpriced fallback.
+  const basicValid = withinDistance.filter(
     (spot) =>
       spot.rating &&
       spot.rating >= minRating &&
       (spot.user_ratings_total || 0) >= MIN_REVIEW_COUNT &&
-      (!maxPrice || !spot.price_level || spot.price_level === maxPrice)
+      (!maxPrice || (maxPrice === 4 ? spot.price_level === 4 : !spot.price_level || spot.price_level === maxPrice))
   );
 
   // Statistical filter (user-designed): drop places whose review count falls
@@ -336,6 +379,61 @@ export async function fetchLocalFood({
   recordFeedPhotos(cachedPool);
 
   return pickFromPool(cachedPool, count, { forceCuisine });
+}
+
+// How many favorites past the user's own distance setting `pickFromFavorites`
+// will ever reach for, and only when there genuinely aren't enough in-range
+// (user request). Deliberately small and fixed - the point is a safety net so
+// there's still something to choose from, not a second, unstated distance
+// setting. Anything pulled in this way comes back flagged `beyondLimit: true`
+// so the caller can visibly separate it from real in-range results, rather
+// than silently serving a spot the user's own slider wouldn't have allowed.
+const FAVORITES_OVERFLOW_CAP = 2;
+
+/**
+ * Rolls from the user's own saved Favorites instead of Google Places -
+ * entirely local, no API call. Each favorite's distance/time is recomputed
+ * against the CURRENT location (it was originally saved relative to wherever
+ * the user was at the time, which may be long gone). Favorites within the
+ * current distance setting are preferred; only once those fall short of
+ * `count` does it reach past that limit for the closest few, capped at
+ * FAVORITES_OVERFLOW_CAP (user request - the goal is having enough real
+ * options to choose from, not quietly expanding someone's 10-minute setting
+ * to 20-30 without telling them).
+ */
+export function pickFromFavorites({ favorites, location, distance, travelType, count }) {
+  if (!favorites || favorites.length === 0 || !location) return [];
+
+  const withLiveDistance = favorites
+    .filter((f) => typeof f.lat === 'number' && typeof f.lng === 'number')
+    .map((f) => {
+      const trueDistanceStr = getTrueDistance(location.latitude, location.longitude, f.lat, f.lng);
+      const trueTimeMins = estimateTripTimeMinutes(parseFloat(trueDistanceStr), travelType);
+      return {
+        ...f,
+        liveMiles: parseFloat(trueDistanceStr),
+        distance: `${trueDistanceStr} mi`,
+        time: `${trueTimeMins} min`,
+        travel: travelType,
+      };
+    });
+
+  const inRange = withLiveDistance.filter((f) => f.liveMiles <= distance);
+  let pool = inRange.map((f) => ({ ...f, beyondLimit: false }));
+
+  if (pool.length < count) {
+    const outOfRange = withLiveDistance
+      .filter((f) => f.liveMiles > distance)
+      .sort((a, b) => a.liveMiles - b.liveMiles)
+      .slice(0, FAVORITES_OVERFLOW_CAP)
+      .map((f) => ({ ...f, beyondLimit: true }));
+    pool = [...pool, ...outOfRange];
+  }
+
+  // Shuffled, not just the closest-first order above - otherwise the same
+  // handful of nearest favorites would win every single spin.
+  const shuffled = [...pool].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count).map(({ liveMiles, ...spot }) => spot);
 }
 
 // Groups a pool by which cuisine filter it's confirmed to match
@@ -388,10 +486,24 @@ function pickFromPool(pool, count, { forceCuisine } = {}) {
   const picked = [];
   const pickedIds = new Set();
 
+  // "Surprise Me" (count === 1) is the one screen with no bracket/list to fall
+  // back on for context, so a result with no identifiable food type at all
+  // (classifySpot came up empty - see shapeSpot's `type`) reads as an
+  // unexplained blank next to the star rating (user report). Once there's
+  // more than one result on screen the neighbors provide enough context that
+  // this doesn't matter as much, so this bias is intentionally count===1
+  // only, not a general pickFromPool preference. Least-shown ordering still
+  // wins WITHIN each group (typed vs untyped) - this only breaks ties
+  // between an untyped spot and a typed one that's been shown equally
+  // often, it doesn't override "show me something fresh."
+  const preferTyped = count === 1;
   const pickOneFrom = (key) => {
     const candidates = (groups.get(key) || []).filter((s) => !pickedIds.has(s.id));
     if (candidates.length === 0) return null;
-    return leastShownFirst(candidates)[0];
+    const sorted = leastShownFirst(candidates);
+    if (!preferTyped) return sorted[0];
+    const typed = sorted.filter((s) => s.type);
+    return typed.length > 0 ? typed[0] : sorted[0];
   };
 
   if (forceCuisine && groups.has(forceCuisine)) {
