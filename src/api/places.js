@@ -63,25 +63,19 @@ async function fetchPlacesPage(url) {
 /** Runs ONE nearbysearch request for a single keyword, following pagination
  * up to Google's cap, and returns raw results.
  *
- * rankby=distance, not radius+default prominence ranking (user report:
- * "adjusted my travel distance significantly, still only getting stuff
- * close to me"). Google's default ranking within a `radius` is prominence,
- * not an even geographic spread - in a dense area, the ~60-result cap
- * (Google's own hard limit, MAX_PAGES above) can fill up entirely with the
- * most prominent/popular places clustered near the center, so a bigger
- * radius parameter often changed nothing: the response was already
- * saturated with close-in results before Google ever got to farther ones.
- * rankby=distance instead returns closest-first, uncapped by any radius (the
- * Places API forbids combining the two) - the actual mile ceiling now has
- * to be enforced client-side afterward (see fetchLocalFood's new distance
- * cutoff, right after chain-dedup where the true distance is already
- * computed), but this way farther spots genuinely become reachable as the
- * closer 60 run out, instead of never appearing in the response at all. */
-async function searchOnce({ location, keyword, openNowOnly, maxDistanceMiles }) {
+ * REVERTED 2026 (was briefly rankby=distance): that change broke live search
+ * outright (user report: "zero spots found" on every spin, screen frozen)
+ * before it could be verified against the real API in production - reverted
+ * immediately rather than debug a ranking-mode change live. Back to
+ * radius+default prominence ranking for now; the "bigger distance setting
+ * doesn't actually reach farther spots" problem this was meant to fix is
+ * still real and still worth solving, just needs a safer approach (e.g.
+ * multiple ring-radius queries) tested before shipping again - see TODO.md. */
+async function searchOnce({ location, radiusInMeters, keyword, openNowOnly }) {
   const baseUrl =
     `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
     `?location=${location.latitude},${location.longitude}` +
-    `&rankby=distance` +
+    `&radius=${radiusInMeters}` +
     `&type=restaurant` +
     `&keyword=${encodeURIComponent(keyword)}` +
     (openNowOnly ? `&opennow=true` : '') +
@@ -94,25 +88,8 @@ async function searchOnce({ location, keyword, openNowOnly, maxDistanceMiles }) 
   }
   let allRaw = data.results || [];
 
-  // Since results are now distance-sorted (not prominence), the farthest
-  // result on a page is a real signal - once it's already past the user's
-  // selected radius, every result on any LATER page will be too, so there's
-  // no reason to spend two more paid API calls fetching them just to have
-  // fetchLocalFood's own distance cutoff throw them straight out. Purely a
-  // cost/latency optimization - fetchLocalFood's client-side filter is the
-  // actual enforcement either way.
-  const pastRadius = (page) => {
-    if (!maxDistanceMiles || page.length === 0) return false;
-    const farthest = page[page.length - 1];
-    const d = getTrueDistance(
-      location.latitude, location.longitude,
-      farthest.geometry.location.lat, farthest.geometry.location.lng
-    );
-    return parseFloat(d) > maxDistanceMiles;
-  };
-
   let pagesFetched = 1;
-  while (data.next_page_token && pagesFetched < MAX_PAGES && !pastRadius(data.results || [])) {
+  while (data.next_page_token && pagesFetched < MAX_PAGES) {
     await new Promise((resolve) => setTimeout(resolve, NEXT_PAGE_DELAY_MS));
     // Per Google's docs, supplying pagetoken makes every other param
     // (including opennow) redundant - the token already encodes the
@@ -219,6 +196,8 @@ export async function fetchLocalFood({
   }
 
   // Cache miss (first search, or a filter changed): do the real fetch.
+  const radiusInMeters = Math.round(distance * 1609.34);
+
   // One search per selected cuisine (capped at 5 parallel calls), or a single
   // generic search if none selected. We fetch ALL cuisines even in randomizer
   // mode - it costs more up front but fills the pool so later flips are free.
@@ -234,7 +213,7 @@ export async function fetchLocalFood({
   try {
     const resultsPerKeyword = await Promise.all(
       keywords.map((keyword) =>
-        searchOnce({ location, keyword, openNowOnly, maxDistanceMiles: distance }).catch(() => [])
+        searchOnce({ location, radiusInMeters, keyword, openNowOnly }).catch(() => [])
       )
     );
     // Interleave results round-robin (first result of each cuisine, then
@@ -312,11 +291,10 @@ export async function fetchLocalFood({
       closestByName.set(key, { ...spot, _chainDistance: distance });
     }
   }
-  // Google's own distance ceiling is gone now that searchOnce uses
-  // rankby=distance instead of radius (see that function's own comment) -
-  // this is what actually enforces the user's selected mile setting now.
-  // Reuses _chainDistance (already computed above, same true-distance calc
-  // shapeSpot uses) rather than recomputing it.
+  // Belt-and-suspenders on top of Google's own radius param above (which
+  // should already bound everything, but isn't always perfectly precise at
+  // the edge) - reuses _chainDistance (already computed above, same
+  // true-distance calc shapeSpot uses) rather than recomputing it.
   const withinDistance = deduped.filter((spot) => parseFloat(spot._chainDistance) <= distance);
 
   // Basic quality filter: minimum star rating + hard review floor backstop.
