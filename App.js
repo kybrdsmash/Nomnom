@@ -60,6 +60,7 @@ import {
   loadFaveCuisines, saveFaveCuisines,
   loadFriends, saveFriends,
   loadJournal, saveJournal,
+  loadTravelType, saveTravelType,
 } from './src/storage';
 import { pushJournal } from './src/api/journal';
 import { uploadJournalPhoto, deleteJournalPhoto } from './src/api/journalPhotos';
@@ -357,10 +358,10 @@ function AppInner() {
   // Load persisted lists once on startup.
   useEffect(() => {
     (async () => {
-      const [h, f, t, seen, p, prefs, faves, frnds, jrnl] = await Promise.all([
+      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel] = await Promise.all([
         loadHistory(), loadFavorites(), loadTryLater(), loadSeenIds(),
         loadProfile(), loadPreferences(), loadFaveCuisines(),
-        loadFriends(), loadJournal(),
+        loadFriends(), loadJournal(), loadTravelType(),
       ]);
       setHistory(h);
       setFavorites(f);
@@ -368,6 +369,7 @@ function AppInner() {
       seenIdsRef.current = seen;
       setProfile(p);
       setPreferences(prefs);
+      setTravelType(travel);
       // Older saves stored each slot as a bare cuisine array ([[], [], []])
       // from before slots had names - normalize those up to the current
       // { name, cuisines } shape rather than crashing on the old data.
@@ -390,6 +392,7 @@ function AppInner() {
   useEffect(() => { if (storageLoaded) saveFaveCuisines(faveCuisines); }, [faveCuisines, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveFriends(friends); }, [friends, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveJournal(journal); }, [journal, storageLoaded]);
+  useEffect(() => { if (storageLoaded) saveTravelType(travelType); }, [travelType, storageLoaded]);
 
   // Mirrors the local journal (plus who's allowed to read it) up to
   // Firestore whenever either changes, so mutual friends can see it from

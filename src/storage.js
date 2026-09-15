@@ -21,6 +21,7 @@ const KEYS = {
   faveCuisines: '@nomnom/faveCuisines',
   journal: '@nomnom/journal',
   atTheTableDraft: '@nomnom/atTheTableDraft',
+  travelType: '@nomnom/travelType',
 };
 
 async function load(key, fallback) {
@@ -87,6 +88,10 @@ export const loadPreferences = () => load(KEYS.preferences, {
   units: 'mi', // 'mi' | 'km'
 });
 export const savePreferences = (prefs) => save(KEYS.preferences, prefs);
+
+// Sticks until the user picks a different one - not reset per session.
+export const loadTravelType = () => load(KEYS.travelType, 'drive');
+export const saveTravelType = (travelType) => save(KEYS.travelType, travelType);
 
 // People you've done a friend-spin session with before, keyed by their
 // (now-persisted, see firebase.js) anonymous auth uid so they can be pinged
