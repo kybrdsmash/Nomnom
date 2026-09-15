@@ -158,14 +158,19 @@ export default function HistoryFavoritesOverlay({
   };
 
   const sourceList = activeView === 'favorites' ? favorites : activeView === 'tryLater' ? tryLater : history;
+  // City grouping/filtering applies to Favorites and Try Later - both are
+  // "saved spots that can span multiple trips/cities" lists. History is left
+  // out since it's already grouped by day, which is the more useful axis
+  // there.
+  const showCityFilter = activeView === 'favorites' || activeView === 'tryLater';
   const availableTypes = [...new Set(sourceList.map((s) => s.type).filter(Boolean))].sort();
-  const availableCities = activeView === 'favorites'
+  const availableCities = showCityFilter
     ? [...new Set(sourceList.map((s) => cityFromAddress(s.address)))].sort()
     : [];
   const filtered = sourceList.filter((spot) => {
     const matchesQuery = !searchQuery.trim() || spot.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
     const matchesType = !typeFilter || spot.type === typeFilter;
-    const matchesCity = activeView !== 'favorites' || !cityFilter || cityFromAddress(spot.address) === cityFilter;
+    const matchesCity = !showCityFilter || !cityFilter || cityFromAddress(spot.address) === cityFilter;
     return matchesQuery && matchesType && matchesCity;
   });
 
@@ -181,11 +186,11 @@ export default function HistoryFavoritesOverlay({
           placeholderTextColor={colors.textMuted}
         />
       </View>
-      {/* Favorites-only - lets you jump straight to a specific city's
-          favorites regardless of where you physically are right now (e.g.
+      {/* Favorites/Try Later - lets you jump straight to a specific city's
+          spots regardless of where you physically are right now (e.g.
           browsing Tahoe favorites from home), on top of the automatic
           nearest-first grouping below. */}
-      {activeView === 'favorites' && availableCities.length > 1 && (
+      {showCityFilter && availableCities.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
           <Pressable
             style={[styles.chip, !cityFilter && styles.chipActive]}
@@ -244,9 +249,17 @@ export default function HistoryFavoritesOverlay({
       </View>
     ));
   } else if (activeView === 'tryLater') {
-    listContent = filtered.map((spot, i) =>
-      renderRow(spot, i, { showFavoriteToggle: true, showTryLaterToggle: true })
-    );
+    // Same reasoning as Favorites above - a try-later list saved across
+    // multiple trips gets just as cluttered without city grouping (user
+    // request: "this should be city based as well").
+    listContent = groupByCity(filtered, location).map(({ city, spots }) => (
+      <View key={city} style={{ marginBottom: 8 }}>
+        <Text style={styles.categoryHeader}>{city}</Text>
+        {spots.map((spot, i) =>
+          renderRow(spot, i, { showFavoriteToggle: true, showTryLaterToggle: true })
+        )}
+      </View>
+    ));
   } else {
     // history is already newest-first (App.js unshifts on every view), so
     // grouping by day in array order keeps the whole list newest-first too.
