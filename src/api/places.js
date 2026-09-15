@@ -143,9 +143,15 @@ export async function fetchLocalFood({
   // a refresh - not padded out with repeats the way a single flip or an
   // elimination bracket wants a full, consistent-sized set every time.
   allowRepeats = true,
+  // Set by the on-launch cache-warming call (below) so a zero-results/error
+  // outcome from that invisible background fetch doesn't pop a user-facing
+  // alert before the user has even pressed Spin (user report: "I didn't even
+  // spin yet" and got the "literally 0 spots found" alert). A real spin still
+  // alerts normally.
+  silent = false,
 }) {
   if (!GOOGLE_API_KEY) {
-    alert('Missing Google API key - check your .env file has EXPO_PUBLIC_GOOGLE_API_KEY set.');
+    if (!silent) alert('Missing Google API key - check your .env file has EXPO_PUBLIC_GOOGLE_API_KEY set.');
     return [];
   }
 
@@ -227,16 +233,18 @@ export async function fetchLocalFood({
     }
   } catch (error) {
     console.error(error);
-    alert('Network Error. Check your internet connection.');
+    if (!silent) alert('Network Error. Check your internet connection.');
     return [];
   }
 
   if (allResults.length === 0) {
-    alert(
-      openNowOnly
-        ? `No spots open right now in this radius. Try turning off "Open now" or widening your search.`
-        : `Literally 0 spots found. Try widening your search.`
-    );
+    if (!silent) {
+      alert(
+        openNowOnly
+          ? `No spots open right now in this radius. Try turning off "Open now" or widening your search.`
+          : `Literally 0 spots found. Try widening your search.`
+      );
+    }
     return [];
   }
 
@@ -340,9 +348,11 @@ export async function fetchLocalFood({
   const validSpots = filterByReviewStats(basicValid);
 
   if (validSpots.length === 0) {
-    alert(
-      `No well-reviewed spots with ${minRating.toFixed(1)}+ stars in this radius. Try widening your search.`
-    );
+    if (!silent) {
+      alert(
+        `No well-reviewed spots with ${minRating.toFixed(1)}+ stars in this radius. Try widening your search.`
+      );
+    }
     return [];
   }
 

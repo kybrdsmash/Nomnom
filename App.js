@@ -302,6 +302,13 @@ function AppInner() {
         alert('Location access is required to find food near you.');
         return;
       }
+      // A cached last-known fix (if any) resolves instantly, so the app can
+      // unblock Spin right away instead of sitting on "Locating..." for
+      // however long a fresh GPS fix takes (user report: "taking forever to
+      // locate"). getCurrentPositionAsync still runs after it and overwrites
+      // with the accurate live fix once that's ready.
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown) setLocation(lastKnown.coords);
       let loc = await Location.getCurrentPositionAsync({});
       setLocation(loc.coords);
     })();
@@ -323,7 +330,7 @@ function AppInner() {
     if (!location) return;
     fetchLocalFood({
       location, distance, minRating, selectedCuisines, travelType,
-      count: 1, openNowOnly, maxPrice, allowRepeats: true,
+      count: 1, openNowOnly, maxPrice, allowRepeats: true, silent: true,
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
