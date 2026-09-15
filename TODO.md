@@ -2,6 +2,12 @@
 
 Living list, kept in the repo so it survives across sessions (unlike chat history). Add to it as things come up; check items off as they land.
 
+## Search: distance filter doesn't reach farther spots (open, reverted once already)
+
+- [ ] User report: increasing the travel-distance filter significantly still only returns nearby options. Root cause: Google's Nearby Search `radius` param uses default *prominence* ranking, not an even geographic spread - in a dense area the ~60-result cap (Google's own hard limit) can fill up entirely with popular places clustered near the center regardless of how large `radius` is, so farther genuine matches never make it into the response at all.
+- [ ] First fix attempt (switching `searchOnce` to `rankby=distance`, removing `radius`, enforcing the mile ceiling client-side) shipped and immediately broke live search - "zero spots found" on every spin, screen appeared frozen. Reverted same day (`git log` - "Revert rankby=distance nearbysearch change") before root-causing exactly why; suspects include a Places API constraint not accounted for, or `applyTypeAllowlist`/downstream filtering behaving differently against distance-ranked vs. prominence-ranked results. Not confirmed.
+- [ ] Needs a safer next approach, verified against the real API (via a preview/dev build, not shipped straight to production) before it ships again - e.g. multiple ring-radius queries (progressively larger `radius` values, deduped) instead of switching ranking mode entirely, so a bug can't take down basic search the way this one did.
+
 ## Google Play Store launch (current focus — Android only for now)
 
 - [x] Draft privacy policy — published as a Claude Artifact: https://claude.ai/code/artifact/82119d59-1862-412c-b5a7-0e92fdd027b1. Entity name (Isaac Finger), CCPA/California rights section, governing-law clause, and the no-Advertising-ID statement are all in. Still needs: a lawyer's sign-off, then the artifact shared so the URL is publicly reachable for Play Console.
