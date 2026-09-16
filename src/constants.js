@@ -49,7 +49,7 @@ export function useVerticalScale() {
 // just inert now - it simply can't be reached via any filter anymore,
 // same as an untagged dish would behave.
 export const CUISINES = [
-  'Acai', 'Afghani', 'African', 'American', 'Asian', 'Bagels', 'Bakery',
+  'Acai', 'African', 'American', 'Armenian', 'Asian', 'Bagels', 'Bakery',
   'BBQ', 'Brazilian', 'Burgers', 'Cafe', 'Candy', 'Chinese', 'Chocolate',
   'Coffee', 'Deli', 'Dessert', 'Diner', 'Donuts', 'French', 'Greek',
   'Ice Cream', 'Indian', 'Indonesian', 'Italian', 'Japanese', 'Juice',

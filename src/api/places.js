@@ -699,9 +699,13 @@ const NON_FOOD_TYPES = new Set([
 // the broader search.
 const CUISINE_TYPE_REQUIREMENTS = {
   Acai: ['acai_shop'],
-  Afghani: ['afghani_restaurant'],
   African: ['african_restaurant'],
   American: ['american_restaurant'],
+  // Google's Places API has no dedicated "armenian_restaurant" type
+  // (confirmed against its official Table A type list) - closest real
+  // types it actually tags Armenian spots with, same "borrow the closest
+  // real neighbors" pattern as Middle Eastern borrowing Lebanese/Turkish.
+  Armenian: ['middle_eastern_restaurant', 'mediterranean_restaurant'],
   Asian: ['asian_restaurant'],
   Bagels: ['bagel_shop'],
   Bakery: ['bakery'],
@@ -776,8 +780,14 @@ function applyTypeAllowlist(results, cuisineLabel) {
 // approach, which would multiply the API cost per search.
 const NAME_HINTS = {
   Acai: ['acai', 'açai'],
-  Afghani: ['afghan', 'afghani'],
   African: ['ethiopian', 'nigerian', 'eritrean', 'african'],
+  // Armenian shares its Google types with Middle Eastern/Mediterranean (no
+  // dedicated Google type exists - see CUISINE_TYPE_REQUIREMENTS), so
+  // without its own name hint, the type filter alone couldn't tell an
+  // Armenian spot apart from any generic mediterranean_restaurant - same
+  // reasoning as Lebanese/Turkish keeping their own hints despite also
+  // sharing Middle Eastern's types.
+  Armenian: ['armenian'],
   Asian: ['pan-asian', 'pan asian', 'asian fusion'],
   Bagels: ['bagel'],
   Bakery: ['bakery', 'patisserie', 'bakeshop'],
