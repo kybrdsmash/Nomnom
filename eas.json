@@ -23,6 +23,20 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        // Local, gitignored path to the Google Cloud service-account key
+        // (Play Console > Users and permissions grants this account release
+        // access - see TODO.md/README for setup notes). Not committed since
+        // it's a credential.
+        "serviceAccountKeyPath": "C:/Users/Isaac/keys/nomnom-play-submit.json",
+        // "internal" for now - Production track is locked until the app
+        // clears Google's closed-testing requirement (12+ testers, 14+
+        // days). Switch to "alpha" (Play's API name for Closed testing) or
+        // "production" once that's cleared, or pass --track on the CLI to
+        // override per-submit without editing this file.
+        "track": "internal"
+      }
+    }
   }
 }
