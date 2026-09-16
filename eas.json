@@ -20,6 +20,22 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    // Identical to "production" - exists only because "production" kept
+    // shipping a stale, already-fixed-in-source expo-asset native
+    // dependency (NoClassDefFoundError: AnyTypeCache crash) even with
+    // `eas build --clear-cache`, while a from-scratch local `npm ci` off
+    // the exact same committed lockfile proved the dependency resolution
+    // itself was correct. Strong sign some cache tied to the "production"
+    // profile name specifically (likely Gradle-level, not npm) survived
+    // clear-cache. A brand-new profile name has no build history to reuse
+    // from at all. Use this until the root cause is confirmed and
+    // "production" can be trusted again.
+    "productionFresh": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {
