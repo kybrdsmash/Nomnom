@@ -323,8 +323,21 @@ function AppInner() {
       // however long a fresh GPS fix takes (user report: "taking forever to
       // locate"). getCurrentPositionAsync still runs after it and overwrites
       // with the accurate live fix once that's ready.
+      //
+      // CRITICAL: the cached fix has NO freshness guarantee - Android will
+      // hand back whatever it last had, even if that's hours or days old
+      // (e.g. the phone's last real fix was in a different city entirely).
+      // A real report: a friend's first-ever spin returned San Francisco
+      // results while he was actually in Mountain View - exactly this,
+      // an unbounded-age stale cached fix used before the accurate one
+      // caught up. Only trust the cached fix if it's recent enough that a
+      // person couldn't plausibly have traveled far since; otherwise just
+      // wait for the real one, same as before this optimization existed.
+      const MAX_CACHED_LOCATION_AGE_MS = 5 * 60 * 1000;
       const lastKnown = await Location.getLastKnownPositionAsync();
-      if (lastKnown) setLocation(lastKnown.coords);
+      if (lastKnown && Date.now() - lastKnown.timestamp < MAX_CACHED_LOCATION_AGE_MS) {
+        setLocation(lastKnown.coords);
+      }
       let loc = await Location.getCurrentPositionAsync({});
       setLocation(loc.coords);
     })();
