@@ -30,12 +30,19 @@
         // access - see TODO.md/README for setup notes). Not committed since
         // it's a credential.
         "serviceAccountKeyPath": "C:/Users/Isaac/keys/nomnom-play-submit.json",
-        // "internal" for now - Production track is locked until the app
-        // clears Google's closed-testing requirement (12+ testers, 14+
-        // days). Switch to "alpha" (Play's API name for Closed testing) or
-        // "production" once that's cleared, or pass --track on the CLI to
-        // override per-submit without editing this file.
         "track": "internal"
+      }
+    },
+    // Same key, targets Play's Closed testing track instead ("alpha" is
+    // Play's API name for it) - eas submit has no CLI flag to override
+    // track per-run, so this is its own profile: `eas submit --profile
+    // closedTesting`. Needed until the app clears Google's closed-testing
+    // requirement (12+ testers opted in, running 14+ days) and Production
+    // unlocks.
+    "closedTesting": {
+      "android": {
+        "serviceAccountKeyPath": "C:/Users/Isaac/keys/nomnom-play-submit.json",
+        "track": "alpha"
       }
     }
   }
