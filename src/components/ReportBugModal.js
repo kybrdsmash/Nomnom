@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Modal, View, Text, Pressable, TextInput, ActivityIndicator,
+  Modal, View, Text, Pressable, TextInput, Image, ActivityIndicator,
   KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { submitBugReport } from '../api/bugReports';
@@ -23,22 +24,34 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [bugText, setBugText] = useState('');
+  const [screenshotUri, setScreenshotUri] = useState(null);
   const [bugSubmitting, setBugSubmitting] = useState(false);
   const [bugStatus, setBugStatus] = useState('idle'); // 'idle' | 'sent' | 'error'
 
   useEffect(() => {
     if (!visible) return;
     setBugText('');
+    setScreenshotUri(null);
     setBugStatus('idle');
   }, [visible]);
+
+  // Picking from the library, not the camera - a bug report screenshot is
+  // almost always already sitting in the photo library (the OS's own
+  // screenshot shortcut), not something worth photographing off the screen.
+  const pickScreenshot = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+    if (result.canceled || !result.assets?.[0]) return;
+    setScreenshotUri(result.assets[0].uri);
+  };
 
   const submitBug = async () => {
     if (!bugText.trim() || bugSubmitting) return;
     setBugSubmitting(true);
-    const ok = await submitBugReport({ uid: myUid, description: bugText, displayName });
+    const ok = await submitBugReport({ uid: myUid, description: bugText, displayName, screenshotUri });
     setBugSubmitting(false);
     if (ok) {
       setBugText('');
+      setScreenshotUri(null);
       setBugStatus('sent');
     } else {
       setBugStatus('error');
@@ -70,6 +83,20 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
             autoFocus
             maxLength={500}
           />
+
+          {screenshotUri ? (
+            <View style={styles.screenshotRow}>
+              <Image source={{ uri: screenshotUri }} style={styles.screenshotThumb} />
+              <Pressable onPress={() => setScreenshotUri(null)} style={styles.screenshotRemoveBtn} hitSlop={8}>
+                <Ionicons name="close-circle" size={20} color={colors.danger} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable style={styles.addScreenshotBtn} onPress={pickScreenshot}>
+              <Ionicons name="image-outline" size={16} color={colors.accent} />
+              <Text style={styles.addScreenshotText}>Add a screenshot</Text>
+            </Pressable>
+          )}
 
           <View style={styles.submitRow}>
             <Pressable
@@ -103,6 +130,16 @@ const makeStyles = (colors) => StyleSheet.create({
   input: {
     backgroundColor: colors.cardAlt, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
     color: colors.textLight, fontSize: 14, minHeight: 110, textAlignVertical: 'top', marginBottom: 14,
+  },
+  addScreenshotBtn: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    marginBottom: 14, paddingVertical: 6,
+  },
+  addScreenshotText: { color: colors.accent, fontSize: 13, fontWeight: '600', marginLeft: 6 },
+  screenshotRow: { marginBottom: 14, alignSelf: 'flex-start' },
+  screenshotThumb: { width: 90, height: 90, borderRadius: 10, backgroundColor: colors.cardAlt },
+  screenshotRemoveBtn: {
+    position: 'absolute', top: -8, right: -8, backgroundColor: colors.background, borderRadius: 10,
   },
   submitRow: { flexDirection: 'row', alignItems: 'center' },
   submitBtn: {

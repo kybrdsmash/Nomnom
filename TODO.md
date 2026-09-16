@@ -70,6 +70,13 @@ Full agent report has the file/line detail for every item below.
 ## In-app bug reporting (2026-09-14, in progress)
 
 - [x] "Report a Bug" in Settings, submits to a new Firestore `bugReports` collection (`src/api/bugReports.js`). One-way mailbox - the app never reads it back. Originally an inline text field in the floating Settings panel; moved 2026-09-14 to its own popup modal (`src/components/ReportBugModal.js`) after the keyboard kept covering the inline field - root-caused to RN's `KeyboardAvoidingView` "position" behavior measuring its shift relative to its immediate parent, which came out wrong nested that deep inside the panel's absolutely-positioned wrapper. A `Modal` renders at the screen root, so the same keyboard-avoidance works correctly there instead.
+- [x] Optional screenshot attachment (2026-09-16) - "Add a screenshot" picks from the photo library, uploads to Storage under `bugReportScreenshots/{uid}/{timestamp}.jpg` (same pattern as `journalPhotos.js`), and links the download URL on the Firestore doc as `screenshotUrl`. Uploaded before the Firestore doc write so a doc never references a failed upload.
+- [ ] **Storage security rule for `bugReportScreenshots`** - needed for the screenshot upload above to actually work (Storage denies all reads/writes by default until configured), same shape as `journalPhotos`' rule below:
+  ```
+  match /bugReportScreenshots/{uid}/{filename} {
+    allow read, write: if request.auth != null && request.auth.uid == uid;
+  }
+  ```
 - [ ] **Firestore security rules for `bugReports`** — need write-only access for any signed-in (anonymous) user, no read/update/delete from the client at all (only the scheduled daily check, running server-side, needs to read/update status):
   ```
   match /bugReports/{reportId} {
