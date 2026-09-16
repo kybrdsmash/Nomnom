@@ -51,6 +51,7 @@ module.exports = {
       },
     },
     plugins: [
+      'expo-asset',
       '@react-native-community/datetimepicker',
       [
         'expo-location',
