@@ -83,6 +83,18 @@ module.exports = {
           microphonePermission: 'Nomnom uses your microphone to turn a spoken note into text for your food journal.',
         },
       ],
+      [
+        'expo-notifications',
+        {
+          // Shown as the small status-bar icon on Android notifications -
+          // reuses the same source art as the adaptive icon (a plain
+          // silhouette works better than the full-color icon at that size,
+          // but this is a reasonable placeholder until a dedicated
+          // monochrome asset exists).
+          icon: './assets/adaptive-icon.png',
+          color: '#ffffff',
+        },
+      ],
     ],
   },
 };

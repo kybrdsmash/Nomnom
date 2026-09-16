@@ -50,6 +50,7 @@ import ReportBugModal from './src/components/ReportBugModal';
 import HelpModal from './src/components/HelpModal';
 import { isFirebaseConfigured, ensureSignedIn } from './src/api/firebase';
 import { watchPings, dismissPing } from './src/api/friendSession';
+import { registerForPushNotifications, addNotificationTapListener } from './src/api/push';
 import {
   loadHistory, saveHistory,
   loadFavorites, saveFavorites,
@@ -186,6 +187,20 @@ function AppInner() {
     const unsub = watchPings(myUid, setPings);
     return unsub;
   }, [myUid]);
+  // Registers this device's Expo push token so a friend's ping can wake the
+  // phone even when the app isn't open (see src/api/push.js) - the in-app
+  // pings list above only ever helped while already looking at the app.
+  useEffect(() => {
+    if (myUid) registerForPushNotifications(myUid);
+  }, [myUid]);
+  // Tapping a push notification (app backgrounded or killed) should join
+  // the session exactly like tapping a shared nomnom:// link already does.
+  useEffect(() => {
+    return addNotificationTapListener((code) => {
+      setPendingJoinCode(code);
+      setActiveView('friend');
+    });
+  }, []);
   const joinPing = (ping) => {
     dismissPing(myUid, ping.id);
     setPings((prev) => prev.filter((p) => p.id !== ping.id));
