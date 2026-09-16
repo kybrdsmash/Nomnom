@@ -142,14 +142,18 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
         if (!g.dragging || g.stepTaken) return;
         const dy = pageY - g.baseY;
         if (dy <= -STEP_PX) {
+          // Swipe up - moves to the previous slot, so the highlighted dot in
+          // the 3-dot column (rendered top-to-bottom in slot order) moves up
+          // too, matching the finger's direction (user report: "up moves the
+          // dot down" - it previously advanced to the NEXT slot here instead).
           g.stepTaken = true;
-          const next = (activeIndexRef.current + 1) % SLOT_COUNT;
+          const next = (activeIndexRef.current + SLOT_COUNT - 1) % SLOT_COUNT;
           activeIndexRef.current = next;
           setActiveIndex(next);
           slideY.setValue(0);
         } else if (dy >= STEP_PX) {
           g.stepTaken = true;
-          const next = (activeIndexRef.current + SLOT_COUNT - 1) % SLOT_COUNT;
+          const next = (activeIndexRef.current + 1) % SLOT_COUNT;
           activeIndexRef.current = next;
           setActiveIndex(next);
           slideY.setValue(0);
@@ -160,7 +164,8 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
       onPanResponderRelease: () => {
         const g = gestureRef.current;
         clearLongPressTimer();
-        Animated.spring(slideY, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+        // Was speed: 20 - read as too fast/snappy (user feedback).
+        Animated.spring(slideY, { toValue: 0, useNativeDriver: true, speed: 10, bounciness: 6 }).start();
         if (g.dragging || g.longPressFired) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onLoadRef.current(activeIndexRef.current);
@@ -182,7 +187,6 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
   ).current;
 
   const activeSlot = slots[activeIndex] || { name: `Fave ${activeIndex + 1}`, cuisines: [] };
-  const hasContent = (activeSlot.cuisines || []).length > 0;
 
   if (renaming) {
     return (
@@ -212,12 +216,6 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
       >
         {activeSlot.name}
       </Animated.Text>
-      {/* A dot instead of dimming the label itself - dimming an already-
-          muted #AAA text down to 0.5 opacity against the button's dark
-          background was faint enough to read as the lettering having
-          vanished entirely (user feedback), especially right after
-          swiping past a slot that just happens to be unsaved. */}
-      {!hasContent && <View style={styles.emptyDot} />}
       {/* Plain 3-dot slot indicator on the right edge (user request: "just 3
           dots... two dots are greyed out when not selected" - no bar, no
           arrows) - one dot per slot, the active one in accent color, the
@@ -259,12 +257,6 @@ const makeStyles = (colors) => StyleSheet.create({
   // depending on the picked theme the muted text could read as barely
   // visible/gone against it (user feedback: "lost the lettering").
   textFlash: { color: colors.textDark },
-  // Small indicator dot (not text dimming - see the comment above where
-  // this renders) that the currently-shown slot has nothing saved yet.
-  emptyDot: {
-    position: 'absolute', bottom: 4, left: 4, width: 4, height: 4, borderRadius: 2,
-    backgroundColor: colors.textMuted,
-  },
   // Vertical stack of 3 plain dots on the right edge, top-to-bottom matching
   // slot order - replaces the earlier decorative pivot (see git history).
   dotColumn: { position: 'absolute', right: 8, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
