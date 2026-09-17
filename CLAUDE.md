@@ -27,6 +27,7 @@ Copy `.env.example` to `.env` and fill in:
 - `EXPO_PUBLIC_GOOGLE_API_KEY` — Google Places API (Nearby Search, Place Details, Place Photos must be enabled), and Maps SDK for Android (for the friend-spin map preview in `FriendMap.js` — read into `app.config.js`'s `android.config.googleMaps.apiKey`; iOS needs no key since `react-native-maps` uses Apple Maps there)
 - 6 `EXPO_PUBLIC_FIREBASE_*` values from Firebase console > Project settings > Your apps > Web app
 - `EXPO_PUBLIC_OPENAI_API_KEY` — optional, powers the "At the Table" journal note's voice-to-text mic button (`src/api/transcribe.js`, OpenAI's Whisper endpoint). Missing this just disables the mic button (fails quietly, tells the user to type instead) rather than breaking anything.
+- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` — Google Sign-In (`src/api/googleAuth.js`, `src/components/GoogleSignInRow.js`). Web client ID comes from Firebase Console > Authentication > Sign-in method > Google; the Android client ID is a *separate* OAuth client (Google Cloud Console > Credentials > Create Credentials > OAuth client ID > Android, package `com.peach.nomnomapp` + the release signing key's SHA-1) — the Web client alone only supports https redirect URIs, which doesn't work for a native app's custom-scheme redirect.
 
 All env vars use the `EXPO_PUBLIC_` prefix so Expo inlines them at build time. `.env` is gitignored. Friend-spin mode checks `isFirebaseConfigured` (`src/api/firebase.js`) and shows a fallback message instead of crashing when Firebase env vars are missing.
 

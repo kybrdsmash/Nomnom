@@ -7,6 +7,7 @@ import { neonSelected, buttonDepth, accentGradient } from '../constants';
 import { hexToHsl, hslToHex } from '../utils/color';
 import { isFirebaseConfigured } from '../api/firebase';
 import SlidableSegmented from './SlidableSegmented';
+import GoogleSignInRow from './GoogleSignInRow';
 
 // Fixed saturation keeps every pick in the same soft, glowing pastel
 // family (matching the current Frost blue's feel) regardless of hue or
@@ -223,6 +224,7 @@ export default function SettingsPanel({
               placeholderTextColor="#777"
               maxLength={24}
             />
+            <GoogleSignInRow />
 
             <Text style={styles.sectionTitle}>Preferences</Text>
             <View style={styles.row}>

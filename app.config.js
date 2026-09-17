@@ -76,6 +76,7 @@ module.exports = {
     },
     plugins: [
       'expo-asset',
+      'expo-web-browser',
       '@react-native-community/datetimepicker',
       [
         'expo-location',
