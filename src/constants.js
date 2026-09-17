@@ -1,6 +1,16 @@
 import { useWindowDimensions } from 'react-native';
 import { hexToHsl, hslToHex } from './utils/color';
 
+// Real https domain (Firebase Hosting) for friend-spin join links, not the
+// nomnom:// custom scheme - a custom scheme just shows as plain unclickable
+// text in SMS/WhatsApp/etc (only http/https get auto-linkified there), which
+// is why sharing a join link/code wasn't tappable (user report). Verified as
+// an Android App Link via app.config.js's android.intentFilters + the
+// asset-links file at public/.well-known/assetlinks.json (deployed via
+// `firebase deploy --only hosting`, kept in sync with this host by hand -
+// see TODO.md). Must match that intentFilters host exactly.
+export const JOIN_LINK_BASE_URL = 'https://nom-nom-83f11.web.app/join';
+
 // The main filter screen's vertical spacing (padding/margins on App.js's
 // homeScreen and FilterPanel's cards) was tuned against a "comfortable"
 // screen height, then just left as fixed pixel constants - which looked

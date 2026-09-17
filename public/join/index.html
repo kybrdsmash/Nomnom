@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Join a Nomnom spin</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1410; color: #f4ede4; margin: 0;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px; box-sizing: border-box;
+  }
+  .card {
+    max-width: 380px; text-align: center;
+  }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  p { color: #c9bfb3; font-size: 15px; line-height: 1.5; }
+  .code {
+    font-size: 32px; font-weight: bold; letter-spacing: 4px;
+    background: #2a221c; border-radius: 12px; padding: 16px 20px;
+    margin: 20px 0; display: inline-block;
+  }
+  a.btn {
+    display: block; background: #ff8a3d; color: #1a1410; font-weight: bold;
+    text-decoration: none; padding: 14px 20px; border-radius: 16px;
+    margin-top: 16px; font-size: 15px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🍽️ Join the spin</h1>
+    <p>A friend wants to pick where to eat together on Nomnom.</p>
+    <div class="code" id="code">----</div>
+    <p id="status">Opening the app…</p>
+    <a class="btn" id="downloadLink" href="https://play.google.com/apps/testing/com.peach.nomnomapp">
+      Don't have Nomnom yet? Get it here
+    </a>
+  </div>
+  <script>
+    // Still on Play's closed/internal testing tracks (not Production yet)
+    // - update the download link above to the real Play Store listing once
+    // this app is publicly launched, since the testing opt-in link only
+    // works for people already added as testers.
+    const params = new URLSearchParams(window.location.search);
+    const code = (params.get('code') || '').toUpperCase();
+    if (code) document.getElementById('code').textContent = code;
+
+    // If Android's own App Link verification didn't intercept this (app not
+    // installed, or verification hasn't landed), attempt the custom-scheme
+    // deep link as a fallback - works if the app IS installed but for
+    // whatever reason the OS routed this to the browser instead.
+    if (code) {
+      window.location.href = 'nomnom://join?code=' + encodeURIComponent(code);
+    } else {
+      document.getElementById('status').textContent = '';
+    }
+  </script>
+</body>
+</html>

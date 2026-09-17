@@ -39,6 +39,30 @@ module.exports = {
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_API_KEY,
         },
       },
+      // Android App Links (verified https, not the nomnom:// custom scheme)
+      // for friend-spin join links - a custom scheme URL just shows as
+      // plain unclickable text in SMS/WhatsApp/etc (only http/https get
+      // auto-linkified), which is why joins were failing (user report:
+      // "sending the link/code, its not clickable"). autoVerify: true is
+      // what makes Android silently check .well-known/assetlinks.json
+      // (hosted on Firebase Hosting - see public/.well-known/, deployed
+      // separately via `firebase deploy --only hosting`, not part of the
+      // app bundle) and open the app directly instead of a browser, IF that
+      // verification succeeds - see TODO.md for the full setup notes.
+      intentFilters: [
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [
+            {
+              scheme: 'https',
+              host: 'nom-nom-83f11.web.app',
+              pathPrefix: '/join',
+            },
+          ],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+      ],
     },
     web: {
       favicon: './assets/favicon.png',

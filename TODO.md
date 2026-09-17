@@ -2,6 +2,15 @@
 
 Living list, kept in the repo so it survives across sessions (unlike chat history). Add to it as things come up; check items off as they land.
 
+## Friend-spin join links now use real https App Links (2026-09-16)
+
+- [x] User report: the join link/code sent via "Share" wasn't clickable - `ExpoLinking.createURL('join', ...)` generates a `nomnom://join?code=X` custom-scheme URL, and most messaging apps (SMS, WhatsApp, etc.) only auto-linkify `http(s)://` URLs, so it just showed as plain text.
+- [x] Fixed with a real Android App Link: `public/.well-known/assetlinks.json` (the app's package name + SHA-256 signing cert fingerprint, from Play Console → Protected with Play → Manage Play app signing → classical key) hosted on Firebase Hosting (`firebase deploy --only hosting`, project `nom-nom-83f11`, live at `https://nom-nom-83f11.web.app`) + `app.config.js`'s `android.intentFilters` with `autoVerify: true` for that same host. `src/constants.js`'s `JOIN_LINK_BASE_URL` is the single source of truth for the host - **must stay in sync by hand** with both `assetlinks.json`'s implicit domain and the intentFilters host in app.config.js if this ever changes (e.g. a custom domain later).
+- [x] `public/join/index.html` - fallback landing page for anyone without the app installed (or if App Link verification hasn't landed yet): shows the code, attempts the `nomnom://` deep link as a fallback, and links to the Play Store (currently the closed-testing opt-in link, since Production isn't live yet - **switch this to the real Play Store listing once the app actually launches publicly**, the testing link won't work for non-testers).
+- [ ] **Needs a fresh native build to take effect** - `intentFilters` is baked into the compiled AndroidManifest at build time, so this doesn't work until the next build ships (unlike the Firebase Hosting/assetlinks.json side, which is already live independent of app builds).
+- [ ] Not yet verified end-to-end on a real device (tap a shared link from another device with the new build installed, confirm it opens the app directly instead of a browser) - Android's own App Link verification can also take a little time to complete after first install.
+- [ ] iOS equivalent (Universal Links, `apple-app-site-association` file) not done - Android-only for now, matching the rest of this project's "Android first" focus.
+
 ## Search: distance filter doesn't reach farther spots (open, reverted once already)
 
 - [ ] User report: increasing the travel-distance filter significantly still only returns nearby options. Root cause: Google's Nearby Search `radius` param uses default *prominence* ranking, not an even geographic spread - in a dense area the ~60-result cap (Google's own hard limit) can fill up entirely with popular places clustered near the center regardless of how large `radius` is, so farther genuine matches never make it into the response at all.

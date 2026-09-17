@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ExpoLinking from 'expo-linking';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
-import { neonSelected, buttonDepth } from '../constants';
+import { neonSelected, buttonDepth, JOIN_LINK_BASE_URL } from '../constants';
 import { joinParts } from '../utils/format';
 import {
   createSession, joinSession, startPlaying, eliminateSpot,
@@ -688,7 +688,10 @@ export default function FriendSpin({
               <Pressable
                 style={styles.shareBtn}
                 onPress={() => {
-                  const joinLink = ExpoLinking.createURL('join', { queryParams: { code } });
+                  // A real https link (not ExpoLinking.createURL's
+                  // nomnom:// custom scheme) so it's actually tappable in
+                  // SMS/WhatsApp/etc - see JOIN_LINK_BASE_URL's own comment.
+                  const joinLink = `${JOIN_LINK_BASE_URL}?code=${code}`;
                   Share.share({
                     message: `Let's pick where to eat on Nomnom! Tap to join: ${joinLink}\n(or enter code ${code} manually)`,
                   });

@@ -9,5 +9,15 @@
         "*.log"
       ]
     }
-  ]
+  ],
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json"],
+    "headers": [
+      {
+        "source": "/.well-known/assetlinks.json",
+        "headers": [{ "key": "Content-Type", "value": "application/json" }]
+      }
+    ]
+  }
 }

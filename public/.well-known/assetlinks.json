@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.peach.nomnomapp",
+      "sha256_cert_fingerprints": [
+        "3D:9C:B6:F3:2E:D2:FF:FC:2E:9E:86:E7:D7:14:D3:C0:94:DC:A9:84:31:ED:4E:DB:4D:18:88:DF:9A:C7:FF:DB"
+      ]
+    }
+  }
+]

@@ -9,6 +9,9 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Firebase CLI's local deploy cache/history (firebase deploy --only hosting)
+.firebase/
+
 # Native
 .kotlin/
 *.orig.*
