@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, ScrollView, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,18 @@ import { fetchFriendJournal } from '../api/journal';
 import { groupByCity } from '../utils/location';
 import SlidableSegmented from './SlidableSegmented';
 import AtTheTableCompose from './AtTheTableCompose';
+import AlphabetIndexBar from './AlphabetIndexBar';
 import ReviewMilestoneBadge from './ReviewMilestoneBadge'; // prototype reward-system UI, see src/api/rewards.js
+
+// Same threshold/helper as HistoryFavoritesOverlay's Favorites/Try Later
+// city sections - kept as a separate copy rather than a shared import since
+// each screen's row shape differs enough that sharing more than this tiny
+// helper wasn't worth the coupling.
+const ALPHABET_INDEX_THRESHOLD = 12;
+function firstLetterOf(name) {
+  const c = (name || '').trim().charAt(0).toUpperCase();
+  return c >= 'A' && c <= 'Z' ? c : '#';
+}
 
 function relativeTime(ts) {
   const mins = Math.floor((Date.now() - ts) / 60000);
@@ -50,6 +61,19 @@ export default function JournalOverlay({
   // a brand-new review now lives behind the + button below instead, which
   // routes to At the Table.
   const [mineQuery, setMineQuery] = useState('');
+  // Backs the Mine tab's alphabet index - same measureLayout-based jump
+  // approach as HistoryFavoritesOverlay's Favorites/Try Later sections.
+  const scrollViewRef = useRef(null);
+  const letterRefs = useRef({});
+  const jumpToLetter = (city, letter) => {
+    const rowRef = letterRefs.current[`${city}::${letter}`];
+    if (!rowRef?.current || !scrollViewRef.current) return;
+    rowRef.current.measureLayout(
+      scrollViewRef.current,
+      (_x, y) => scrollViewRef.current.scrollTo({ y: y - 8, animated: true }),
+      () => {}
+    );
+  };
 
   useEffect(() => {
     if (tab !== 'friends' || !isFirebaseConfigured || !friends || friends.length === 0) return;
@@ -84,8 +108,8 @@ export default function JournalOverlay({
     : mineRows;
   const mineByCity = groupByCity(filteredMineRows, location);
 
-  const renderMineRow = ({ latest, count }) => (
-    <Pressable key={latest.spot.id} style={styles.row} onPress={() => onShowDetails(latest.spot)}>
+  const renderMineRow = ({ latest, count }, rowRef) => (
+    <Pressable key={latest.spot.id} ref={rowRef} style={styles.row} onPress={() => onShowDetails(latest.spot)}>
       {latest.spot.photoUrl ? (
         <Image source={{ uri: latest.spot.photoUrl }} style={styles.rowImage} />
       ) : (
@@ -170,7 +194,7 @@ export default function JournalOverlay({
         <AtTheTableCompose location={location} travelType={travelType} onSave={onSaveAtTheTable} />
       )}
 
-      <ScrollView style={{ width: '100%', paddingHorizontal: 20, display: tab === 'atTable' ? 'none' : 'flex' }}>
+      <ScrollView ref={scrollViewRef} style={{ width: '100%', paddingHorizontal: 20, display: tab === 'atTable' ? 'none' : 'flex' }}>
         {tab === 'mine' && (
           <>
             {/* Filters places already reviewed - NOT a live search for a new
@@ -199,15 +223,37 @@ export default function JournalOverlay({
               // same reasoning as Favorites: a journal collected across many
               // trips needs to stay organized by where you actually were,
               // not just when (user request).
-              mineByCity.map(({ city, spots }) => (
-                <View key={city} style={{ marginBottom: 8 }}>
-                  <View style={styles.cityHeaderRow}>
-                    <Text style={styles.categoryHeader}>{city}</Text>
-                    <ReviewMilestoneBadge count={spots.length} />
+              mineByCity.map(({ city, spots }) => {
+                const showIndex = spots.length > ALPHABET_INDEX_THRESHOLD;
+                const seenLetters = new Set();
+                const availableLetters = new Set(spots.map((s) => firstLetterOf(s.name)));
+                return (
+                  <View key={city} style={{ marginBottom: 8, paddingRight: showIndex ? 22 : 0 }}>
+                    <View style={styles.cityHeaderRow}>
+                      <Text style={styles.categoryHeader}>{city}</Text>
+                      <ReviewMilestoneBadge count={spots.length} />
+                    </View>
+                    {spots.map((row) => {
+                      const letter = firstLetterOf(row.name);
+                      const isFirstOfLetter = !seenLetters.has(letter);
+                      seenLetters.add(letter);
+                      let rowRef;
+                      if (showIndex && isFirstOfLetter) {
+                        const key = `${city}::${letter}`;
+                        letterRefs.current[key] = letterRefs.current[key] || React.createRef();
+                        rowRef = letterRefs.current[key];
+                      }
+                      return renderMineRow(row, rowRef);
+                    })}
+                    {showIndex && (
+                      <AlphabetIndexBar
+                        availableLetters={availableLetters}
+                        onSelectLetter={(letter) => jumpToLetter(city, letter)}
+                      />
+                    )}
                   </View>
-                  {spots.map(renderMineRow)}
-                </View>
-              ))
+                );
+              })
             )}
           </>
         )}

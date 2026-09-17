@@ -42,7 +42,13 @@ export function groupByCity(spots, location) {
     const rep = citySpots.find((s) => s.lat != null && s.lng != null);
     const distanceMiles =
       location && rep ? parseFloat(getTrueDistance(location.latitude, location.longitude, rep.lat, rep.lng)) : null;
-    return { city, distanceMiles, spots: citySpots };
+    // Alphabetical within the city - once a city's list grows, "nearest
+    // first" ordering (which only applies BETWEEN cities anyway) gave no
+    // organizing principle for finding one specific place inside it.
+    const sortedSpots = [...citySpots].sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '')
+    );
+    return { city, distanceMiles, spots: sortedSpots };
   });
 
   result.sort((a, b) => {

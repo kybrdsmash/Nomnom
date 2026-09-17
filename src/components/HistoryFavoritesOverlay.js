@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, Image, ScrollView, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,20 @@ import { joinParts } from '../utils/format';
 import { cityFromAddress, groupByCity } from '../utils/location';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import AddSpotModal from './AddSpotModal';
+import AlphabetIndexBar from './AlphabetIndexBar';
+
+// A city section needs its own alphabet index once it's roughly "longer
+// than a page" (user request) - tuned to this screen's row height rather
+// than counted in exact screenfuls, since that varies by device.
+const ALPHABET_INDEX_THRESHOLD = 12;
+
+// '#' catches anything not starting with a plain A-Z letter (emoji, digits,
+// accented characters that don't uppercase into A-Z, etc) rather than
+// silently dropping it from the index entirely.
+function firstLetterOf(name) {
+  const c = (name || '').trim().charAt(0).toUpperCase();
+  return c >= 'A' && c <= 'Z' ? c : '#';
+}
 
 // First letter of up to the first two words, e.g. "Isaac Rivera" -> "IR",
 // "Sam" -> "S". Used for the friend-spin token badge - there's no custom
@@ -66,6 +80,22 @@ export default function HistoryFavoritesOverlay({
   // travel-spanning favorites collection navigable (user request).
   const [cityFilter, setCityFilter] = useState(null); // null = All
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
+  // Backs the alphabet index (see AlphabetIndexBar) - the outer ScrollView
+  // itself, and one ref per city+letter pointing at whichever row is the
+  // first alphabetically under that letter, so a tap/scrub can jump the
+  // ScrollView straight to it via measureLayout (works correctly regardless
+  // of how deep that row is nested, unlike manually accumulating offsets).
+  const scrollViewRef = useRef(null);
+  const letterRefs = useRef({});
+  const jumpToLetter = (city, letter) => {
+    const rowRef = letterRefs.current[`${city}::${letter}`];
+    if (!rowRef?.current || !scrollViewRef.current) return;
+    rowRef.current.measureLayout(
+      scrollViewRef.current,
+      (_x, y) => scrollViewRef.current.scrollTo({ y: y - 8, animated: true }),
+      () => {}
+    );
+  };
   // Shared by both Favorites and Try Later - everything needed to add a
   // spot by search lives behind the "+" button (see AddSpotModal) instead
   // of an always-visible search bar at the top of the screen (user
@@ -112,11 +142,11 @@ export default function HistoryFavoritesOverlay({
   // either list can add/remove a spot from Favorites (or Try Later) without
   // opening its full detail view first (user request). Favorites rows don't
   // get these - being in the list already implies "favorited."
-  const renderRow = (spot, i, { showFavoriteToggle, showTryLaterToggle } = {}) => {
+  const renderRow = (spot, i, { showFavoriteToggle, showTryLaterToggle, rowRef } = {}) => {
     const isFav = favorites.some((f) => f.id === spot.id);
     const isTry = tryLater.some((t) => t.id === spot.id);
     return (
-      <View key={`${spot.id}-${i}`} style={styles.historyCard}>
+      <View key={`${spot.id}-${i}`} ref={rowRef} style={styles.historyCard}>
         <View>
           {spot.photoUrl ? (
             <Pressable onPress={() => setFullscreenPhoto(spot.photoUrl)}>
@@ -153,6 +183,38 @@ export default function HistoryFavoritesOverlay({
         <Pressable onPress={() => onOpenMaps(spot)} style={styles.historyGoBtn}>
           <Ionicons name="navigate" size={22} color={colors.textDark} />
         </Pressable>
+      </View>
+    );
+  };
+
+  // Shared by Favorites and Try Later - one city's header + alphabetized
+  // rows, with an AlphabetIndexBar attached once it's long enough to need
+  // one. `spots` must already be alphabetized (groupByCity sorts them).
+  const renderCitySection = (city, spots, rowOptions) => {
+    const showIndex = spots.length > ALPHABET_INDEX_THRESHOLD;
+    const seenLetters = new Set();
+    const availableLetters = new Set(spots.map((s) => firstLetterOf(s.name)));
+    return (
+      <View key={city} style={{ marginBottom: 8, paddingRight: showIndex ? 22 : 0 }}>
+        <Text style={styles.categoryHeader}>{city}</Text>
+        {spots.map((spot, i) => {
+          const letter = firstLetterOf(spot.name);
+          const isFirstOfLetter = !seenLetters.has(letter);
+          seenLetters.add(letter);
+          let rowRef;
+          if (showIndex && isFirstOfLetter) {
+            const key = `${city}::${letter}`;
+            letterRefs.current[key] = letterRefs.current[key] || React.createRef();
+            rowRef = letterRefs.current[key];
+          }
+          return renderRow(spot, i, { ...rowOptions, rowRef });
+        })}
+        {showIndex && (
+          <AlphabetIndexBar
+            availableLetters={availableLetters}
+            onSelectLetter={(letter) => jumpToLetter(city, letter)}
+          />
+        )}
       </View>
     );
   };
@@ -242,24 +304,14 @@ export default function HistoryFavoritesOverlay({
     // favorites across many trips: not wanting home favorites cluttering
     // the list while visiting Tahoe or Sacramento (user request). Cuisine
     // is still visible per-row via the existing rating/type subtitle line.
-    listContent = groupByCity(filtered, location).map(({ city, spots }) => (
-      <View key={city} style={{ marginBottom: 8 }}>
-        <Text style={styles.categoryHeader}>{city}</Text>
-        {spots.map((spot, i) => renderRow(spot, i))}
-      </View>
-    ));
+    listContent = groupByCity(filtered, location).map(({ city, spots }) => renderCitySection(city, spots));
   } else if (activeView === 'tryLater') {
     // Same reasoning as Favorites above - a try-later list saved across
     // multiple trips gets just as cluttered without city grouping (user
     // request: "this should be city based as well").
-    listContent = groupByCity(filtered, location).map(({ city, spots }) => (
-      <View key={city} style={{ marginBottom: 8 }}>
-        <Text style={styles.categoryHeader}>{city}</Text>
-        {spots.map((spot, i) =>
-          renderRow(spot, i, { showFavoriteToggle: true, showTryLaterToggle: true })
-        )}
-      </View>
-    ));
+    listContent = groupByCity(filtered, location).map(({ city, spots }) =>
+      renderCitySection(city, spots, { showFavoriteToggle: true, showTryLaterToggle: true })
+    );
   } else {
     // history is already newest-first (App.js unshifts on every view), so
     // grouping by day in array order keeps the whole list newest-first too.
@@ -294,7 +346,7 @@ export default function HistoryFavoritesOverlay({
         <Text style={styles.overlayTitle}>{titles[activeView]}</Text>
         <View style={{ width: 28 }} />
       </View>
-      <ScrollView style={{ width: '100%', paddingHorizontal: 20 }}>
+      <ScrollView ref={scrollViewRef} style={{ width: '100%', paddingHorizontal: 20 }}>
         {filterBar}
         {listContent}
       </ScrollView>
