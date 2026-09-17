@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, Pressable, Image, ScrollView, StyleSheet, Platform } from 'react-native';
+import { Modal, View, Text, Pressable, Image, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { neonSelected, buttonDepth } from '../constants';
@@ -78,6 +78,7 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
   };
 
   const canSend = !!spot && !!proposedDate && !!selectedFriendUid && !sending;
+  const selectedFriendName = friends.find((f) => f.uid === selectedFriendUid)?.name;
 
   const send = async () => {
     if (!canSend) return;
@@ -117,7 +118,12 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
               </Text>
               <Pressable
                 style={styles.calendarBtn}
-                onPress={() => shareIcsForSpot(spot, proposedDate.toISOString()).catch(() => {})}
+                onPress={() => shareIcsForSpot(spot, proposedDate.toISOString(), [displayName, selectedFriendName])
+                  .catch(() => {
+                    // Was a silent .catch(() => {}) - a real failure looked
+                    // identical to nothing happening at all (user report).
+                    Alert.alert('Could not add to calendar', 'Please try again.');
+                  })}
               >
                 <Ionicons name="calendar" size={18} color={colors.textDark} />
                 <Text style={styles.calendarBtnText}>Add to your own calendar too</Text>

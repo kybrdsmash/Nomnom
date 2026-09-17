@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal, View, Text, Pressable, TextInput, ScrollView,
-  StyleSheet, Platform, Linking,
+  StyleSheet, Platform, Linking, Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,12 +11,14 @@ import { sendChatMessage, setProposedTime, toggleLockIn } from '../api/friendSes
 import { shareIcsForSpot } from '../utils/ics';
 
 /** Google Calendar's "add event" template link - no account/API key needed, just a URL. */
-function buildCalendarLink(spot, proposedTimeIso) {
+function buildCalendarLink(spot, proposedTimeIso, participantNames = []) {
   const start = new Date(proposedTimeIso);
   const end = new Date(start.getTime() + 90 * 60 * 1000); // default 90-minute dinner
   const fmt = (d) => d.toISOString().replace(/[-:]|\.\d{3}/g, '');
+  const names = participantNames.filter(Boolean);
+  const withNames = names.length ? ` with ${names.join(' & ')}` : '';
   const text = encodeURIComponent(`Nomnom: ${spot.name}`);
-  const details = encodeURIComponent(`Picked together on Nomnom: ${spot.name}`);
+  const details = encodeURIComponent(`Picked together on Nomnom: ${spot.name}${withNames}`);
   const location = encodeURIComponent(spot.address || `${spot.lat},${spot.lng}`);
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${fmt(start)}/${fmt(end)}&details=${details}&location=${location}`;
 }
@@ -147,12 +149,20 @@ export default function ScheduleMealModal({ visible, onClose, session, code, myU
                   to work on iPhones and Androids"). */}
               <Pressable
                 style={styles.calendarBtn}
-                onPress={() => shareIcsForSpot(spot, session.proposedTime).catch(() => {})}
+                onPress={() => shareIcsForSpot(spot, session.proposedTime, [session.hostName, session.guestName])
+                  .catch(() => {
+                    // Was a silent .catch(() => {}) before - a real failure
+                    // (sharing unavailable, file write error) looked
+                    // identical to nothing happening at all (user report:
+                    // "the .ics that gets generated doesn't actually do
+                    // anything, I couldn't download it").
+                    Alert.alert('Could not add to calendar', 'Try "or use Google Calendar" below instead.');
+                  })}
               >
                 <Ionicons name="calendar" size={18} color={colors.textDark} />
                 <Text style={styles.calendarBtnText}>Add to Calendar</Text>
               </Pressable>
-              <Pressable onPress={() => Linking.openURL(buildCalendarLink(spot, session.proposedTime))}>
+              <Pressable onPress={() => Linking.openURL(buildCalendarLink(spot, session.proposedTime, [session.hostName, session.guestName]))}>
                 <Text style={styles.altCalendarLink}>or use Google Calendar</Text>
               </Pressable>
             </>
