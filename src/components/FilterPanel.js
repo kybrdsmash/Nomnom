@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, TextInput, PanResponder, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, PanResponder, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SPEEDS_MPH, neonSelected, buttonDepth, accentGradient, useVerticalScale } from '../constants';
@@ -176,21 +176,29 @@ export default function FilterPanel({
             gradientColors={accentGradient(colors).colors}
           />
           {editingTime ? (
-            <View style={styles.travelTimeEditRow}>
-              <TextInput
-                style={styles.timeInput}
-                value={timeText}
-                onChangeText={setTimeText}
-                keyboardType="number-pad"
-                autoFocus
-                maxLength={3}
-                onBlur={commitTime}
-                onSubmitEditing={commitTime}
-                placeholder={`${estimatedMaxTime}`}
-                placeholderTextColor="#777"
-              />
-              <Text style={styles.sliderLabel}> mins</Text>
-            </View>
+            // 'position' behavior (not the whole main screen, which has too
+            // much absolutely-positioned/animated content to safely wrap
+            // wholesale) - lifts just this small row above the keyboard,
+            // same targeted fix as SettingsPanel's floating panel (user
+            // report: text inputs across the app getting hidden behind the
+            // keyboard).
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'position' : undefined}>
+              <View style={styles.travelTimeEditRow}>
+                <TextInput
+                  style={styles.timeInput}
+                  value={timeText}
+                  onChangeText={setTimeText}
+                  keyboardType="number-pad"
+                  autoFocus
+                  maxLength={3}
+                  onBlur={commitTime}
+                  onSubmitEditing={commitTime}
+                  placeholder={`${estimatedMaxTime}`}
+                  placeholderTextColor="#777"
+                />
+                <Text style={styles.sliderLabel}> mins</Text>
+              </View>
+            </KeyboardAvoidingView>
           ) : (
             <Pressable style={styles.travelTimeTextBtn} onPress={() => { setTimeText(''); setEditingTime(true); }}>
               <Text style={styles.sliderLabel}>

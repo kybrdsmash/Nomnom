@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, Pressable, TextInput, ActivityIndicator,
-  Image, ScrollView, StyleSheet, Share, Platform,
+  Image, ScrollView, StyleSheet, Share, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -446,7 +446,13 @@ export default function FriendSpin({
   }
 
   return (
-    <View style={styles.screen}>
+    // Same pattern as AtTheTableCompose - the join-code entry (menu step)
+    // and Quick Invite search (friends step) both had nothing shifting them
+    // out from under the keyboard (user report: "multiple times... the
+    // dialogue box stays hidden by the keyboard"). behavior=undefined on
+    // Android matches every other KeyboardAvoidingView in this codebase -
+    // Android's own window resize handles it there, this is an iOS-only fix.
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Header onClose={onClose} title="Feast with Friends" />
 
       {step === 'menu' && (
@@ -848,7 +854,7 @@ export default function FriendSpin({
         photos={fullscreenPhoto ? [fullscreenPhoto] : []}
         onClose={() => setFullscreenPhoto(null)}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
