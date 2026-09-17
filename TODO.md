@@ -2,6 +2,14 @@
 
 Living list, kept in the repo so it survives across sessions (unlike chat history). Add to it as things come up; check items off as they land.
 
+## Someday: import Google Maps saved places (2026-09-17, scoped, deliberately not started)
+
+- [ ] User request: let someone bring their existing Google Maps favorites/saved places into Nomnom on first use, since that's where most people already have a list before ever trying this app. No API exists for this - the only path is the user manually exporting via Google Takeout, then importing that file into Nomnom.
+- [ ] Real shape of the work, confirmed via research (not guessed): Takeout gives TWO different formats depending on what's exported - named lists ("Want to go", custom lists) export as **CSV with no coordinates at all**; "Starred places" exports as **Saved Places.json**, which is actually **GeoJSON** (name + coordinates), with a known Google bug where some entries have broken `[0,0]` coordinates.
+- [ ] Needs `expo-document-picker` (new native module - another build cycle) for the user to pick their exported file, plus a parser tolerant of both formats and bad/missing data.
+- [ ] **The real cost isn't parsing - it's resolution.** Neither export format gives a Google Place ID our app's spot shape needs (photo/rating/price/etc, see `shapeSpot`/`shapeSearchResult` in `places.js`/`placeSearch.js`). Each imported entry needs a Google Places **Text Search** (a paid API call, unlike the Nearby Search calls already used liberally) to resolve "Joe's Pizza, 123 Main St" into a real place - and text matches aren't always exact (a same-named chain nearby could resolve wrong), so ambiguous matches need a review/confirm UI step, not silent auto-accept. Someone with 100 saved places = 100 paid searches + a review flow.
+- [ ] Deliberately on hold - the app already has a lot of surface area (per the same conversation this was scoped in); adding an onboarding-import flow competes with the priority of making the EXISTING app feel more seamless first, not more feature-rich.
+
 ## Friend-spin join links now use real https App Links (2026-09-16)
 
 - [x] User report: the join link/code sent via "Share" wasn't clickable - `ExpoLinking.createURL('join', ...)` generates a `nomnom://join?code=X` custom-scheme URL, and most messaging apps (SMS, WhatsApp, etc.) only auto-linkify `http(s)://` URLs, so it just showed as plain text.
