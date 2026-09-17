@@ -48,6 +48,7 @@ import JournalOverlay from './src/components/JournalOverlay';
 import FoodDetailModal from './src/components/FoodDetailModal';
 import ReportBugModal from './src/components/ReportBugModal';
 import HelpModal from './src/components/HelpModal';
+import OnboardingOverlay from './src/components/OnboardingOverlay';
 import { isFirebaseConfigured, ensureSignedIn } from './src/api/firebase';
 import { watchPings, dismissPing } from './src/api/friendSession';
 import { registerForPushNotifications, addNotificationTapListener } from './src/api/push';
@@ -62,6 +63,7 @@ import {
   loadFriends, saveFriends,
   loadJournal, saveJournal,
   loadTravelType, saveTravelType,
+  loadOnboardingSeen, saveOnboardingSeen,
 } from './src/storage';
 import { pushJournal } from './src/api/journal';
 import { uploadJournalPhoto, deleteJournalPhoto } from './src/api/journalPhotos';
@@ -103,6 +105,11 @@ function AppInner() {
   const [gameMode, setGameMode] = useState('dontcare');
 
   const [travelType, setTravelType] = useState('drive');
+  // Defaults true (not false) so the overlay's "show while !onboardingSeen"
+  // condition can never flash visible before storage has actually loaded -
+  // it only ever gets set false below once loadOnboardingSeen() genuinely
+  // confirms a brand new install hasn't seen it yet.
+  const [onboardingSeen, setOnboardingSeen] = useState(true);
   const [distance, setDistance] = useState(3);
   const [minRating, setMinRating] = useState(4.0);
   const [location, setLocation] = useState(null);
@@ -386,10 +393,10 @@ function AppInner() {
   // Load persisted lists once on startup.
   useEffect(() => {
     (async () => {
-      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel] = await Promise.all([
+      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel, onboarded] = await Promise.all([
         loadHistory(), loadFavorites(), loadTryLater(), loadSeenIds(),
         loadProfile(), loadPreferences(), loadFaveCuisines(),
-        loadFriends(), loadJournal(), loadTravelType(),
+        loadFriends(), loadJournal(), loadTravelType(), loadOnboardingSeen(),
       ]);
       setHistory(h);
       setFavorites(f);
@@ -398,6 +405,7 @@ function AppInner() {
       setProfile(p);
       setPreferences(prefs);
       setTravelType(travel);
+      setOnboardingSeen(onboarded);
       // Older saves stored each slot as a bare cuisine array ([[], [], []])
       // from before slots had names - normalize those up to the current
       // { name, cuisines } shape rather than crashing on the old data.
@@ -421,6 +429,16 @@ function AppInner() {
   useEffect(() => { if (storageLoaded) saveFriends(friends); }, [friends, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveJournal(journal); }, [journal, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveTravelType(travelType); }, [travelType, storageLoaded]);
+
+  // Hides the overlay for the rest of THIS session either way, but only
+  // persists "seen" (so it stays gone on future opens too) if the user left
+  // the "Don't show this again" checkbox checked - unchecking it and
+  // dismissing means it shows again next launch, per the checkbox's own
+  // purpose (user request).
+  const dismissOnboarding = (dontShowAgain) => {
+    setOnboardingSeen(true);
+    if (dontShowAgain) saveOnboardingSeen(true);
+  };
 
   // Mirrors the local journal (plus who's allowed to read it) up to
   // Firestore whenever either changes, so mutual friends can see it from
@@ -1034,6 +1052,7 @@ function AppInner() {
       />
 
       <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
+      <OnboardingOverlay visible={storageLoaded && !onboardingSeen} onDismiss={dismissOnboarding} />
 
       <FabMenu
         visible={showFab}

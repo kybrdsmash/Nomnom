@@ -22,6 +22,7 @@ const KEYS = {
   journal: '@nomnom/journal',
   atTheTableDraft: '@nomnom/atTheTableDraft',
   travelType: '@nomnom/travelType',
+  onboardingSeen: '@nomnom/onboardingSeen',
 };
 
 async function load(key, fallback) {
@@ -92,6 +93,15 @@ export const savePreferences = (prefs) => save(KEYS.preferences, prefs);
 // Sticks until the user picks a different one - not reset per session.
 export const loadTravelType = () => load(KEYS.travelType, 'drive');
 export const saveTravelType = (travelType) => save(KEYS.travelType, travelType);
+
+// Whether the first-launch onboarding walkthrough (OnboardingOverlay.js) has
+// already been shown/dismissed - default false so it genuinely shows once
+// for a brand new install (user report: "they don't really know where or
+// what to do"). Only ever set true from the overlay's own "don't show this
+// again" checkbox, not automatically on every dismiss - see that
+// component's own comment for why.
+export const loadOnboardingSeen = () => load(KEYS.onboardingSeen, false);
+export const saveOnboardingSeen = (seen) => save(KEYS.onboardingSeen, seen);
 
 // People you've done a friend-spin session with before, keyed by their
 // (now-persisted, see firebase.js) anonymous auth uid so they can be pinged
