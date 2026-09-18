@@ -1,11 +1,19 @@
-import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Pressable, Animated, Easing, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import Svg, { Rect, Path, Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
 import { frostedGlow } from '../constants';
+
+const ITEM_COUNT = 5;
+// Must match barInner's own `gap` and `padding` below - the highlight's
+// slide destinations are computed analytically from one measured row width
+// rather than 5 separate per-item refs, so these two have to stay in sync
+// with the actual layout by hand.
+const ITEM_GAP = 6;
+const BAR_PADDING = 8;
 
 /**
  * Persistent 5-destination bottom nav (Option C from the design canvas
@@ -34,12 +42,14 @@ import { frostedGlow } from '../constants';
  * CuisineDropdown.js - so no new native-module risk here) tinted with the
  * theme accent at low opacity, same convention CuisineDropdown already
  * established for "a plain blur reads as neutral/grey, this ties it back to
- * whatever accent color the user picked." The active tab's fill is
- * TRANSLUCENT accent (not the old opaque one) with frostedGlow's desaturated
- * halo, so it still reads as glowing glass rather than a solid button
- * sitting on top of the panel; its icon lights up in colors.neon (the same
- * hue as the ring) instead of the old solid-fill's textDark, since a fully
- * opaque icon color would lose contrast against a now-translucent fill.
+ * whatever accent color the user picked." The "active" signal is a single
+ * shared highlight (translucent accent fill + frostedGlow's border) that
+ * SLIDES between tab slots via an Animated.Value, rather than each item
+ * carrying its own conditional style - user request, after the original
+ * per-item approach just snapped instantly with no sense of motion between
+ * destinations. Its icon lights up in colors.neon (the same hue as the
+ * ring) instead of textDark, since a fully opaque icon color would lose
+ * contrast against the highlight's translucent fill.
  */
 export default function BottomNav({ activeTab, onSelect }) {
   const { colors } = useTheme();
@@ -52,6 +62,41 @@ export default function BottomNav({ activeTab, onSelect }) {
     { key: 'history', label: 'History' },
     { key: 'settings', label: 'Settings' },
   ];
+  const activeIndex = Math.max(0, items.findIndex((item) => item.key === activeTab));
+
+  // Row width measured once via onLayout (not 5 separate per-item refs) -
+  // every item is an equal flex:1 slot, so each slot's x-offset is just
+  // arithmetic off this one number + ITEM_GAP/BAR_PADDING above, which stay
+  // in sync with barInner's real layout by hand.
+  const [barWidth, setBarWidth] = useState(0);
+  const itemWidth = barWidth > 0
+    ? (barWidth - BAR_PADDING * 2 - ITEM_GAP * (ITEM_COUNT - 1)) / ITEM_COUNT
+    : 0;
+  const slotX = (index) => BAR_PADDING + index * (itemWidth + ITEM_GAP);
+
+  const highlightX = useRef(new Animated.Value(0)).current;
+  // Tracks whether the highlight has ever been positioned yet - the FIRST
+  // time barWidth becomes known (right after mount) snaps straight to the
+  // active tab's slot with no animation, so it doesn't visibly slide in
+  // from x=0 before the user has done anything. Every change after that
+  // (including the very first real tap) animates normally.
+  const hasPositionedRef = useRef(false);
+
+  useEffect(() => {
+    if (itemWidth <= 0) return;
+    const target = slotX(activeIndex);
+    if (!hasPositionedRef.current) {
+      hasPositionedRef.current = true;
+      highlightX.setValue(target);
+      return;
+    }
+    Animated.timing(highlightX, {
+      toValue: target,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [activeIndex, itemWidth]);
 
   return (
     <LinearGradient
@@ -64,26 +109,38 @@ export default function BottomNav({ activeTab, onSelect }) {
           overflow:hidden, same fix CuisineDropdown.js already established -
           Android doesn't reliably clip a native BlurView to an ancestor's
           rounded corners via the ancestor's overflow:hidden alone. */}
-      <View style={styles.barInner}>
+      <View
+        style={styles.barInner}
+        onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+      >
         <BlurView intensity={55} tint="dark" style={styles.barBlur} />
         <View style={[styles.barTint, { backgroundColor: colors.accent }]} pointerEvents="none" />
-        {items.map((item) => {
-          const active = activeTab === item.key;
+        {/* One shared sliding highlight instead of each Pressable carrying
+            its own active/inactive style - this is what actually SLIDES
+            between tabs (user request: the old per-item conditional style
+            just snapped instantly, with no sense of motion between
+            destinations). Rendered before the icons so it paints underneath
+            them, sized to exactly one item's slot via the analytical layout
+            math above. Only rendered once a real width is known, so it
+            never flashes at width:0 before the first layout pass. No
+            elevation, same fix as before - Android's shadow can't render
+            correctly (or in color) on this fully transparent glass surface. */}
+        {itemWidth > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.highlight,
+              frostedGlow(colors),
+              { elevation: 0, width: itemWidth, transform: [{ translateX: highlightX }] },
+            ]}
+          />
+        )}
+        {items.map((item, index) => {
+          const active = index === activeIndex;
           return (
             <Pressable
               key={item.key}
-              // frostedGlow's shadowColor/shadowOpacity are iOS-only - Android's
-              // `elevation` shadow always renders plain grey/black regardless
-              // of shadowColor (a platform limitation, not something this app
-              // introduced - every other neonSelected/frostedGlow user has
-              // the same grey shadow, just usually blending into an opaque
-              // background). This item's cell is fully transparent glass, so
-              // that plain grey smudge had nothing to blend into and read as
-              // a stray box (caught on-device, twice). Overriding elevation
-              // back to 0 here keeps frostedGlow's real border/color intact
-              // (still the actual "active" signal) while dropping the shadow
-              // Android can't render correctly on a see-through surface.
-              style={[styles.item, active && styles.itemActive, active && frostedGlow(colors), active && { elevation: 0 }]}
+              style={styles.item}
               onPress={() => onSelect(item.key)}
               hitSlop={4}
             >
@@ -159,9 +216,9 @@ const makeStyles = (colors) => StyleSheet.create({
   barInner: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 6,
+    gap: ITEM_GAP,
     borderRadius: BAR_RADIUS - RING_WIDTH,
-    padding: 8,
+    padding: BAR_PADDING,
     overflow: 'hidden',
     // Opaque fallback so the bar isn't literally invisible on whatever
     // (rare, older-Android) device falls back to BlurView's slow RenderScript
@@ -177,34 +234,34 @@ const makeStyles = (colors) => StyleSheet.create({
   // rolling food, gradients) than that dropdown's flatter backdrop, so a
   // strong tint fought with what was visible through the glass.
   barTint: { ...StyleSheet.absoluteFillObject, opacity: 0.12 },
-  // NO elevation here, unlike FabMenu's priceBtn/fabSubBtn or FilterPanel's
-  // toggleBtnSmall (which pin a constant elevation to dodge a real Android
-  // bug: a view going stuck-blank after its OWN elevation changes between
-  // renders). Tried that same pin here first and it was wrong for this
-  // component specifically - those other buttons always have a real opaque
-  // fill, so their constant shadow is invisible-but-harmless at rest and a
-  // deliberate glow when active. These cells are meant to be fully flat/
-  // transparent at rest (just an icon on the glass pill), and Android's
-  // elevation still draws a shadow from a view's BOUNDS regardless of its
-  // content's opacity - pinning it here rendered as a visible grey box under
-  // every icon, active or not (caught on-device). frostedGlow below still
-  // supplies its own elevation only on the active item, which is the one
-  // case actually meant to look raised. borderWidth pinned (not elevation)
-  // so frostedGlow's own borderWidth arriving on activation doesn't nudge
-  // these fixed-width flex siblings.
+  // No active/inactive variants anymore - a single shared `highlight` (below)
+  // slides between slots instead of each item carrying its own conditional
+  // style, so every item now just needs this one plain, stable layout.
   item: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     height: 56,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
   },
-  // Translucent (hex + alpha suffix), not the old opaque fill - a frosted
-  // "glass" cell should still let the blur underneath read through, even on
-  // its active/highlighted state.
-  itemActive: {
+  // The sliding highlight itself - absolutely positioned so `translateX` can
+  // animate it between slots independent of the icons' own normal flex flow.
+  // top:BAR_PADDING/height:56 match where `item`'s own box actually sits
+  // inside barInner's padding, so it lines up exactly under whichever icon
+  // is active. NO elevation (see frostedGlow's spread in the
+  // JSX for why - Android can't render a colored shadow on this transparent
+  // glass surface, confirmed on-device) - borderWidth/borderColor come from
+  // frostedGlow itself here since, unlike the old per-item approach, this
+  // element ONLY ever renders in its "active" form (nothing to pin against
+  // an inactive state).
+  // left:0, not BAR_PADDING - slotX() (see the component) already bakes
+  // BAR_PADDING into the translateX value itself, so this stays the sole
+  // origin the transform measures from. Setting both would double-offset it.
+  highlight: {
+    position: 'absolute',
+    left: 0,
+    top: BAR_PADDING,
+    height: 56,
+    borderRadius: 18,
     backgroundColor: `${colors.accent}40`,
   },
 });

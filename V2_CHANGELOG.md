@@ -2,6 +2,14 @@
 
 What to actually test for on your phone, build by build. Newest at the top. Each entry lists what's NEW in that specific build; everything from earlier entries is still there too (this is cumulative, not a diff).
 
+## versionCode 24 — BottomNav highlight now slides between tabs
+
+The active-tab highlight used to snap instantly between icons - tap Places, it just teleported there with no sense of motion. It now animates: one shared highlight slides smoothly to whichever tab you tap, instead of each icon carrying its own on/off style. Static resting-state confirmed unchanged (screenshotted, matches v23 exactly) - the actual sliding motion needs to be checked live on your phone by tapping between tabs, since that can't be verified from a screenshot.
+
+Full-screen swipe-to-navigate between destinations is the agreed next step after this, but deliberately held until the food-drift animation replaces RollingFoodStrip (removes a competing gesture surface first) - see TODO.md.
+
+---
+
 ## versionCode 23 — Fix: grey box under BottomNav's active tab (built via new local pipeline)
 
 One more round of the same "grey box" hunt from v18, caught after you spotted it live: the Home tab (the active one) still showed a small grey box under its icon even after v18's fix. Root cause: Android's `elevation` shadow always renders plain grey/black no matter what color you ask for via `shadowColor` - `shadowColor` is iOS-only. `frostedGlow()`'s "desaturated colored glow" idea silently does nothing on Android; the grey smudge WAS that shadow, just rendering as elevation always does. Every other "selected" button in this app has the same grey shadow - it's just usually hidden by an opaque background. Fix: the active tab no longer gets an elevation shadow at all (it still gets the real color signal - the border ring and translucent fill), so it reads as a clean lit glass tile instead of a lit tile sitting in a shadow-box.
