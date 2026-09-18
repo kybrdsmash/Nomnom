@@ -40,6 +40,7 @@ import ResultCard from './src/components/ResultCard';
 import InviteFriendModal from './src/components/InviteFriendModal';
 import HistoryFavoritesOverlay from './src/components/HistoryFavoritesOverlay';
 import FabMenu from './src/components/FabMenu';
+import BottomNav from './src/components/BottomNav';
 import SettingsPanel from './src/components/SettingsPanel';
 import DetailModal from './src/components/DetailModal';
 import FriendSpin from './src/components/FriendSpin';
@@ -835,6 +836,28 @@ function AppInner() {
     activeView === 'main' && !isSearching && !result &&
     eliminationList.length === 0 && browseList.length === 0;
 
+  // BottomNav is scoped to the Home screen for this first increment, same
+  // as FabMenu above - it doesn't yet appear on Favorites/History/Friend
+  // screens, since those get restructured anyway once the My Places hub
+  // (a later, separate increment) consolidates Favorites/Try Later/
+  // Journal/Friends into one destination.
+  const showBottomNav = showFab;
+  // "Places" has no activeView of its own yet - it routes to 'favorites',
+  // the closest existing screen, until the My Places hub exists.
+  const activeNavTab =
+    activeView === 'main' ? 'home'
+    : activeView === 'friend' ? 'feast'
+    : activeView === 'history' ? 'history'
+    : (activeView === 'favorites' || activeView === 'tryLater' || activeView === 'journal') ? 'places'
+    : null;
+  const handleNavSelect = (key) => {
+    if (key === 'home') setActiveView('main');
+    else if (key === 'places') setActiveView('favorites');
+    else if (key === 'feast') setActiveView('friend');
+    else if (key === 'history') setActiveView('history');
+    else if (key === 'settings') setShowSettingsMenu(true);
+  };
+
   return (
     // edges restricted to left/right only - top/bottom real insets are
     // applied by hand below (homeScreen, pingBanner) and additively inside
@@ -1085,6 +1108,8 @@ function AppInner() {
 
       <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
       <OnboardingOverlay visible={storageLoaded && !onboardingSeen} onDismiss={dismissOnboarding} />
+
+      {showBottomNav && <BottomNav activeTab={activeNavTab} onSelect={handleNavSelect} />}
 
       <FabMenu
         visible={showFab}

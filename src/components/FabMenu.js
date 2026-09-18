@@ -126,7 +126,13 @@ const makeStyles = (colors) => StyleSheet.create({
   // fixed-size circular button within it, visibly shifting the whole stack
   // left (user feedback). Right-aligning instead keeps every button pinned
   // to the same edge no matter how wide the price row gets.
-  fabWrapper: { position: 'absolute', bottom: 30, right: 30, alignItems: 'flex-end', zIndex: 50 },
+  // bottom raised from 30 to 110 (temporary, first BottomNav increment) so
+  // this doesn't overlap the new persistent nav bar's ~94px-tall footprint
+  // at the screen bottom - FabMenu's remaining nav-only buttons become
+  // redundant with BottomNav once the My Places hub exists, at which point
+  // this whole component is expected to come out rather than stay stacked
+  // above the nav permanently.
+  fabWrapper: { position: 'absolute', bottom: 110, right: 30, alignItems: 'flex-end', zIndex: 50 },
   fabSubMenu: { marginBottom: 12, alignItems: 'flex-end' },
   priceRow: { flexDirection: 'column', alignItems: 'center', marginBottom: 8 },
   // elevation pinned constant (10, matching neonSelected's) whether active or
