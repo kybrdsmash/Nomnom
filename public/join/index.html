@@ -24,8 +24,14 @@
   a.btn {
     display: block; background: #ff8a3d; color: #1a1410; font-weight: bold;
     text-decoration: none; padding: 14px 20px; border-radius: 16px;
-    margin-top: 16px; font-size: 15px;
+    margin-top: 14px; font-size: 15px;
   }
+  a.btnSecondary {
+    display: block; background: transparent; color: #ff8a3d; font-weight: bold;
+    text-decoration: none; padding: 12px 20px; border-radius: 16px;
+    margin-top: 10px; font-size: 14px; border: 2px solid #3a2f26;
+  }
+  .hint { font-size: 12.5px; color: #8a8074; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -34,18 +40,37 @@
     <p>A friend wants to pick where to eat together on Nomnom.</p>
     <div class="code" id="code">----</div>
     <p id="status">Opening the app…</p>
-    <a class="btn" id="downloadLink" href="https://play.google.com/apps/testing/com.peach.nomnomapp">
-      Don't have Nomnom yet? Get it here
+
+    <!-- Referrer-carrying link (Android only) - the ONLY link shape Play
+         preserves through to Application.getInstallReferrerAsync() on first
+         launch (App.js's install-referrer effect), so someone who already
+         accepted the tester invite lands here, installs, and is auto-joined
+         with zero typing. The /apps/testing/... opt-in URL does NOT carry
+         this through, which is why a brand-new tester needs the separate
+         opt-in step below first (Play closed-testing limitation, not
+         something this page can work around). -->
+    <a class="btn" id="installLink" href="#">
+      Install Nomnom &amp; join automatically
     </a>
+    <p class="hint">Already accepted the tester invite? This installs and drops you straight into the session.</p>
+
+    <a class="btnSecondary" id="optInLink" href="https://play.google.com/apps/testing/com.peach.nomnomapp">
+      First time? Get tester access here
+    </a>
+    <p class="hint">Then come back to this link to install and auto-join.</p>
   </div>
   <script>
-    // Still on Play's closed/internal testing tracks (not Production yet)
-    // - update the download link above to the real Play Store listing once
-    // this app is publicly launched, since the testing opt-in link only
-    // works for people already added as testers.
+    // Still on Play's closed/internal testing tracks (not Production yet) -
+    // once this app reaches Production, the opt-in step above goes away
+    // entirely and everyone can use the one referrer-carrying link.
+    const ANDROID_PACKAGE_ID = 'com.peach.nomnomapp';
     const params = new URLSearchParams(window.location.search);
     const code = (params.get('code') || '').toUpperCase();
     if (code) document.getElementById('code').textContent = code;
+
+    document.getElementById('installLink').href =
+      'https://play.google.com/store/apps/details?id=' + ANDROID_PACKAGE_ID +
+      (code ? '&referrer=' + encodeURIComponent('code=' + code) : '');
 
     // If Android's own App Link verification didn't intercept this (app not
     // installed, or verification hasn't landed), attempt the custom-scheme

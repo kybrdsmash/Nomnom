@@ -11,6 +11,14 @@ import { hexToHsl, hslToHex } from './utils/color';
 // see TODO.md). Must match that intentFilters host exactly.
 export const JOIN_LINK_BASE_URL = 'https://nom-nom-83f11.web.app/join';
 
+// Android package id, used to build the Play Store listing URL that carries
+// an install-referrer `code=` param (public/join/index.html) - the ONLY link
+// shape Play preserves through to Application.getInstallReferrerAsync() on
+// first launch (the /apps/testing/... opt-in URL does not carry it). See
+// App.js's install-referrer effect and TODO.md for the closed-testing
+// two-step caveat this implies.
+export const ANDROID_PACKAGE_ID = 'com.peach.nomnomapp';
+
 // The main filter screen's vertical spacing (padding/margins on App.js's
 // homeScreen and FilterPanel's cards) was tuned against a "comfortable"
 // screen height, then just left as fixed pixel constants - which looked

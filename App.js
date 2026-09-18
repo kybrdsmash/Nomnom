@@ -21,6 +21,7 @@ import {
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as ExpoLinking from 'expo-linking';
+import * as Application from 'expo-application';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -64,6 +65,7 @@ import {
   loadJournal, saveJournal,
   loadTravelType, saveTravelType,
   loadOnboardingSeen, saveOnboardingSeen,
+  loadInstallReferrerChecked, saveInstallReferrerChecked,
 } from './src/storage';
 import { pushJournal } from './src/api/journal';
 import { uploadJournalPhoto, deleteJournalPhoto } from './src/api/journalPhotos';
@@ -388,6 +390,36 @@ function AppInner() {
     ExpoLinking.getInitialURL().then(handleUrl);
     const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => sub.remove();
+  }, []);
+
+  // Android-only: recovers a join code that couldn't ride a tapped link
+  // because the app wasn't installed yet (public/join/index.html sends that
+  // case to a Play Store listing URL carrying `referrer=code%3DXXXX` instead,
+  // since that's the only link shape Play preserves through an install - see
+  // ANDROID_PACKAGE_ID's comment in constants.js). getInstallReferrerAsync()
+  // keeps returning the same value on every call, not just the first, so
+  // this only ever acts on it once per install (loadInstallReferrerChecked) -
+  // otherwise leaving a joined session and relaunching later would silently
+  // drop you right back into it.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    (async () => {
+      const alreadyChecked = await loadInstallReferrerChecked();
+      if (alreadyChecked) return;
+      await saveInstallReferrerChecked(true);
+      try {
+        const referrer = await Application.getInstallReferrerAsync();
+        const match = referrer?.match(/(?:^|&)code=([^&]+)/);
+        if (match) {
+          setPendingJoinCode(decodeURIComponent(match[1]).toUpperCase());
+          setActiveView('friend');
+        }
+      } catch (e) {
+        // No Play Store install referrer available (sideloaded build, an
+        // emulator without Play Store, or genuinely no referrer) - same
+        // best-effort swallow as the rest of storage.js.
+      }
+    })();
   }, []);
 
   // Load persisted lists once on startup.

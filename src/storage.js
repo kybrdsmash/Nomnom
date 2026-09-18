@@ -23,6 +23,7 @@ const KEYS = {
   atTheTableDraft: '@nomnom/atTheTableDraft',
   travelType: '@nomnom/travelType',
   onboardingSeen: '@nomnom/onboardingSeen',
+  installReferrerChecked: '@nomnom/installReferrerChecked',
 };
 
 async function load(key, fallback) {
@@ -102,6 +103,14 @@ export const saveTravelType = (travelType) => save(KEYS.travelType, travelType);
 // component's own comment for why.
 export const loadOnboardingSeen = () => load(KEYS.onboardingSeen, false);
 export const saveOnboardingSeen = (seen) => save(KEYS.onboardingSeen, seen);
+
+// Whether Application.getInstallReferrerAsync() has already been read and
+// acted on once for this install - the referrer string keeps answering the
+// same value on every subsequent call, so without this flag a friend who
+// joined via a referrer link, then later left that session and relaunched
+// the app, would get silently yanked back into the old session every time.
+export const loadInstallReferrerChecked = () => load(KEYS.installReferrerChecked, false);
+export const saveInstallReferrerChecked = (checked) => save(KEYS.installReferrerChecked, checked);
 
 // People you've done a friend-spin session with before, keyed by their
 // (now-persisted, see firebase.js) anonymous auth uid so they can be pinged

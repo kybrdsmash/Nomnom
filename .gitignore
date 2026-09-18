@@ -63,3 +63,11 @@ client_secret_*.apps.googleusercontent.com.json
 # only points at ./assets/), so excluded to keep the repo/build upload lean.
 # Remove this line if you want them version-controlled after all.
 /Ref Images/
+
+# Downloaded .aab/.apks build artifacts from the bundletool/adb crash-check
+# process - large binaries, not source, regenerated fresh each time.
+/.build-verify/
+
+# Working files for the Claude Design canvas mockup (.dc.html artboards,
+# canvas.json, the seeded output) - design scratch space, not app source.
+/.design-scratch/

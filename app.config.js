@@ -6,7 +6,7 @@
 // too. iOS needs no key at all (react-native-maps uses Apple Maps there).
 module.exports = {
   expo: {
-    name: 'Nomnom_App',
+    name: 'Nomnom',
     slug: 'Nomnom_App',
     version: '1.1.0',
     scheme: 'nomnom',

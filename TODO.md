@@ -2,6 +2,13 @@
 
 Living list, kept in the repo so it survives across sessions (unlike chat history). Add to it as things come up; check items off as they land.
 
+## Button styling: frosted glass + desaturated glow (2026-09-18, exploration, not started)
+
+- [ ] User request: buttons look "nice" today but not "interesting" - wants a variant that keeps the neon-glow identity but swaps today's solid accent fill + fully-saturated glow (`neonSelected` in `constants.js`: `shadowOpacity: 0.9`, glow color at `hslToHex(h, 85, 28)` off the accent hue) for a translucent "frosted glass" fill (blurred, semi-transparent) with the same glow desaturated to roughly 30-40%.
+- [ ] Mocked up 3 directions in `.design-scratch/ButtonGlowConcepts.dc.html` (published to the nav-concepts canvas): frosted+cool (cyan family, desaturated), frosted+warm (gold family, ties to the coin/star-rating accent), and frosted+dual-tone gradient border (cyan-to-gold ring, the most "interesting" of the three). Recipe: `background: rgba(255,255,255,0.07-0.08)` + `backdrop-filter: blur(14px) saturate(150%)` + a hairline light border + a soft inset top highlight + an outer glow at ~30-40% saturation instead of today's ~90%+.
+- [ ] Not yet decided which direction (or none); not implemented in the real app. React Native's `backdrop-filter` equivalent would need `expo-blur`'s `<BlurView>` (not currently a dependency) rather than a CSS property, since RN has no native backdrop-filter - a real implementation cost worth weighing once a direction is picked.
+- [ ] Scope: this is a styling-only exploration, independent of the Home-screen layout work happening in the same canvas (nav, My Places, thumb-zone reachability).
+
 ## Someday: import Google Maps saved places (2026-09-17, scoped, deliberately not started)
 
 - [ ] User request: let someone bring their existing Google Maps favorites/saved places into Nomnom on first use, since that's where most people already have a list before ever trying this app. No API exists for this - the only path is the user manually exporting via Google Takeout, then importing that file into Nomnom.
@@ -18,6 +25,17 @@ Living list, kept in the repo so it survives across sessions (unlike chat histor
 - [ ] **Needs a fresh native build to take effect** - `intentFilters` is baked into the compiled AndroidManifest at build time, so this doesn't work until the next build ships (unlike the Firebase Hosting/assetlinks.json side, which is already live independent of app builds).
 - [ ] Not yet verified end-to-end on a real device (tap a shared link from another device with the new build installed, confirm it opens the app directly instead of a browser) - Android's own App Link verification can also take a little time to complete after first install.
 - [ ] iOS equivalent (Universal Links, `apple-app-site-association` file) not done - Android-only for now, matching the rest of this project's "Android first" focus.
+
+## Join links: auto-join for friends who don't have the app yet (2026-09-17)
+
+- [x] User report: the App Link above only helps someone who already has Nomnom installed. A friend installing for the first time landed on `public/join/index.html`, had to remember/re-type the 4-letter code by hand after installing - "a huge barrier."
+- [x] Cross-platform join (Android host ↔ iOS guest or vice versa) was already fine - confirmed `joinSession()` in `friendSession.js` is a plain Firestore doc read/write with no OS-specific logic at all. Nothing needed there.
+- [x] Added `expo-application` (official Expo SDK module, no config plugin needed - autolinked) for `Application.getInstallReferrerAsync()`, Android's Play Install Referrer API. App.js reads it once per install (gated by `storage.js`'s `loadInstallReferrerChecked`/`saveInstallReferrerChecked` - the referrer string keeps answering the same value on every call, so without the gate, leaving a session and relaunching later would silently rejoin it) and feeds a found `code=` into the same `pendingJoinCode` path the URL-based join already uses.
+- [x] `public/join/index.html` now offers two links: **"Install Nomnom & join automatically"** (the Play Store *listing* URL with `&referrer=code%3DXXXX` - confirmed via research this is the ONLY link shape Play preserves through to `getInstallReferrerAsync()`) and **"First time? Get tester access here"** (the existing `/apps/testing/...` opt-in URL, which does NOT carry the referrer through). Deployed live already (`firebase deploy --only hosting`).
+- [ ] **Closed-testing caveat, not fixable from our side**: a brand-new tester needs the opt-in link ONCE, then has to come back and tap the auto-join link separately - two taps the first time only. Once this app reaches Play Production, the opt-in step disappears entirely and it's always one tap. Worth re-explaining this to friends until then.
+- [ ] Known flake, not our bug: a managed/enterprise Google account on the installer's phone resets the referrer token (documented Play Store behavior) - would silently fall back to manual code entry for that specific device.
+- [ ] **Needs a fresh native build to take effect** (`expo-application` needs to be in the compiled binary) - not live until the next EAS build ships and gets verified via the usual bundletool/adb crash-check process.
+- [ ] iOS still has no deferred-deep-link path (Apple only supports it for paid Search Ads installs; Firebase Dynamic Links, the old free option, was sunset in 2025) - true one-tap join on iOS would need a third-party service like Branch.io. Deliberately deferred; iOS friends still need to paste the code by hand for now.
 
 ## Search: distance filter doesn't reach farther spots (open, reverted once already)
 
