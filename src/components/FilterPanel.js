@@ -1,15 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, TextInput, PanResponder, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SPEEDS_MPH, neonSelected, buttonDepth, accentGradient, useVerticalScale } from '../constants';
 import { useTheme } from '../ThemeContext';
 import SlidableSegmented from './SlidableSegmented';
 import HelpModal from './HelpModal';
+import FaveCuisineButton from './FaveCuisineButton';
 
-const DIST_MIN = 0.5;
 const DIST_MAX = 20;
-const MI_TO_KM = 1.60934;
 // No one wants to walk more than ~2 hours to eat (user feedback) - cap each
 // travel mode's selectable distance at 2 hours of travel at that mode's
 // speed. Transit (12mph) and drive (25mph) are already well under 2 hours
@@ -47,7 +45,10 @@ export default function FilterPanel({
   onToggleCuisine,
   onCuisinesExpanded,
   cuisineTriggerRef,
-  units = 'mi',
+  faveCuisines,
+  onLoadFave,
+  onSaveFave,
+  onRenameFave,
 }) {
   const { colors } = useTheme();
   const vscale = useVerticalScale();
@@ -56,28 +57,15 @@ export default function FilterPanel({
   const [timeText, setTimeText] = useState('');
   const [showCuisinesHelp, setShowCuisinesHelp] = useState(false);
 
-  // Distance and star-rating both use the same tap-or-drag-directly-on-it
-  // pattern (no separate @react-native-community/slider) - one interactive
-  // element per control, so there's no touchable-vs-parent-responder race
-  // (see SlidableSegmented's history with that exact bug). The old Slider
-  // for distance had minimumValue=0.5 with step=1, so EVERY reachable value
-  // was X.5 (0.5, 1.5, 2.5...) - it could never land on a whole mile or any
-  // other .5 multiple. This snaps to the nearest 0.5 directly instead.
-  const distRowRef = useRef(null);
-  const distBoundsRef = useRef({ pageX: 0, width: 0 });
-  // Drives the fill/dial's own position with a measured pixel width rather
-  // than a percentage string - percentage-based `left` on an absolutely
-  // positioned view has historically been an unreliable RN layout path
-  // (looked visibly shifted/misaligned - user feedback).
-  const [trackWidth, setTrackWidth] = useState(0);
+  // Research-backed call (Zahavi's hypothesis / Marchetti's constant -
+  // people plan travel by budgeted TIME, not distance, and a faster mode
+  // just covers more ground in the same time rather than getting there
+  // sooner) - the distance slider that used to sit here is gone; the
+  // editable minutes field below is the only control now, and `distance`
+  // is still the real underlying value everything else (places.js's search
+  // radius) reads - it's just derived from typed minutes or the per-mode
+  // default now, never dragged directly.
   const distMax = distMaxForMode(travelType);
-  const distanceFromPageX = (pageX) => {
-    const { pageX: originX, width } = distBoundsRef.current;
-    if (!width) return distance;
-    const ratio = Math.min(1, Math.max(0, (pageX - originX) / width));
-    const raw = DIST_MIN + ratio * (distMax - DIST_MIN);
-    return Math.min(distMax, Math.max(DIST_MIN, Math.round(raw * 2) / 2));
-  };
 
   // Driving and walking jump straight to their own sensible default travel
   // time whenever that mode is selected (10 min / 20 min - user request),
@@ -95,28 +83,6 @@ export default function FilterPanel({
     const cap = distMaxForMode(travelType);
     if (distance > cap) setDistance(cap);
   }, [travelType]);
-
-  // PanResponder.create() only ever runs once (useRef freezes it after the
-  // first render), so its callbacks can't just call `distanceFromPageX`
-  // directly - that would permanently close over the FIRST render's
-  // `distMax` (whatever travelType was on mount), while the dial's on-screen
-  // position is computed from the CURRENT render's distMax every time. For
-  // walk mode specifically (a much smaller cap than the mount-time default)
-  // that mismatch let a drag push `distance` past walk's real max, so the
-  // computed dial position landed far outside the visible track - looked
-  // like the dial vanished. Same stale-closure bug as CoinSpinner's flick
-  // handler and SlidableSegmented's drag math; same fix - route through a
-  // ref reassigned every render.
-  const distanceFromPageXRef = useRef(distanceFromPageX);
-  distanceFromPageXRef.current = distanceFromPageX;
-
-  const distPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => setDistance(distanceFromPageXRef.current(evt.nativeEvent.pageX)),
-      onPanResponderMove: (evt) => setDistance(distanceFromPageXRef.current(evt.nativeEvent.pageX)),
-    })
-  ).current;
 
   const starRowRef = useRef(null);
   const starBoundsRef = useRef({ pageX: 0, width: 0 });
@@ -144,8 +110,6 @@ export default function FilterPanel({
     }
     setEditingTime(false);
   };
-
-  const distPct = ((distance - DIST_MIN) / (distMax - DIST_MIN)) * 100;
 
   return (
     <>
@@ -200,49 +164,17 @@ export default function FilterPanel({
               </View>
             </KeyboardAvoidingView>
           ) : (
+            // Dotted underline on just the number instead of a "~" and a
+            // pencil glyph - people already understand a search-radius
+            // estimate isn't exact, and a subtle "this is tappable" cue
+            // reads cleaner than two extra symbols (design review).
             <Pressable style={styles.travelTimeTextBtn} onPress={() => { setTimeText(''); setEditingTime(true); }}>
-              <Text style={styles.sliderLabel}>
-                ~{estimatedMaxTime} mins <Text style={styles.editHint}>✎</Text>
-              </Text>
+              <View style={styles.timeDisplayRow}>
+                <Text style={styles.timeValueDotted}>{estimatedMaxTime}</Text>
+                <Text style={styles.timeUnitLabel}>min</Text>
+              </View>
             </Pressable>
           )}
-        </View>
-        {/* Search radius readout moved inline to the right of the slider
-            instead of its own line underneath (user request - reclaims a
-            full text row of vertical height, part of freeing up room so the
-            Cuisines trigger further down never gets pinched against the
-            rolling food strip on shorter screens). Fixed width + right
-            alignment so digit-count changes (0.5 vs 20) don't nudge the
-            slider's own width, which distBoundsRef's measured pageX/width
-            depends on. */}
-        <View style={styles.distRow}>
-          <View
-            ref={distRowRef}
-            style={styles.distTouchArea}
-            onLayout={(e) => {
-              setTrackWidth(e.nativeEvent.layout.width);
-              distRowRef.current?.measureInWindow((pageX, _pageY, width) => {
-                distBoundsRef.current = { pageX, width };
-              });
-            }}
-            {...distPan.panHandlers}
-          >
-            <View style={styles.distTrack}>
-              {/* Same glossy diagonal gradient as the coin (accentGradient in
-                  constants.js) - user request, after liking it there. */}
-              <LinearGradient
-                {...accentGradient(colors)}
-                style={[styles.distFill, { width: (distPct / 100) * trackWidth }]}
-              />
-            </View>
-            <LinearGradient
-              {...accentGradient(colors)}
-              style={[styles.distDial, { left: (distPct / 100) * trackWidth - 14 }]}
-            />
-          </View>
-          <Text style={styles.distCaptionInline}>
-            {(units === 'km' ? distance * MI_TO_KM : distance).toFixed(1)} {units === 'km' ? 'km' : 'mi'}
-          </Text>
         </View>
       </View>
 
@@ -292,42 +224,60 @@ export default function FilterPanel({
         collapsable={false}
         style={[styles.cuisineContainer, showCuisines && styles.cuisineContainerOpen]}
       >
-        <Pressable
-          style={styles.cuisineHeader}
-          onPress={() => {
-            const opening = !showCuisines;
-            setShowCuisines(opening);
-            if (opening) onCuisinesExpanded?.();
-          }}
-        >
-          <View style={styles.cuisineHeaderLeft}>
-            <Text style={styles.cuisineHeaderText}>
-              Cuisines{' '}
-              <Text style={styles.cuisineHeaderCount}>
-                {selectedCuisines.length > 0 ? `(${selectedCuisines.length})` : '(Any)'}
+        <View style={styles.cuisineHeader}>
+          {/* FaveCuisineButton drives its touch handling off a raw
+              PanResponder, not a Pressable (see that file's own docstring -
+              it was built that way specifically to dodge the Pressable-vs-
+              PanResponder responder fight this codebase has hit before,
+              e.g. SlidableSegmented's history). Keeping it a sibling of the
+              toggle Pressable below, rather than nesting it inside, sidesteps
+              that fight entirely - each owns its own bounding box, so there's
+              nothing to arbitrate. It sits here (not inside CuisineDropdown
+              anymore) so a saved cuisine preset can be hot-swapped in one tap
+              without ever opening the dropdown (design review). */}
+          <FaveCuisineButton
+            slots={faveCuisines}
+            onLoad={onLoadFave}
+            onSave={onSaveFave}
+            onRename={onRenameFave}
+            selectedCuisines={selectedCuisines}
+          />
+          <Pressable
+            style={styles.cuisineHeaderMain}
+            onPress={() => {
+              const opening = !showCuisines;
+              setShowCuisines(opening);
+              if (opening) onCuisinesExpanded?.();
+            }}
+          >
+            <View style={styles.cuisineHeaderLeft}>
+              <Text style={styles.cuisineHeaderText}>
+                Cuisines{' '}
+                <Text style={styles.cuisineHeaderCount}>
+                  {selectedCuisines.length > 0 ? `(${selectedCuisines.length})` : '(Any)'}
+                </Text>
               </Text>
-            </Text>
-            {/* Only shown once the dropdown is actually open (user request) -
-                collapsed, this row is just the toggle; the icon would have
-                nothing to explain yet. A plain nested Pressable here is safe
-                - unlike the PanResponder-claimed rows elsewhere in this
-                codebase (FaveCuisineButton, CoinSpinner, RollingFoodStrip's
-                strip), this parent is an ordinary Pressable, and RN resolves
-                nested Pressables correctly (the deeper one wins a touch
-                landing on it, the outer only ever sees what lands outside
-                it) - no responder fight, no need for a sibling workaround. */}
-            {showCuisines && (
-              <Pressable
-                onPress={() => setShowCuisinesHelp(true)}
-                hitSlop={10}
-                style={styles.cuisineHelpBtn}
-              >
-                <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
-              </Pressable>
-            )}
-          </View>
-          <Ionicons name={showCuisines ? 'chevron-up' : 'chevron-down'} size={24} color={colors.accent} />
-        </Pressable>
+              {/* Only shown once the dropdown is actually open (user request) -
+                  collapsed, this row is just the toggle; the icon would have
+                  nothing to explain yet. A plain nested Pressable here is safe
+                  - unlike FaveCuisineButton above, this parent is an ordinary
+                  Pressable, and RN resolves nested Pressables correctly (the
+                  deeper one wins a touch landing on it, the outer only ever
+                  sees what lands outside it) - no responder fight, no need
+                  for a sibling workaround. */}
+              {showCuisines && (
+                <Pressable
+                  onPress={() => setShowCuisinesHelp(true)}
+                  hitSlop={10}
+                  style={styles.cuisineHelpBtn}
+                >
+                  <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
+                </Pressable>
+              )}
+            </View>
+            <Ionicons name={showCuisines ? 'chevron-up' : 'chevron-down'} size={24} color={colors.accent} />
+          </Pressable>
+        </View>
       </View>
 
       <HelpModal
@@ -377,26 +327,12 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   travelTimeEditRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
   travelTimeTextBtn: { marginLeft: 12 },
   sliderLabel: { color: colors.textLight, fontSize: 18, fontWeight: 'bold' },
-  editHint: { color: colors.accent, fontSize: 14 },
   timeInput: { color: colors.gold, fontSize: 18, fontWeight: 'bold', borderBottomWidth: 1, borderBottomColor: colors.accent, minWidth: 44, textAlign: 'center', padding: 0 },
-  distRow: { flexDirection: 'row', alignItems: 'center', width: '100%' },
-  distTouchArea: { flex: 1, paddingVertical: 14, justifyContent: 'center' },
-  // Fixed width (not content-hugging) so "0.5 mi" vs "20.0 mi" never
-  // changes how much room distTouchArea gets, which would otherwise shift
-  // trackWidth/distBoundsRef's measured width mid-use.
-  distCaptionInline: { color: colors.textMuted, fontSize: 13, fontWeight: '600', marginLeft: 10, width: 60, textAlign: 'right' },
-  distTrack: { height: 8, borderRadius: 4, backgroundColor: colors.cardAlt, width: '100%', overflow: 'hidden' },
-  distFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 4, backgroundColor: colors.accent },
-  // top is a fixed pixel offset, not a percentage - percentage-based `top`
-  // on an absolutely positioned view was the source of the mispositioning
-  // (distTouchArea's height is paddingVertical:14*2 + distTrack's 8, so its
-  // vertical center sits 18px down; offsetting by the dial's own half-height
-  // centers it exactly).
-  distDial: {
-    position: 'absolute', top: 18 - 14,
-    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.accent, overflow: 'hidden',
-    ...neonSelected(colors),
-  },
+  // Replaces the old "~X mins ✎" text - a dotted underline on just the
+  // number instead of a tilde + pencil (design review).
+  timeDisplayRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  timeValueDotted: { color: colors.textLight, fontSize: 18, fontWeight: 'bold', borderBottomWidth: 2, borderBottomColor: colors.accent, borderStyle: 'dotted', paddingBottom: 1 },
+  timeUnitLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
 
   starContainer: { alignItems: 'center', backgroundColor: colors.card, padding: 14 * vscale, borderRadius: 15, width: '85%', marginBottom: 10 * vscale },
   starRowWrapper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
@@ -413,7 +349,16 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   // decorative spacing.
   cuisineContainer: { width: '85%', backgroundColor: colors.card, borderRadius: 15, overflow: 'hidden', marginBottom: 15 * vscale },
   cuisineContainerOpen: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
-  cuisineHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
+  // Plain row now, not itself a Pressable - FaveCuisineButton and the toggle
+  // Pressable below are touch siblings inside it (see the comment where
+  // they render for why). paddingLeft carries the trigger's old left inset;
+  // paddingRight is trimmed since FaveCuisineButton already has its own
+  // right-side padding for the dot indicator.
+  cuisineHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20, paddingLeft: 20, paddingRight: 12 },
+  // The actual toggle - everything that used to be cuisineHeader's own
+  // content, now just this Pressable's, with the button taking the space
+  // to its left instead of padding.
+  cuisineHeaderMain: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginLeft: 12 },
   cuisineHeaderLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   cuisineHeaderText: { color: colors.textLight, fontSize: 18, fontWeight: 'bold' },
   cuisineHeaderCount: { color: colors.textMuted, fontSize: 15, fontWeight: '400' },

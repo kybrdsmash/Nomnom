@@ -134,6 +134,27 @@ export const neonSelected = (colors) => ({
   elevation: 10,
 });
 
+// Desaturated companion to neonSelected, for the "frosted glass" button
+// treatment (dual-tone edge direction, picked in the design canvas review
+// over plain cool/warm variants) - same neon-glow identity, but pulled down
+// to roughly 30-40% of neonSelected's saturation/opacity so it reads as an
+// ambient tint glowing through blurred glass rather than a solid neon sign.
+// First real usage: BottomNav.js's active tab. Spread alongside a
+// TRANSLUCENT (not solid) accent background - a frosted surface with a
+// fully opaque fill underneath would defeat the point of the glass.
+export const frostedGlow = (colors) => {
+  const { h } = hexToHsl(colors.accent);
+  return {
+    borderWidth: 1.5,
+    borderColor: hslToHex(h, 55, 68),
+    shadowColor: hslToHex(h, 45, 38),
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+  };
+};
+
 // The coin's diagonal "catches the light" gradient (see CoinSpinner.js's
 // faceHighlight/faceGradient) as a reusable, theme-following style, so any
 // other solid-accent-colored selected/active button can share the same

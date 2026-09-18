@@ -7,7 +7,6 @@ import { CUISINES, neonSelected, buttonDepth, accentGradient } from '../constant
 import { useTheme } from '../ThemeContext';
 import { joinParts } from '../utils/format';
 import { searchNearbyByKeyword } from '../api/places';
-import FaveCuisineButton from './FaveCuisineButton';
 
 // Waits this long after the last keystroke before searching - each search
 // is a real (billed) Places API call, so typing "fried chicken" shouldn't
@@ -44,7 +43,7 @@ const DEFAULT_SCROLL_HEIGHT = 150;
  */
 export default function CuisineDropdown({
   visible, top, scrollHeight, selectedCuisines, onToggleCuisine,
-  faveCuisines, onLoadFave, onSaveFave, onRenameFave, onSelectAll, onSelectNone,
+  onSelectAll, onSelectNone,
   location, travelType, onShowSpotDetails,
 }) {
   const { colors } = useTheme();
@@ -102,10 +101,13 @@ export default function CuisineDropdown({
               this ties it back to whatever accent color the user picked. */}
           <View style={[styles.tint, { backgroundColor: colors.accent }]} pointerEvents="none" />
 
-        {/* All/None/search/Fave now scroll away together with the cuisine
+        {/* All/None/search now scroll away together with the cuisine
             bubbles as one continuous list, rather than staying pinned as a
             fixed header above it (user request - the split read as two
-            disconnected panels rather than one). */}
+            disconnected panels rather than one). The Fave 1/2/3 slider used
+            to live in this row too; it moved out to sit next to the
+            collapsed Cuisines trigger in FilterPanel.js so a slot can be
+            hot-swapped without opening this dropdown at all. */}
         {/* ScrollView needs its OWN matching bottom-corner radius +
             overflow:hidden too, same fix as BlurView above - it's the last
             child, its bottom edge sits exactly at the card's rounded
@@ -114,12 +116,11 @@ export default function CuisineDropdown({
             (confirmed by testing with BlurView removed entirely - the
             square corners persisted, so it was never BlurView specifically). */}
         <ScrollView style={[{ height: scrollHeight || DEFAULT_SCROLL_HEIGHT }, styles.scroll]} showsVerticalScrollIndicator>
-          {/* All/None on the left, a specific-dish search in the middle, the
-              Fave 1/2/3 slider on the right. All/None both functionally mean
-              "no cuisine filter" (an empty OR a fully-selected list both
-              match everything), so both fire the same "no filter applied"
-              toast up in App.js rather than silently doing nothing the user
-              can't tell happened. */}
+          {/* All/None on the left, a specific-dish search taking the rest of
+              the row. Both functionally mean "no cuisine filter" (an empty
+              OR a fully-selected list both match everything), so both fire
+              the same "no filter applied" toast up in App.js rather than
+              silently doing nothing the user can't tell happened. */}
           <View style={styles.topRow}>
             <Pressable style={styles.allNoneBtn} onPress={onSelectAll}>
               <Text style={styles.allNoneText}>All</Text>
@@ -139,13 +140,6 @@ export default function CuisineDropdown({
               />
               {dishSearching && <ActivityIndicator size="small" color={colors.accent} />}
             </View>
-            <FaveCuisineButton
-              slots={faveCuisines}
-              onLoad={onLoadFave}
-              onSave={onSaveFave}
-              onRename={onRenameFave}
-              selectedCuisines={selectedCuisines}
-            />
           </View>
 
           {dishSearched && !dishSearching && dishResults.length === 0 && (
@@ -267,7 +261,7 @@ const makeStyles = (colors) => StyleSheet.create({
   // colors.card (not cardAlt, which the cuisine bubbles below use) - this
   // whole row is a distinct set of controls, not more selections, so it
   // reads as its own strip rather than blending into the bubble grid
-  // (user request). FaveCuisineButton picks up the same shade independently.
+  // (user request).
   allNoneBtn: {
     paddingHorizontal: 10, paddingVertical: 10, borderRadius: 16, marginRight: 6,
     backgroundColor: colors.card, ...buttonDepth, elevation: 0,

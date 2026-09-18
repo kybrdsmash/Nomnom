@@ -32,7 +32,7 @@ const brightnessStops = (hue) =>
  * outside the expanded panel closes it.
  */
 export default function SettingsPanel({
-  visible, showSettingsMenu, setShowSettingsMenu,
+  visible, hideTrigger, showSettingsMenu, setShowSettingsMenu,
   profile, setProfile, preferences, setPreferences, onOpenBugReport, onOpenHelp,
 }) {
   const { colors, accentColor, setAccentColor } = useTheme();
@@ -267,9 +267,21 @@ export default function SettingsPanel({
           </View>
           </KeyboardAvoidingView>
         )}
-        <Pressable style={styles.gearBtn} onPress={() => setShowSettingsMenu(!showSettingsMenu)}>
-          <Ionicons name="settings-sharp" size={22} color={colors.textDark} />
-        </Pressable>
+        {/* BottomNav's own Settings icon toggles this exact same
+            showSettingsMenu state now and sits almost exactly on top of this
+            wrapper's bottom-left corner (both anchor near bottom:22-30/
+            left:16-30) - a real visual collision, not just redundant
+            coexistence, since this button's opaque circle fully hid
+            BottomNav's Home icon underneath it (confirmed on-device). Hidden
+            whenever BottomNav is showing rather than deleted outright, since
+            hideTrigger is driven by the exact same flag (showBottomNav in
+            App.js) that gates BottomNav's own visibility - if that ever
+            changes, this button reappears as a safe fallback. */}
+        {!hideTrigger && (
+          <Pressable style={styles.gearBtn} onPress={() => setShowSettingsMenu(!showSettingsMenu)}>
+            <Ionicons name="settings-sharp" size={22} color={colors.textDark} />
+          </Pressable>
+        )}
       </View>
     </>
   );

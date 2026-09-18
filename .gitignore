@@ -71,3 +71,7 @@ client_secret_*.apps.googleusercontent.com.json
 # Working files for the Claude Design canvas mockup (.dc.html artboards,
 # canvas.json, the seeded output) - design scratch space, not app source.
 /.design-scratch/
+
+# `tee`'d output from local `eas build --local` runs (see .build-verify/local-build.sh) -
+# debug logs, regenerated fresh each build, not app source.
+build-local*.log

@@ -122,7 +122,7 @@ function AppInner() {
   const [showCuisines, setShowCuisines] = useState(false);
   const [selectedCuisines, setSelectedCuisines] = useState([]);
   // 3 saved cuisine-selection presets, shown/edited via the Fave 1/2/3
-  // slider at the top of the Cuisines dropdown - see FaveCuisineButton.js.
+  // slider next to the collapsed Cuisines trigger - see FaveCuisineButton.js.
   // Each slot is { name, cuisines } - name is user-renameable (long-press a
   // slot that's already saved-and-loaded to rename it instead of re-saving).
   const [faveCuisines, setFaveCuisines] = useState([
@@ -976,7 +976,10 @@ function AppInner() {
             onToggleCuisine={toggleCuisine}
             onCuisinesExpanded={handleCuisinesExpanded}
             cuisineTriggerRef={cuisineTriggerRef}
-            units={preferences.units}
+            faveCuisines={faveCuisines}
+            onLoadFave={handleLoadFave}
+            onSaveFave={handleSaveFave}
+            onRenameFave={handleRenameFave}
           />
         </ScrollView>
 
@@ -1027,18 +1030,6 @@ function AppInner() {
             />
           </View>
           {!location && <Text style={styles.locatingText}>📍 Locating…</Text>}
-
-          {/* Promoted out of the hamburger menu and centered directly under
-              the coin - connecting with a friend over food is a core part
-              of the app, not a buried settings-menu shortcut (user
-              request). */}
-          <Pressable style={styles.friendSpinBtn} onPress={() => setActiveView('friend')}>
-            {/* Same glossy diagonal gradient as the coin (accentGradient in
-                constants.js) - user request, after liking it there. */}
-            <LinearGradient {...accentGradient(colors)} style={StyleSheet.absoluteFill} />
-            <Ionicons name="people" size={20} color={colors.textDark} />
-            <Text style={styles.friendSpinBtnText}>Feast with Friends</Text>
-          </Pressable>
         </View>
       </Animated.View>
 
@@ -1111,6 +1102,7 @@ function AppInner() {
 
       <SettingsPanel
         visible={showFab}
+        hideTrigger={showBottomNav}
         showSettingsMenu={showSettingsMenu}
         setShowSettingsMenu={setShowSettingsMenu}
         profile={profile}
@@ -1214,10 +1206,6 @@ function AppInner() {
         scrollHeight={cuisineDropdownHeight}
         selectedCuisines={selectedCuisines}
         onToggleCuisine={toggleCuisine}
-        faveCuisines={faveCuisines}
-        onLoadFave={handleLoadFave}
-        onSaveFave={handleSaveFave}
-        onRenameFave={handleRenameFave}
         onSelectAll={handleSelectAllCuisines}
         onSelectNone={handleSelectNoneCuisines}
         location={location}
@@ -1355,15 +1343,9 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   // margins by the same rough amount, since bottomControls sits in a
   // fixed-height flex layout where any growth here shrinks the (non-
   // scrolling) filter panel's allotted space above.
-  friendSpinBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.accent, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 20,
-    marginTop: 20, overflow: 'hidden', ...neonSelected(colors),
-  },
-  friendSpinBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 14, marginLeft: 8 },
   absoluteCenter: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
   // marginBottom widened (16->24) to nudge the coin (and everything below
-  // it) down a bit, same request/trade-off as friendSpinBtn's marginTop above.
+  // it) down a bit.
   modeToggleContainer: { flexDirection: 'row', backgroundColor: '#333', borderRadius: 30, padding: 4, marginBottom: 24, width: '85%', overflow: 'hidden' },
   // marginHorizontal gives the active segment's neon glow room to breathe -
   // Android's `elevation` shadow can bleed sideways onto a flush-adjacent
