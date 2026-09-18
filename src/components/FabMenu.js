@@ -5,18 +5,18 @@ import { neonSelected, buttonDepth } from '../constants';
 import { useTheme } from '../ThemeContext';
 
 /**
- * Floating action button that expands into: price filter ($-$$$$),
- * "Open now" toggle, "Favorites only" toggle, and History / Favorites
- * shortcuts.
+ * Floating action button for the search-filter toggles that have no
+ * BottomNav equivalent: price filter ($-$$$$), "Open now" toggle,
+ * "Favorites only" toggle. The History/Favorites/Try Later/Journal
+ * shortcuts this used to also carry moved to BottomNav (History) and
+ * MyPlacesHub (Favorites/Try Later/Journal, now tabs in one screen) - pure
+ * navigation, not filter state, so they came out of here once those had a
+ * real home.
  */
 export default function FabMenu({
   visible,
   showFabMenu,
   setShowFabMenu,
-  onOpenHistory,
-  onOpenFavorites,
-  onOpenTryLater,
-  onOpenJournal,
   openNowOnly,
   onToggleOpenNow,
   favoritesOnly,
@@ -92,21 +92,6 @@ export default function FabMenu({
                 color={favoritesOnly ? colors.textDark : colors.accent}
               />
             </Pressable>
-            <Pressable style={[styles.fabSubBtnSolid, { marginTop: 10 }]} onPress={onOpenHistory}>
-              <Ionicons name="book" size={22} color={colors.textDark} />
-            </Pressable>
-            <Pressable style={[styles.fabSubBtnSolid, { marginTop: 10 }]} onPress={onOpenTryLater}>
-              <Ionicons name="bookmark" size={22} color={colors.textDark} />
-            </Pressable>
-            <Pressable style={[styles.fabSubBtnSolid, { marginTop: 10 }]} onPress={onOpenFavorites}>
-              <Ionicons name="heart" size={22} color={colors.textDark} />
-            </Pressable>
-            {/* "Journal" - the food journal (your own ratings/notes plus
-                friends'), pen-and-paper icon so it reads as "notes" at a
-                glance. */}
-            <Pressable style={[styles.fabSubBtnSolid, { marginTop: 10 }]} onPress={onOpenJournal}>
-              <Ionicons name="create" size={22} color={colors.textDark} />
-            </Pressable>
           </View>
         )}
         <Pressable style={styles.fabMainBtn} onPress={() => setShowFabMenu(!showFabMenu)}>
@@ -126,12 +111,9 @@ const makeStyles = (colors) => StyleSheet.create({
   // fixed-size circular button within it, visibly shifting the whole stack
   // left (user feedback). Right-aligning instead keeps every button pinned
   // to the same edge no matter how wide the price row gets.
-  // bottom raised from 30 to 110 (temporary, first BottomNav increment) so
-  // this doesn't overlap the new persistent nav bar's ~94px-tall footprint
-  // at the screen bottom - FabMenu's remaining nav-only buttons become
-  // redundant with BottomNav once the My Places hub exists, at which point
-  // this whole component is expected to come out rather than stay stacked
-  // above the nav permanently.
+  // bottom raised from 30 to 110 so this stays clear of BottomNav's
+  // ~94px-tall footprint at the screen bottom now that both are visible on
+  // Home at the same time.
   fabWrapper: { position: 'absolute', bottom: 110, right: 30, alignItems: 'flex-end', zIndex: 50 },
   fabSubMenu: { marginBottom: 12, alignItems: 'flex-end' },
   priceRow: { flexDirection: 'column', alignItems: 'center', marginBottom: 8 },
@@ -148,6 +130,5 @@ const makeStyles = (colors) => StyleSheet.create({
   // Same elevation-pin fix as priceBtn/priceBtnActive above (4 -> 10 toggle).
   fabSubBtn: { backgroundColor: colors.card, borderWidth: 2, borderColor: colors.accent, width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', ...buttonDepth, elevation: 10 },
   fabSubBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent, ...neonSelected(colors) },
-  fabSubBtnSolid: { backgroundColor: colors.accent, width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', ...buttonDepth },
   fabMainBtn: { backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', ...buttonDepth },
 });

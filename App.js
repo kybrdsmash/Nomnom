@@ -41,6 +41,7 @@ import InviteFriendModal from './src/components/InviteFriendModal';
 import HistoryFavoritesOverlay from './src/components/HistoryFavoritesOverlay';
 import FabMenu from './src/components/FabMenu';
 import BottomNav from './src/components/BottomNav';
+import MyPlacesHub from './src/components/MyPlacesHub';
 import SettingsPanel from './src/components/SettingsPanel';
 import DetailModal from './src/components/DetailModal';
 import FriendSpin from './src/components/FriendSpin';
@@ -157,7 +158,12 @@ function AppInner() {
 
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main' | 'history' | 'favorites'
+  const [activeView, setActiveView] = useState('main');
+  // 'main' | 'friend' | 'history' | 'places' | 'journal' are all reachable
+  // today (BottomNav/FabMenu). 'favorites' | 'tryLater' are dead values -
+  // nothing sets them anymore since MyPlacesHub ('places') consolidated
+  // those, but HistoryFavoritesOverlay.js still handles them correctly if
+  // something ever does again.
   const [openNowOnly, setOpenNowOnly] = useState(false);
   // null = any price; otherwise 1-4 matching Google's price_level scale ($-$$$$)
   const [maxPrice, setMaxPrice] = useState(null);
@@ -837,22 +843,22 @@ function AppInner() {
     eliminationList.length === 0 && browseList.length === 0;
 
   // BottomNav is scoped to the Home screen for this first increment, same
-  // as FabMenu above - it doesn't yet appear on Favorites/History/Friend
-  // screens, since those get restructured anyway once the My Places hub
-  // (a later, separate increment) consolidates Favorites/Try Later/
-  // Journal/Friends into one destination.
+  // as FabMenu above - it doesn't yet appear on Places/History/Friend
+  // screens themselves.
   const showBottomNav = showFab;
-  // "Places" has no activeView of its own yet - it routes to 'favorites',
-  // the closest existing screen, until the My Places hub exists.
+  // 'favorites'/'tryLater'/'journal' as raw activeView values are now dead
+  // (nothing sets them anymore - FabMenu's shortcuts to them were removed
+  // once MyPlacesHub existed) but HistoryFavoritesOverlay.js/
+  // JournalOverlay.js are left otherwise untouched rather than deleted.
   const activeNavTab =
     activeView === 'main' ? 'home'
     : activeView === 'friend' ? 'feast'
     : activeView === 'history' ? 'history'
-    : (activeView === 'favorites' || activeView === 'tryLater' || activeView === 'journal') ? 'places'
+    : activeView === 'places' ? 'places'
     : null;
   const handleNavSelect = (key) => {
     if (key === 'home') setActiveView('main');
-    else if (key === 'places') setActiveView('favorites');
+    else if (key === 'places') setActiveView('places');
     else if (key === 'feast') setActiveView('friend');
     else if (key === 'history') setActiveView('history');
     else if (key === 'settings') setShowSettingsMenu(true);
@@ -892,7 +898,7 @@ function AppInner() {
         />
       )}
 
-      {activeView !== 'main' && activeView !== 'friend' && activeView !== 'journal' && (
+      {activeView !== 'main' && activeView !== 'friend' && activeView !== 'journal' && activeView !== 'places' && (
         <HistoryFavoritesOverlay
           activeView={activeView}
           onBack={() => setActiveView('main')}
@@ -916,6 +922,23 @@ function AppInner() {
           onShowDetails={(spot) => setDetailSpot(spot)}
           location={location}
           travelType={travelType}
+          onSaveAtTheTable={addAtTheTableEntry}
+        />
+      )}
+
+      {activeView === 'places' && (
+        <MyPlacesHub
+          onBack={() => setActiveView('main')}
+          favorites={favorites}
+          tryLater={tryLater}
+          journal={journal}
+          friends={friends}
+          location={location}
+          travelType={travelType}
+          onOpenMaps={openMaps}
+          onShowDetails={(spot) => setDetailSpot(spot)}
+          onRemoveTryLater={toggleTryLater}
+          onAddFavorite={toggleFavorite}
           onSaveAtTheTable={addAtTheTableEntry}
         />
       )}
@@ -1132,22 +1155,6 @@ function AppInner() {
             showToast(next ? 'Favorites Only' : 'Favorites Only Off');
             return next;
           });
-        }}
-        onOpenHistory={() => {
-          setActiveView('history');
-          setShowFabMenu(false);
-        }}
-        onOpenFavorites={() => {
-          setActiveView('favorites');
-          setShowFabMenu(false);
-        }}
-        onOpenTryLater={() => {
-          setActiveView('tryLater');
-          setShowFabMenu(false);
-        }}
-        onOpenJournal={() => {
-          setActiveView('journal');
-          setShowFabMenu(false);
         }}
       />
 
