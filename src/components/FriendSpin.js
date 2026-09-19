@@ -9,6 +9,7 @@ import * as ExpoLinking from 'expo-linking';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth, JOIN_LINK_BASE_URL } from '../constants';
+import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
 import { joinParts } from '../utils/format';
 import {
   createSession, joinSession, startPlaying, eliminateSpot,
@@ -681,6 +682,7 @@ export default function FriendSpin({
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </Pressable>
             ))}
+            <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
           </ScrollView>
         </View>
       )}
@@ -791,8 +793,10 @@ export default function FriendSpin({
               only anyway - see App.js), so without real insets.bottom this
               sat flush against the very bottom edge on some phones (user
               feedback). The +20 on top is the original deliberate spacing,
-              kept as-is. */}
-          <Pressable onPress={leaveSession} style={{ alignSelf: 'center', padding: 14, marginBottom: insets.bottom + 20 }}>
+              kept as-is. BOTTOM_NAV_CLEARANCE added on top of that - BottomNav
+              now persists over this screen too, and without it this button
+              sat directly underneath the floating bar. */}
+          <Pressable onPress={leaveSession} style={{ alignSelf: 'center', padding: 14, marginBottom: insets.bottom + 20 + BOTTOM_NAV_CLEARANCE }}>
             <Text style={styles.leaveText}>Leave session</Text>
           </Pressable>
         </View>
@@ -881,7 +885,9 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   screen: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.background, zIndex: 90, paddingTop: insets.top + 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
   headerTitle: { color: colors.accent, fontSize: 20, fontWeight: 'bold', letterSpacing: 1 },
-  centerCol: { flex: 1, alignItems: 'center', paddingHorizontal: 30, paddingTop: 30 },
+  // paddingBottom added so BottomNav (now persists over this screen, not
+  // just Home) doesn't sit on top of this content's last element.
+  centerCol: { flex: 1, alignItems: 'center', paddingHorizontal: 30, paddingTop: 30, paddingBottom: 30 + BOTTOM_NAV_CLEARANCE },
   bodyText: { color: colors.textLight, fontSize: 16, textAlign: 'center', marginTop: 10 },
   bigBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, paddingVertical: 13, paddingHorizontal: 26, borderRadius: 30 },
   bigBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 16, marginLeft: 8 },

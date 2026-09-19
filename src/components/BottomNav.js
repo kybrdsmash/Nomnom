@@ -48,10 +48,11 @@ export const BOTTOM_NAV_CLEARANCE = BAR_BOTTOM_OFFSET * 2 + BAR_HEIGHT;
  * filter toggles moved to QuickFilters.js as 3 always-visible buttons
  * instead of a hamburger-expand menu.
  *
- * "Places" doesn't have its own activeView yet (it currently routes to
- * 'favorites', the closest existing screen) - the real My Places hub
- * (Favorites/Try Later/Journal/Friends as tabs in one screen) is its own
- * follow-up increment, not part of this nav-shell pass.
+ * "Places" routes to MyPlacesHub (Favorites/Try Later/Journal/Friends as
+ * tabs in one screen). This bar now also persists across Places/Favorites/
+ * Feast, not just Home - it used to unmount the instant you navigated away,
+ * which made its sliding highlight look broken (nothing to slide toward if
+ * the whole bar just vanishes mid-tap) - see App.js's showBottomNav.
  *
  * Frosted dual-tone-edge glass (design canvas review's pick over plain cool/
  * warm variants): a slim colors.neon-to-colors.accentDeep gradient ring -
@@ -246,6 +247,13 @@ const makeStyles = (colors) => StyleSheet.create({
     left: 16,
     right: 16,
     bottom: BAR_BOTTOM_OFFSET,
+    // Now a persistent sibling over Places/Favorites/Feast too, not just
+    // Home - those screens' own root Views are explicitly zIndex:90/100
+    // (see MyPlacesHub/HistoryFavoritesOverlay/FriendSpin's `overlayScreen`/
+    // `screen` styles), so this needs its own explicit zIndex higher than
+    // any of them to reliably paint on top - JSX order alone isn't a safe
+    // enough guarantee once siblings start setting zIndex themselves.
+    zIndex: 200,
     borderRadius: BAR_RADIUS,
     padding: RING_WIDTH,
     shadowColor: '#000',

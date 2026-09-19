@@ -385,12 +385,24 @@ export default function SettingsPanel({
 }
 
 const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 },
+  // zIndex bumped 40/50/55 -> 240/250/255 (same +200 shift across all three,
+  // preserving their relative order) - Settings can now open from Places/
+  // Favorites/Feast too (BottomNav persists there - see App.js's
+  // showBottomNav), and those screens' own root Views are zIndex:90/100
+  // (MyPlacesHub/HistoryFavoritesOverlay/FriendSpin), which used to have
+  // nothing to compete with here since this drawer only ever had to out-
+  // stack Home's plain zIndex:0 content. Below that, BottomNav itself is
+  // zIndex:200 - the drawer needs to sit above it too so it can't be tapped
+  // through while open, hence starting past 200 rather than just past 100
+  // (caught on-device: opening Settings from Favorites highlighted the
+  // gear correctly but the drawer itself never appeared - it was painting
+  // underneath HistoryFavoritesOverlay the whole time).
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 240 },
   // Own absolute position now (used to be a child of `wrapper`, which also
   // held the panel - that shared anchor is gone now that the drawer lives on
   // the opposite edge of the screen from this fallback trigger).
   gearBtn: {
-    position: 'absolute', bottom: 30, left: 30, zIndex: 50,
+    position: 'absolute', bottom: 30, left: 30, zIndex: 250,
     backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23,
     alignItems: 'center', justifyContent: 'center', ...buttonDepth,
   },
@@ -402,7 +414,7 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // where nothing would ever see it.
   drawer: {
     position: 'absolute', top: 0, bottom: 0, right: 0, width: DRAWER_WIDTH,
-    backgroundColor: colors.card, zIndex: 55,
+    backgroundColor: colors.card, zIndex: 255,
     elevation: 20, shadowColor: '#000', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.4, shadowRadius: 12,
   },
   drawerFlex: { flex: 1 },

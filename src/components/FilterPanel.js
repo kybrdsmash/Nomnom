@@ -235,6 +235,7 @@ export default function FilterPanel({
             onSave={onSaveFave}
             onRename={onRenameFave}
             selectedCuisines={selectedCuisines}
+            attractPulse={showCuisines}
           />
         </View>
       </FrostedGlass>

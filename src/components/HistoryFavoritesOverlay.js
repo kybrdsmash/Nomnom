@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
+import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
 import { joinParts } from '../utils/format';
 import { cityFromAddress, groupByCity } from '../utils/location';
 import FullscreenImageViewer from './FullscreenImageViewer';
@@ -349,6 +350,9 @@ export default function HistoryFavoritesOverlay({
       <ScrollView ref={scrollViewRef} style={{ width: '100%', paddingHorizontal: 20 }}>
         {filterBar}
         {listContent}
+        {/* Same reasoning as MyPlacesHub's identical spacer - BottomNav now
+            persists over this screen (was Home-only before). */}
+        <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
 
       {/* Opens AddSpotModal: search any restaurant by name, or pick straight
@@ -425,7 +429,9 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   // home-indicator/gesture-bar inset could collide with (or sit underneath)
   // the button on devices that have one.
   addFab: {
-    position: 'absolute', bottom: insets.bottom + 30, right: 30, width: 52, height: 52, borderRadius: 26,
+    // bottom now also clears BottomNav (persists over this screen), same
+    // reasoning as the scroll spacer above.
+    position: 'absolute', bottom: insets.bottom + 30 + BOTTOM_NAV_CLEARANCE, right: 30, width: 52, height: 52, borderRadius: 26,
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
     ...buttonDepth, elevation: 20,
   },

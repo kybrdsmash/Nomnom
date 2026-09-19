@@ -840,9 +840,17 @@ function AppInner() {
     activeView === 'main' && !isSearching && !result &&
     eliminationList.length === 0 && browseList.length === 0;
 
-  // BottomNav is scoped to the Home screen - it doesn't yet appear on
-  // Places/History/Friend screens themselves (a known gap - see TODO.md).
-  const showBottomNav = showFab;
+  // BottomNav now also persists across Places/Favorites/Feast, not just
+  // Home (closes the gap TODO.md documented) - it used to unmount the
+  // instant activeView left 'main', which is why its sliding highlight
+  // never actually appeared to slide (user report: "slider doesn't slide
+  // across") - there was nothing wrong with the animation, the whole bar
+  // (highlight included) just vanished in the same tap that would have
+  // triggered it. Still gated to `showFab`'s idle-Home condition while ON
+  // Home, since the bar has never been designed to coexist with the
+  // coin/elimination/browse flow.
+  const showBottomNav =
+    showFab || activeView === 'places' || activeView === 'favorites' || activeView === 'friend';
   // 'tryLater'/'journal' as raw activeView values are dead (nothing sets
   // them anymore - FabMenu's shortcuts to them were removed once
   // MyPlacesHub existed, and FabMenu itself has since been fully retired in
@@ -1113,7 +1121,13 @@ function AppInner() {
       />
 
       <SettingsPanel
-        visible={showFab}
+        // showSettingsMenu included on top of showFab - Settings can now be
+        // opened from Places/Favorites/Feast too (BottomNav's settings icon
+        // is reachable there), and those screens leave `activeView` !==
+        // 'main' the whole time, so showFab alone would make this component
+        // return null (see its own `if (!visible) return null`) and the
+        // drawer could never actually open from those screens.
+        visible={showFab || showSettingsMenu}
         hideTrigger={showBottomNav}
         showSettingsMenu={showSettingsMenu}
         setShowSettingsMenu={setShowSettingsMenu}

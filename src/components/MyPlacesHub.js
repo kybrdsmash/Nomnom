@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth } from '../constants';
 import { isFirebaseConfigured } from '../api/firebase';
+import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
 import { fetchFriendJournal } from '../api/journal';
 import { joinParts } from '../utils/format';
 import { cityFromAddress, groupByCity } from '../utils/location';
@@ -520,6 +521,13 @@ export default function MyPlacesHub({
           </ScrollView>
         )}
         {listContent}
+        {/* BottomNav now persists over this screen (was Home-only before) -
+            a spacer at the end of the scroll content, sized to the bar's
+            own real clearance, keeps the last row from ending up hidden
+            behind it. Plain style-prop padding on the ScrollView itself
+            wouldn't do this - that constrains the outer viewport, not how
+            far the content can actually scroll. */}
+        <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
 
       {showFab && (
@@ -591,7 +599,9 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   chipTextActive: { color: colors.textDark, fontWeight: 'bold' },
 
   addFab: {
-    position: 'absolute', bottom: insets.bottom + 30, right: 30, width: 52, height: 52, borderRadius: 26,
+    // bottom now clears BottomNav (persists over this screen) on top of the
+    // original insets.bottom + 30, same reasoning as the scroll spacer above.
+    position: 'absolute', bottom: insets.bottom + 30 + BOTTOM_NAV_CLEARANCE, right: 30, width: 52, height: 52, borderRadius: 26,
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
     ...buttonDepth, elevation: 20,
   },

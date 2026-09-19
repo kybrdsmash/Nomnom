@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Animated, TextInput, PanResponder, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -48,12 +48,22 @@ function sameCuisines(a, b) {
  * instead (user request: reuse that otherwise-wasted gesture to let a slot
  * be renamed).
  *
+ * `attractPulse` (true right when the Cuisines dropdown opens) plays a
+ * brief, one-time glow + scale bounce so this reads as "tap me" the moment
+ * it's actually relevant, rather than sitting there as an unexplained label
+ * (user request: this button has 3 different gestures packed into it with
+ * zero visible affordance for any of them). Deliberately NOT the same
+ * treatment as `flash` (the save-success state) - reusing that here would
+ * make an unpressed button look like it just saved something. Runs once
+ * per dropdown-open, not a repeating loop - a control this discoverable
+ * only needs to earn one glance, and looping it would read as nagging.
+ *
  * Built as a single PanResponder rather than a Pressable+PanResponder combo -
  * this codebase has a standing bug class where the two fight over touch
  * ownership (see SlidableSegmented's history with that exact problem) - so
  * taps/holds/drags are all resolved by hand from one responder here instead.
  */
-export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, selectedCuisines }) {
+export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, selectedCuisines, attractPulse }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -62,6 +72,38 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
   const [flash, setFlash] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameText, setRenameText] = useState('');
+
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseGlow = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!attractPulse) return;
+    // Two soft pulses (bounce + glow together) then settle - see the
+    // docstring above for why this is capped at a fixed run rather than a
+    // loop.
+    Animated.sequence([
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulseScale, { toValue: 1.08, duration: 220, useNativeDriver: true }),
+          Animated.timing(pulseScale, { toValue: 1, duration: 220, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pulseGlow, { toValue: 1, duration: 220, useNativeDriver: true }),
+          Animated.timing(pulseGlow, { toValue: 0, duration: 220, useNativeDriver: true }),
+        ]),
+      ]),
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulseScale, { toValue: 1.08, duration: 220, useNativeDriver: true }),
+          Animated.timing(pulseScale, { toValue: 1, duration: 220, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pulseGlow, { toValue: 1, duration: 220, useNativeDriver: true }),
+          Animated.timing(pulseGlow, { toValue: 0, duration: 220, useNativeDriver: true }),
+        ]),
+      ]),
+    ]).start();
+  }, [attractPulse]);
 
   // Reassigned every render so the frozen PanResponder callbacks (see
   // useRef below) always see the CURRENT props, not whichever instance
@@ -206,10 +248,22 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
   }
 
   return (
-    <View style={[styles.button, flash && styles.buttonFlash]} {...pan.panHandlers}>
+    <Animated.View
+      style={[styles.button, flash && styles.buttonFlash, { transform: [{ scale: pulseScale }] }]}
+      {...pan.panHandlers}
+    >
       {/* Same glossy diagonal gradient as the coin (accentGradient in
           constants.js) - user request, after liking it there. */}
       {flash && <LinearGradient {...accentGradient(colors)} style={StyleSheet.absoluteFill} />}
+      {/* Attract-pulse glow ring - opacity-only (never touches borderWidth),
+          same "pin the width, animate color/opacity instead" convention this
+          codebase uses everywhere else a border needs to react to state
+          (see App.js's modeBtn, FilterPanel's toggleBtn) - a 0->N px border
+          jump can visibly nudge fixed-width neighbors. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.pulseRing, { opacity: pulseGlow }]}
+      />
       <Animated.Text
         style={[styles.text, flash && styles.textFlash, { transform: [{ translateY: slideY }] }]}
         numberOfLines={1}
@@ -229,7 +283,7 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
           <View key={i} style={[styles.dot, i === activeIndex ? styles.dotActive : styles.dotInactive]} />
         ))}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -251,6 +305,16 @@ const makeStyles = (colors) => StyleSheet.create({
   buttonFlash: {
     backgroundColor: colors.accent, ...neonSelected(colors),
     elevation: 0,
+  },
+  // The attract-pulse glow ring (see attractPulse in the docstring above) -
+  // borderWidth stays fixed, only `opacity` animates, matching this file's
+  // own convention (see the comment where this renders). No elevation, same
+  // reasoning as everywhere else in this file.
+  pulseRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.neon,
   },
   // Bumped from fontSize:13/textMuted to match the Cuisines label it now
   // sits beside (user feedback: "fonts need to match... look too
