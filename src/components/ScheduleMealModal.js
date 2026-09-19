@@ -140,13 +140,18 @@ export default function ScheduleMealModal({ visible, onClose, session, code, myU
             </View>
           )}
 
-          {bothLocked && proposedDate && (
+          {bothLocked && proposedDate && spot && (
             <>
-              {/* Real .ics file handed to the OS share sheet - works on both
-                  iOS (Apple Calendar) and Android natively, unlike the
-                  Google Calendar web link below which only really feels
-                  "automatic" on Android/Chrome (user request: "this needs
-                  to work on iPhones and Androids"). */}
+              {/* `spot` guard added - this modal is now reachable mid-bracket
+                  too (before a winner exists), via the 'playing' step's own
+                  chat icon in FriendSpin.js. Locking in a time is still
+                  possible that early, but there's no spot to build a
+                  calendar entry FOR yet, so this section just doesn't show
+                  until one exists. Real .ics file handed to the OS share
+                  sheet - works on both iOS (Apple Calendar) and Android
+                  natively, unlike the Google Calendar web link below which
+                  only really feels "automatic" on Android/Chrome (user
+                  request: "this needs to work on iPhones and Androids"). */}
               <Pressable
                 style={styles.calendarBtn}
                 onPress={() => shareIcsForSpot(spot, session.proposedTime, [session.hostName, session.guestName])

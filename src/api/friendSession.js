@@ -43,6 +43,13 @@ export async function createSession(hostLocation, hostName = '') {
     eliminatedIds: [],
     turnUid: null,
     winnerId: null,
+    // "Propose a place" (bracket step): either player, out of turn, can
+    // flag one still-live spot as "what about this one?" without spending
+    // a turn - see proposeSpot below. The OTHER player resolves it on
+    // their next actual turn by either agreeing (ends the bracket right
+    // there) or eliminating it like normal (a soft decline).
+    proposedId: null,
+    proposedByUid: null,
     // Schedule-a-meal step (winner screen): a short-lived chat plus a
     // shared proposed date/time either player can set, confirmed by both
     // tapping "I'm in" before the calendar link is offered.
@@ -125,7 +132,22 @@ export async function startPlaying(code, spots, guestUid) {
     status: 'playing',
     spots,
     eliminatedIds: [],
+    proposedId: null,
+    proposedByUid: null,
     turnUid: guestUid,
+  });
+}
+
+/**
+ * Either player, when it's NOT their turn: flags one still-live spot as a
+ * suggestion, without spending a turn - the other player resolves it (agree
+ * or eliminate) the next time their turn comes around. Overwrites whatever
+ * was proposed before, so "actually, how about this one instead" just works.
+ */
+export async function proposeSpot(code, spotId, byUid) {
+  await updateDoc(doc(db, 'sessions', code), {
+    proposedId: spotId,
+    proposedByUid: byUid,
   });
 }
 
@@ -135,11 +157,31 @@ export async function eliminateSpot(code, session, spotId, myUid) {
   const remaining = session.spots.filter((s) => !eliminated.includes(s.id));
   const otherUid = myUid === session.hostUid ? session.guestUid : session.hostUid;
   const update = { eliminatedIds: eliminated, turnUid: otherUid };
+  // Eliminating the currently-proposed spot is a soft decline - clear it so
+  // it doesn't keep showing as "proposed" once it's gone.
+  if (session.proposedId === spotId) {
+    update.proposedId = null;
+    update.proposedByUid = null;
+  }
   if (remaining.length === 1) {
     update.status = 'done';
     update.winnerId = remaining[0].id;
   }
   await updateDoc(doc(db, 'sessions', code), update);
+}
+
+/**
+ * The player who did NOT propose, on their turn: agrees to the proposed
+ * spot outright, ending the bracket immediately with it as the winner -
+ * same "done" shape eliminateSpot reaches when only one spot is left.
+ */
+export async function agreeToProposal(code, session, spotId) {
+  await updateDoc(doc(db, 'sessions', code), {
+    status: 'done',
+    winnerId: spotId,
+    proposedId: null,
+    proposedByUid: null,
+  });
 }
 
 /**
@@ -154,6 +196,8 @@ export async function requestNewBracket(code) {
     spots: [],
     eliminatedIds: [],
     winnerId: null,
+    proposedId: null,
+    proposedByUid: null,
   });
 }
 

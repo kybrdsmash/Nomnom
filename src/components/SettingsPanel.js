@@ -234,6 +234,19 @@ export default function SettingsPanel({
         style={[styles.drawer, { transform: [{ translateX: drawerX }] }]}
         pointerEvents={showSettingsMenu ? 'auto' : 'none'}
       >
+        {/* A right-pointing chevron on the drawer's own left edge - user
+            request: nothing on the drawer itself hinted at how to close it
+            (the backdrop tap works, but is invisible/undiscoverable). Points
+            the direction the drawer itself travels when it closes (right,
+            back off-screen), tucked onto the edge rather than another full
+            button competing with the content. */}
+        <Pressable
+          style={styles.closeTab}
+          onPress={() => setShowSettingsMenu(false)}
+          hitSlop={8}
+        >
+          <Ionicons name="chevron-forward" size={20} color={colors.textDark} />
+        </Pressable>
         <KeyboardAvoidingView
           style={styles.drawerFlex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -435,6 +448,18 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // more cramped). shadowOffset points left (negative width) since the
   // shadow should fall toward the screen's content, not off the right edge
   // where nothing would ever see it.
+  // A small tab straddling the drawer's own left edge (negative left offset
+  // pulls half its width outside the drawer, onto the content behind it) -
+  // vertically centered so it's visible regardless of scroll position.
+  // backgroundColor+color both use colors.accent/textDark (same pairing as
+  // gearBtn) so it reads as "part of the settings affordance," not a random
+  // stray button.
+  closeTab: {
+    position: 'absolute', left: -18, top: '50%', marginTop: -18, zIndex: 256,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+    ...buttonDepth,
+  },
   drawer: {
     position: 'absolute', top: 0, bottom: 0, right: 0, width: DRAWER_WIDTH,
     backgroundColor: colors.card, zIndex: 255,

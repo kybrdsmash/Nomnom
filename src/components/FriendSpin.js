@@ -14,7 +14,7 @@ import { joinParts } from '../utils/format';
 import {
   createSession, joinSession, startPlaying, eliminateSpot,
   requestNewBracket, watchSession, midpoint, milesBetween,
-  sendPing, createDirectInvite,
+  sendPing, createDirectInvite, proposeSpot, agreeToProposal,
 } from '../api/friendSession';
 import { fetchLocalFood, searchNearbyByKeyword } from '../api/places';
 import { isFirebaseConfigured, ensureSignedIn } from '../api/firebase';
@@ -734,9 +734,35 @@ export default function FriendSpin({
               onSelectSpot={(spot) => { setSelectedSpotId(spot.id); onShowDetails(spot); }}
             />
           </View>
-          <Text style={[styles.turnBanner, myTurn ? styles.turnMine : styles.turnTheirs]}>
-            {myTurn ? "🟢 Your turn - eliminate one" : "⏳ Their turn…"}
-          </Text>
+          <View style={styles.turnRow}>
+            <Text style={[styles.turnBanner, myTurn ? styles.turnMine : styles.turnTheirs, { flex: 1 }]}>
+              {myTurn ? "🟢 Your turn - eliminate one" : "⏳ Their turn…"}
+            </Text>
+            {/* Chat was only reachable from the winner screen before (user
+                report: "no way anyone knows chat is available until they're
+                already at the calendar") - this carries the same icon
+                through the bracket step too, using the SAME modal/state
+                (see the ScheduleMealModal render below, moved out of the
+                'done' branch). */}
+            <Pressable onPress={() => setShowScheduleModal(true)} style={styles.chatIconBtn} hitSlop={8}>
+              <Ionicons name="chatbubble-ellipses" size={20} color={colors.accent} />
+              {hasUnreadChat && <View style={styles.chatIconDot} />}
+            </Pressable>
+          </View>
+          {/* "Propose a place" (user request: "if they don't want to go
+              through all 5... one person proposes 1 of the 5, then the
+              other person can either also select it - or cross it off on
+              their next turn"). Anyone can propose while it's NOT their
+              turn - a free action, doesn't spend a turn - and whoever's
+              proposal it isn't resolves it (Agree or the normal ✕) the next
+              time their own turn comes around. */}
+          {session.proposedId && !session.eliminatedIds.includes(session.proposedId) && (
+            <Text style={styles.proposedBanner}>
+              {session.proposedByUid === myUid
+                ? "You proposed a spot below - waiting on your friend…"
+                : "👉 Your friend proposed a spot below"}
+            </Text>
+          )}
           <ScrollView style={{ paddingHorizontal: 20 }}>
             {/* Renders the full bracket (session.spots never shrinks
                 server-side) - eliminated spots stay visible, greyed out and
@@ -746,10 +772,19 @@ export default function FriendSpin({
                 eliminated - only the eliminate (X) button is turn-gated. */}
             {session.spots.map((spot) => {
               const isEliminated = session.eliminatedIds.includes(spot.id);
+              const isProposed = session.proposedId === spot.id && !isEliminated;
+              // Only the player who DIDN'T propose gets to resolve it, and
+              // only once it's actually their turn - the proposer can't
+              // agree to their own suggestion.
+              const canAgree = isProposed && myTurn && session.proposedByUid !== myUid;
+              // Proposing is the opposite: only while it's NOT your turn
+              // (otherwise you'd just eliminate/keep normally), on a spot
+              // that isn't already the live proposal.
+              const canPropose = !myTurn && !isEliminated && session.proposedId !== spot.id;
               return (
                 <Pressable
                   key={spot.id}
-                  style={[styles.card, isEliminated && styles.cardOut, spot.id === selectedSpotId && styles.cardSelected]}
+                  style={[styles.card, isEliminated && styles.cardOut, spot.id === selectedSpotId && styles.cardSelected, isProposed && styles.cardProposed]}
                   onPress={() => { setSelectedSpotId(spot.id); onShowDetails(spot); }}
                 >
                   {spot.photoUrl ? (
@@ -772,7 +807,26 @@ export default function FriendSpin({
                         {spot.unconfirmedCuisine} Spots Nearby
                       </Text>
                     )}
+                    {isProposed && <Text style={styles.proposedTag}>👉 Proposed</Text>}
                   </View>
+                  {canAgree && (
+                    <Pressable
+                      onPress={() => agreeToProposal(code, session, spot.id)}
+                      hitSlop={10}
+                      style={styles.agreeBtn}
+                    >
+                      <Ionicons name="checkmark" size={20} color={colors.textDark} />
+                    </Pressable>
+                  )}
+                  {canPropose && (
+                    <Pressable
+                      onPress={() => proposeSpot(code, spot.id, myUid)}
+                      hitSlop={10}
+                      style={styles.proposeBtn}
+                    >
+                      <Ionicons name="hand-right-outline" size={18} color={colors.accent} />
+                    </Pressable>
+                  )}
                   {myTurn && !isEliminated && (
                     <Pressable
                       onPress={() => eliminateSpot(code, session, spot.id, myUid)}
@@ -803,36 +857,42 @@ export default function FriendSpin({
       )}
 
       {step === 'done' && winner && (
-        <>
-          <ResultCard
-            result={winner}
-            gameMode="friend"
-            location={myUid === session.hostUid ? session.hostLocation : session.guestLocation}
-            isFavorite={favorites.some((f) => f.id === winner.id)}
-            onToggleFavorite={() => onToggleFavorite(winner)}
-            isTryLater={tryLater.some((t) => t.id === winner.id)}
-            onToggleTryLater={() => onToggleTryLater(winner)}
-            onOpenMaps={() => onOpenMaps(winner)}
-            onShowDetails={() => onShowDetails(winner)}
-            onReroll={() => requestNewBracket(code)}
-            onOpenSchedule={() => setShowScheduleModal(true)}
-            hasUnreadMessage={hasUnreadChat}
-            scheduleLocked={
-              !!session.hostUid && !!session.guestUid &&
-              session.lockedUids?.includes(session.hostUid) &&
-              session.lockedUids?.includes(session.guestUid)
-            }
-          />
-          <ScheduleMealModal
-            visible={showScheduleModal}
-            onClose={() => setShowScheduleModal(false)}
-            session={session}
-            code={code}
-            myUid={myUid}
-            spot={winner}
-          />
-        </>
+        <ResultCard
+          result={winner}
+          gameMode="friend"
+          location={myUid === session.hostUid ? session.hostLocation : session.guestLocation}
+          isFavorite={favorites.some((f) => f.id === winner.id)}
+          onToggleFavorite={() => onToggleFavorite(winner)}
+          isTryLater={tryLater.some((t) => t.id === winner.id)}
+          onToggleTryLater={() => onToggleTryLater(winner)}
+          onOpenMaps={() => onOpenMaps(winner)}
+          onShowDetails={() => onShowDetails(winner)}
+          onReroll={() => requestNewBracket(code)}
+          onOpenSchedule={() => setShowScheduleModal(true)}
+          hasUnreadMessage={hasUnreadChat}
+          scheduleLocked={
+            !!session.hostUid && !!session.guestUid &&
+            session.lockedUids?.includes(session.hostUid) &&
+            session.lockedUids?.includes(session.guestUid)
+          }
+        />
       )}
+
+      {/* Chat/schedule modal moved OUT of the 'done' branch above - it's now
+          reachable from the 'playing' step's own chat icon too (user
+          request: "no way anyone knows chat is available until they're
+          already at the calendar... need a chat icon that carries through
+          the pages"). spot is only real once there's a winner; the modal's
+          own calendar-link section already guards on `spot` being present,
+          so mid-bracket this just offers chat + a shared proposed time. */}
+      <ScheduleMealModal
+        visible={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        session={session}
+        code={code}
+        myUid={myUid}
+        spot={winner}
+      />
 
       {/* Reopening from the archive sets step to 'done' immediately, before
           the Firestore snapshot for that code has actually arrived - this
@@ -931,9 +991,20 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   archiveLinkText: { color: colors.accent, fontWeight: '600', fontSize: 14, marginLeft: 6 },
   archiveBack: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 },
   archiveBackText: { color: colors.accent, fontWeight: '600', fontSize: 15, marginLeft: 6 },
+  // Wraps turnBanner + the new chat icon (see FriendSpin's 'playing' step) -
+  // turnBanner itself keeps its own marginHorizontal/marginBottom, this row
+  // just adds the icon as a fixed-width sibling instead of centering it
+  // separately.
+  turnRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 20 },
   turnBanner: { textAlign: 'center', fontSize: 16, fontWeight: 'bold', paddingVertical: 10, marginHorizontal: 20, marginBottom: 12, borderRadius: 12, overflow: 'hidden' },
   turnMine: { backgroundColor: '#1E3A2A', color: '#7BE495' },
   turnTheirs: { backgroundColor: colors.card, color: colors.textMuted },
+  chatIconBtn: { padding: 6, marginBottom: 12 },
+  chatIconDot: {
+    position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: 4.5,
+    backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.background,
+  },
+  proposedBanner: { color: colors.accent, fontSize: 13, fontWeight: '600', textAlign: 'center', marginHorizontal: 20, marginTop: -6, marginBottom: 10 },
   // elevation pinned constant (10) whether selected or not, same fix as
   // every other selected/unselected toggle this session - Android can leave
   // a view stuck blank after its elevation changes between renders.
@@ -946,6 +1017,12 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   cardOut: { opacity: 0.45 },
   // Mirrors the map pin's glow when this spot's details were last opened.
   cardSelected: { ...neonSelected(colors) },
+  // Proposed-spot highlight - a visible border rather than reusing
+  // neonSelected's full glow (cardSelected), so a proposed spot that's also
+  // the currently-selected one doesn't visually collide with two different
+  // "special" treatments at once.
+  cardProposed: { borderWidth: 2, borderColor: colors.accent },
+  proposedTag: { color: colors.accent, fontSize: 11, fontWeight: '700', marginTop: 2 },
   cardTitleOut: { textDecorationLine: 'line-through' },
   cardImage: { width: 46, height: 46, borderRadius: 23, marginRight: 12 },
   cardImagePlaceholder: { width: 46, height: 46, borderRadius: 23, marginRight: 12, backgroundColor: '#555', alignItems: 'center', justifyContent: 'center' },
@@ -955,5 +1032,17 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   eliminateBtn: {
     width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.danger,
+  },
+  // Agree/propose sit to the LEFT of eliminateBtn (both can render alongside
+  // it - see canAgree above, which is deliberately turn-gated the same way
+  // eliminateBtn already is) - marginRight spaces them from whichever
+  // neighbor follows.
+  agreeBtn: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.accent, marginRight: 8, ...buttonDepth,
+  },
+  proposeBtn: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.accent,
   },
 });
