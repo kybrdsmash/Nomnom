@@ -75,6 +75,11 @@ module.exports = {
       },
     },
     plugins: [
+      // Powers the app/ directory file-based routing (navigation
+      // migration) - couldn't be auto-added by `expo install` since this
+      // is a dynamic (.js) config file, same reason extra.eas above had to
+      // be set by hand.
+      'expo-router',
       'expo-asset',
       'expo-web-browser',
       '@react-native-community/datetimepicker',
