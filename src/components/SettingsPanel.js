@@ -56,14 +56,37 @@ export default function SettingsPanel({
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors, insets);
   const drawerX = useRef(new Animated.Value(DRAWER_WIDTH)).current;
+  // Tracks whichever animation (open OR close) is currently running on
+  // drawerX, so a new one can explicitly .stop() it first - see below.
+  const drawerAnimRef = useRef(null);
 
   useEffect(() => {
-    Animated.timing(drawerX, {
-      toValue: showSettingsMenu ? 0 : DRAWER_WIDTH,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    // Opening gets a short delay before the drawer itself starts sliding -
+    // BottomNav's own highlight (see its own ~240ms slide) was starting at
+    // the exact same instant as this drawer's animation, so the drawer
+    // visually "jumped out" without the highlight ever appearing to lead it
+    // (user report: "the settings [icon] doesn't highlight before the
+    // drawer rolls out"). No delay on close - there's nothing to wait for
+    // there, the highlight is already leaving that slot as the tap lands.
+    //
+    // .stop() the PREVIOUS animation before starting a new one - without
+    // this, a fast open-then-close (tap Settings, then immediately tap a
+    // different nav icon within that 150ms) left the open's delay still
+    // pending underneath the close that had already started; 150ms later
+    // the stale open fired anyway and snapped the drawer back open with no
+    // further effect ever re-closing it (confirmed on-device via a screen
+    // recording - the drawer stayed open across several nav taps, tracking
+    // each screen's own highlight correctly the whole time, since only the
+    // drawer's animation was stuck, not the actual nav state).
+    if (drawerAnimRef.current) drawerAnimRef.current.stop();
+    const animation = showSettingsMenu
+      ? Animated.sequence([
+          Animated.delay(150),
+          Animated.timing(drawerX, { toValue: 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        ])
+      : Animated.timing(drawerX, { toValue: DRAWER_WIDTH, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    drawerAnimRef.current = animation;
+    animation.start();
   }, [showSettingsMenu]);
   const [hue, setHue] = useState(() => hexToHsl(accentColor).h);
   const [lightness, setLightness] = useState(() => clampLight(hexToHsl(accentColor).l));

@@ -6,6 +6,7 @@ import { useTheme } from '../ThemeContext';
 import { joinParts } from '../utils/format';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import SpotsMap from './SpotsMap';
+import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
 
 // Was an inline ternary chain that defaulted to 'car' for anything that
 // wasn't 'walk'/'transit' - silently mislabeling 'bike' as driving once that
@@ -183,7 +184,13 @@ export default function ResultCard({
       {/* Fixed footer, outside the ScrollView above - always visible no
           matter how tall the scrollable content gets (see the comment on
           cardHeight/the outer wrapper for why). */}
-      <View style={styles.resultActionRow}>
+      {/* BottomNav persists over the Feast screen (not solo mode's result
+          view, where it's deliberately hidden during a result - see
+          App.js's showFab) - the extra clearance only applies in friend
+          mode so solo's own already-tuned marginBottom is untouched (user
+          report: "Try again" partially hidden by the bottom bar on the
+          Feast results page). */}
+      <View style={[styles.resultActionRow, gameMode === 'friend' && { marginBottom: 76 + BOTTOM_NAV_CLEARANCE }]}>
         {gameMode === 'friend' ? (
           <Pressable onPress={onReroll} style={styles.friendPrimaryBtn}>
             <Text style={styles.friendPrimaryText}>Try Again 🔄</Text>

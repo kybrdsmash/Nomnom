@@ -875,11 +875,23 @@ function AppInner() {
     : activeView === 'places' ? 'places'
     : null;
   const handleNavSelect = (key) => {
+    if (key === 'settings') {
+      setShowSettingsMenu(true);
+      return;
+    }
+    // Tapping any OTHER destination while Settings is open used to leave it
+    // open - the drawer only covers the right DRAWER_WIDTH of the screen
+    // (see SettingsPanel.js), so Home/Places/Feast's own icons stay exposed
+    // and tappable to its left the whole time. Tapping one changed
+    // activeView underneath the drawer, but nothing ever reset
+    // showSettingsMenu, so the drawer just kept riding on top of whatever
+    // screen you landed on (user report: "the left home tap opens the
+    // settings drawer" - it was already open, this just failed to close it).
+    setShowSettingsMenu(false);
     if (key === 'home') setActiveView('main');
     else if (key === 'places') setActiveView('places');
     else if (key === 'feast') setActiveView('friend');
     else if (key === 'favorites') setActiveView('favorites');
-    else if (key === 'settings') setShowSettingsMenu(true);
   };
 
   return (
