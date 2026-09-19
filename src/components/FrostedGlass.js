@@ -45,6 +45,20 @@ import { useTheme } from '../ThemeContext';
 // position (FilterPanel's Cuisines trigger, measured by App.js to position
 // CuisineDropdown flush beneath it) can still attach its own ref to the
 // actual outer measurable box, same as before this was extracted.
+//
+// The ref goes on a plain `View`, NOT the `LinearGradient` - a real,
+// on-device crash (TypeError: undefined is not a function, inside
+// handleCuisinesExpanded's `cuisineTriggerRef.current.measureInWindow(...)`
+// call) confirmed expo-linear-gradient's forwarded ref does NOT expose
+// RN's NativeMethods (measureInWindow/measure/etc.) the way a host View's
+// ref does - calling it just isn't a function on whatever LinearGradient
+// forwards. This was latent since the Cuisines trigger was first wrapped in
+// FrostedGlass; every verification pass since then only ever checked the
+// COLLAPSED resting state, never actually tapped it open. Fix: the gradient
+// ring is now an absolutely-filled decorative layer BEHIND a real outer
+// View (which carries the ref), with the inner content inset by `ringWidth`
+// via margin instead of the LinearGradient's own padding - same visual
+// result, but the measurable box is guaranteed to be a real host View.
 const FrostedGlass = React.forwardRef(function FrostedGlass({
   children, style, contentStyle, radius = 15, ringWidth = 1.5,
   tintOpacity = 0.16, blurIntensity = 50, squareBottom = false, collapsable,
@@ -64,19 +78,19 @@ const FrostedGlass = React.forwardRef(function FrostedGlass({
     : { borderRadius: innerRadius };
 
   return (
-    <LinearGradient
-      ref={ref}
-      collapsable={collapsable}
-      colors={[colors.neon, colors.accentDeep]}
-      start={{ x: 0.05, y: 0 }}
-      end={{ x: 0.95, y: 1 }}
-      style={[cornerStyle, { padding: ringWidth }, style]}
-    >
+    <View ref={ref} collapsable={collapsable} style={[cornerStyle, style]}>
+      <LinearGradient
+        colors={[colors.neon, colors.accentDeep]}
+        start={{ x: 0.05, y: 0 }}
+        end={{ x: 0.95, y: 1 }}
+        style={[StyleSheet.absoluteFillObject, cornerStyle]}
+      />
       {/* BlurView + tint need their OWN matching border radius +
           overflow:hidden - Android doesn't reliably clip a native BlurView
           to an ancestor's rounded corners via the ancestor's overflow:hidden
-          alone (established in CuisineDropdown.js, reused here). */}
-      <View style={[styles.inner, innerCornerStyle, contentStyle]}>
+          alone (established in CuisineDropdown.js, reused here). margin:
+          ringWidth is what reveals the gradient ring painted behind it. */}
+      <View style={[styles.inner, innerCornerStyle, contentStyle, { margin: ringWidth }]}>
         <BlurView intensity={blurIntensity} tint="dark" style={[StyleSheet.absoluteFillObject, innerCornerStyle]} />
         <View
           pointerEvents="none"
@@ -84,7 +98,7 @@ const FrostedGlass = React.forwardRef(function FrostedGlass({
         />
         {children}
       </View>
-    </LinearGradient>
+    </View>
   );
 });
 
