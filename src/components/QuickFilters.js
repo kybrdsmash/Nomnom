@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Pressable, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Pressable, Text, Animated, StyleSheet } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../ThemeContext';
 import { frostedGlow } from '../constants';
 import FrostedGlass from './FrostedGlass';
@@ -23,7 +24,7 @@ const PRICE_LEVELS = [1, 2, 3, 4];
  */
 export default function QuickFilters({
   visible, openNowOnly, onToggleOpenNow, favoritesOnly, onToggleFavoritesOnly,
-  maxPrice, setMaxPrice,
+  maxPrice, setMaxPrice, hapticsEnabled = true,
 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -38,21 +39,21 @@ export default function QuickFilters({
 
   return (
     <View style={styles.stack} pointerEvents="box-none">
-      <Toggle active={maxPrice != null} onPress={cyclePrice} colors={colors} styles={styles}>
+      <Toggle active={maxPrice != null} onPress={cyclePrice} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={0}>
         {maxPrice != null ? (
           <Text style={[styles.priceText, { color: colors.neon }]}>{'$'.repeat(maxPrice)}</Text>
         ) : (
           <Ionicons name="cash-outline" size={20} color={colors.textMuted} />
         )}
       </Toggle>
-      <Toggle active={openNowOnly} onPress={onToggleOpenNow} colors={colors} styles={styles}>
+      <Toggle active={openNowOnly} onPress={onToggleOpenNow} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={1}>
         <MaterialCommunityIcons
           name={openNowOnly ? 'clock-check' : 'clock-check-outline'}
           size={22}
           color={openNowOnly ? colors.neon : colors.textMuted}
         />
       </Toggle>
-      <Toggle active={favoritesOnly} onPress={onToggleFavoritesOnly} colors={colors} styles={styles}>
+      <Toggle active={favoritesOnly} onPress={onToggleFavoritesOnly} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={2}>
         <Ionicons
           name={favoritesOnly ? 'heart-circle' : 'heart-circle-outline'}
           size={24}
@@ -63,22 +64,63 @@ export default function QuickFilters({
   );
 }
 
-function Toggle({ active, onPress, children, colors, styles }) {
+// Trying out FaveCuisineButton.js's "attract pulse" (two soft glow + scale
+// bounces, then settle - never a persistent glow, so it can't turn into a
+// permanently-ignored notification dot) on these 3 toggles, since they're
+// the most likely to go unnoticed among everything else on Home (user
+// request, part of solving discoverability for Favorites-only spinning).
+// Currently fires once on every mount (i.e. every time Home's QuickFilters
+// remounts) as a first pass to evaluate the feel - if this sticks, the next
+// step is gating it behind a real "has the user ever tried this" flag
+// (AsyncStorage, same convention as storage.js's seen-ids) so it only plays
+// once ever, likely just on the Favorites-only toggle rather than all 3.
+// `order` staggers the 3 pulses slightly so they read as a small wave down
+// the stack rather than all 3 flashing in perfect unison.
+function Toggle({ active, onPress, children, colors, styles, hapticsEnabled, order = 0 }) {
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseGlow = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const onePulse = () => Animated.parallel([
+      Animated.sequence([
+        Animated.timing(pulseScale, { toValue: 1.08, duration: 220, useNativeDriver: true }),
+        Animated.timing(pulseScale, { toValue: 1, duration: 220, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.timing(pulseGlow, { toValue: 1, duration: 220, useNativeDriver: true }),
+        Animated.timing(pulseGlow, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]),
+    ]);
+    Animated.sequence([Animated.delay(order * 90), onePulse(), onePulse()]).start();
+  }, []);
+
+  const handlePress = () => {
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  };
+
   return (
-    <FrostedGlass
-      style={styles.toggleRing}
-      contentStyle={styles.toggleInner}
-      radius={19}
-      tintOpacity={active ? 0.28 : 0.12}
-    >
-      <Pressable
-        style={[styles.toggleTouch, active && frostedGlow(colors), active && { elevation: 0 }]}
-        onPress={onPress}
-        hitSlop={6}
+    <Animated.View style={{ transform: [{ scale: pulseScale }] }}>
+      <FrostedGlass
+        style={styles.toggleRing}
+        contentStyle={styles.toggleInner}
+        radius={19}
+        tintOpacity={active ? 0.28 : 0.12}
       >
-        {children}
-      </Pressable>
-    </FrostedGlass>
+        <Pressable
+          style={[styles.toggleTouch, active && frostedGlow(colors), active && { elevation: 0 }]}
+          onPress={handlePress}
+          hitSlop={6}
+        >
+          {children}
+        </Pressable>
+      </FrostedGlass>
+      {/* Sits OUTSIDE FrostedGlass's own inner view on purpose - that inner
+          view is overflow:hidden (see FrostedGlass.js), which would clip the
+          scale bounce and glow ring right at the button's own edge instead
+          of letting either breathe past it. */}
+      <Animated.View pointerEvents="none" style={[styles.pulseRing, { opacity: pulseGlow }]} />
+    </Animated.View>
   );
 }
 
@@ -95,4 +137,17 @@ const makeStyles = (colors) => StyleSheet.create({
     borderRadius: 17, borderWidth: 1.5, borderColor: 'transparent',
   },
   priceText: { fontWeight: 'bold', fontSize: 13 },
+  // The attract-pulse glow ring (see Toggle's docstring) - opacity-only,
+  // borderWidth stays fixed, matching FaveCuisineButton's same convention
+  // for a border that reacts to state without nudging fixed-width neighbors.
+  // absoluteFillObject here sizes against the outer Animated.View, which in
+  // turn sizes to toggleRing's own 38x38 (its only non-absolute child) - so
+  // this ring always matches the button's real footprint with no hand-kept
+  // duplicate width/height.
+  pulseRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 19,
+    borderWidth: 2,
+    borderColor: colors.neon,
+  },
 });

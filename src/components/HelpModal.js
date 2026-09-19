@@ -3,7 +3,7 @@ import { Modal, View, Text, Pressable, ScrollView, StyleSheet } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
-import { HELP_HIGHLIGHTS, HELP_SECTIONS, findHelpSection } from '../helpContent';
+import { HELP_QUICK_START, HELP_SECTIONS, findHelpSection } from '../helpContent';
 
 // Fixed (not theme-derived) so each gesture kind stays visually distinct no
 // matter what accent color the user has picked - same reasoning as colors.gold
@@ -23,10 +23,13 @@ const TAG_LABELS = {
 /**
  * Two render modes, one component - both are just different slices of the
  * same src/helpContent.js data:
- *  - `sectionId` unset (opened from Settings' "(i)"): the full guide - the
- *    11 "secret moves" highlights, then every section as a tap-to-expand
- *    accordion row (user request: "categorical highlights... then a list
- *    with each of the next sections... clickable... expands even more").
+ *  - `sectionId` unset (opened from Settings' "(i)"): the full guide - a
+ *    short always-visible Quick Start (HELP_QUICK_START), then every
+ *    section as a tap-to-expand accordion row. The gestures with no
+ *    on-screen hint anywhere else in the app get a small gold sparkle badge
+ *    inline on their row (`secret: true` in helpContent.js) instead of
+ *    being repeated in a separate top-level list - an earlier version had
+ *    both, which just said everything twice (user feedback).
  *  - `sectionId` set (opened from the Cuisines header's "(i)", only while
  *    expanded): just that one section's content, already open, no
  *    accordion - "all applicable training material in a scrollable page"
@@ -39,12 +42,10 @@ export default function HelpModal({ visible, onClose, sectionId }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [expandedId, setExpandedId] = useState(null);
-  const [highlightsOpen, setHighlightsOpen] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setExpandedId(null);
-      setHighlightsOpen(false);
     }
   }, [visible]);
 
@@ -70,6 +71,9 @@ export default function HelpModal({ visible, onClose, sectionId }) {
             {TAG_LABELS[move.tag] ? `${TAG_LABELS[move.tag]} · ` : ''}
             {move.action}
           </Text>
+          {move.secret && (
+            <Ionicons name="sparkles" size={11} color={colors.gold} style={{ marginLeft: 5 }} />
+          )}
         </View>
         <Text style={styles.moveResult}>{move.result}</Text>
       </View>
@@ -106,42 +110,21 @@ export default function HelpModal({ visible, onClose, sectionId }) {
               </>
             ) : (
               <>
-                {/* Same collapsed-rectangle treatment as the section rows
-                    below (user request) - starts closed so the guide opens
-                    on a short, scannable list rather than dumping all 11
-                    highlights immediately. */}
-                <View style={styles.sectionCard}>
-                  <Pressable
-                    style={styles.sectionRow}
-                    onPress={() => setHighlightsOpen((v) => !v)}
-                  >
-                    <Ionicons name="sparkles-outline" size={18} color={colors.gold} style={{ marginRight: 10 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.sectionTitle}>11 Things Nobody Tells You</Text>
-                      {!highlightsOpen && (
-                        <Text style={styles.sectionDescCollapsed} numberOfLines={1}>
-                          Gestures and shortcuts with no on-screen hint anywhere in the app.
-                        </Text>
-                      )}
+                <View style={styles.quickStartCard}>
+                  {HELP_QUICK_START.map((item, i) => (
+                    <View key={i} style={styles.quickStartRow}>
+                      <Ionicons name={item.icon} size={16} color={colors.accent} style={{ marginRight: 10 }} />
+                      <Text style={styles.quickStartText}>{item.text}</Text>
                     </View>
-                    <Ionicons name={highlightsOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
-                  </Pressable>
-                  {highlightsOpen && (
-                    <View style={styles.sectionExpanded}>
-                      {HELP_HIGHLIGHTS.map((h, i) => (
-                        <View key={i} style={styles.highlightRow}>
-                          <Text style={styles.highlightNum}>{i + 1}</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.highlightTitle}>{h.title}</Text>
-                            <Text style={styles.highlightText}>{h.text}</Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+                  ))}
                 </View>
 
-                <Text style={styles.sectionsHead}>Every section, in order</Text>
+                {/* The gold sparkle badge on a row further down marks the
+                    gestures with no on-screen hint anywhere else in the app
+                    - previously a separate "11 Things" list duplicating
+                    these same rows; folded inline instead (user request:
+                    consolidate, cut duplication). */}
+                <Text style={styles.sectionsHead}>Full Guide</Text>
                 {HELP_SECTIONS.map((section) => {
                   const open = expandedId === section.id;
                   return (
@@ -187,15 +170,11 @@ const makeStyles = (colors) => StyleSheet.create({
   title: { color: colors.textLight, fontSize: 19, fontWeight: 'bold', flex: 1, marginRight: 10 },
   scroll: { flex: 1 },
 
-  highlightRow: {
-    flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12,
-    padding: 10, marginBottom: 6, alignItems: 'flex-start',
+  quickStartCard: {
+    backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 14,
   },
-  highlightNum: {
-    color: colors.accent, fontWeight: 'bold', fontSize: 13, width: 20,
-  },
-  highlightTitle: { color: colors.textLight, fontSize: 13, fontWeight: '700' },
-  highlightText: { color: colors.textMuted, fontSize: 12, marginTop: 2, lineHeight: 16 },
+  quickStartRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+  quickStartText: { color: colors.textLight, fontSize: 13, lineHeight: 17, flex: 1 },
 
   sectionsHead: {
     color: colors.accent, fontWeight: 'bold', fontSize: 12, letterSpacing: 1,

@@ -1168,6 +1168,7 @@ function AppInner() {
 
       <QuickFilters
         visible={showFab}
+        hapticsEnabled={preferences.haptics}
         openNowOnly={openNowOnly}
         onToggleOpenNow={() => {
           setOpenNowOnly((prev) => {
