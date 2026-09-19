@@ -14,6 +14,26 @@ const ITEM_COUNT = 5;
 // with the actual layout by hand.
 const ITEM_GAP = 6;
 const BAR_PADDING = 8;
+// Real, unscaled dimensions this bar actually renders at - kept here (not
+// hand-copied into App.js) so anything that needs to clear the bar always
+// stays correct if these ever change. ITEM_HEIGHT/BAR_BOTTOM_OFFSET are
+// also used directly in this file's own styles below (item.height, barRing
+// .bottom) - defined once here instead of repeating the numbers in two
+// places that could drift out of sync.
+const ITEM_HEIGHT = 56;
+const BAR_BOTTOM_OFFSET = 22;
+// Ring thickness (px) of the gradient border - the outer LinearGradient is
+// sized to the full bar, `barInner` insets by exactly this much via padding,
+// so only this sliver of the gradient shows around the blurred panel.
+export const RING_WIDTH = 1.5;
+export const BAR_HEIGHT = ITEM_HEIGHT + BAR_PADDING * 2 + RING_WIDTH * 2;
+// Total clearance Home's own content needs above the screen's bottom edge
+// to sit flush above the bar with real breathing room, not tucked behind
+// it - the bar's own bottom offset, its full height, and (user request)
+// that SAME offset again as the gap between the bar's top edge and
+// whatever sits above it, so the gap below the coin visually matches the
+// gap below the bar itself.
+export const BOTTOM_NAV_CLEARANCE = BAR_BOTTOM_OFFSET * 2 + BAR_HEIGHT;
 
 /**
  * Persistent 5-destination bottom nav (Option C from the design canvas
@@ -204,28 +224,35 @@ function PlacesIcon({ color }) {
   );
 }
 
-// Ring thickness (px) of the gradient border - the outer LinearGradient is
-// sized to the full bar, `barInner` insets by exactly this much via padding,
-// so only this sliver of the gradient shows around the blurred panel.
-const RING_WIDTH = 1.5;
 const BAR_RADIUS = 26;
 
 const makeStyles = (colors) => StyleSheet.create({
   // Shadow/elevation live here (not barInner) - Android's elevation needs
   // an opaque backing to clip its shadow against, and a LinearGradient
   // fully fills its own bounds, so it qualifies same as any solid View.
+  //
+  // elevation bumped 12 -> 24 (user request: lean into the bar visually
+  // "levitating" over the swipable content behind it, rather than reading
+  // as a docked footer - the coin sitting partly behind the bar already
+  // reads as intentional layering once the shadow actually sells it).
+  // shadowOffset/shadowOpacity/shadowRadius are iOS-only - Android reads
+  // ONLY the `elevation` number for its shadow's reach/softness, same
+  // platform split already documented on FrostedGlass's own glow. At 12
+  // the shadow was real but too subtle against this app's already-dark
+  // background to visibly convey "floating" - 24 gives a noticeably wider,
+  // softer cast without tipping into looking like a rendering glitch.
   barRing: {
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: 22,
+    bottom: BAR_BOTTOM_OFFSET,
     borderRadius: BAR_RADIUS,
     padding: RING_WIDTH,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.6,
     shadowRadius: 30,
-    elevation: 12,
+    elevation: 24,
   },
   barInner: {
     flexDirection: 'row',
@@ -255,7 +282,7 @@ const makeStyles = (colors) => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 56,
+    height: ITEM_HEIGHT,
   },
   // The sliding highlight itself - absolutely positioned so `translateX` can
   // animate it between slots independent of the icons' own normal flex flow.
@@ -274,7 +301,7 @@ const makeStyles = (colors) => StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: BAR_PADDING,
-    height: 56,
+    height: ITEM_HEIGHT,
     borderRadius: 18,
     backgroundColor: `${colors.accent}40`,
   },

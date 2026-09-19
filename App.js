@@ -40,7 +40,7 @@ import ResultCard from './src/components/ResultCard';
 import InviteFriendModal from './src/components/InviteFriendModal';
 import HistoryFavoritesOverlay from './src/components/HistoryFavoritesOverlay';
 import QuickFilters from './src/components/QuickFilters';
-import BottomNav from './src/components/BottomNav';
+import BottomNav, { BOTTOM_NAV_CLEARANCE } from './src/components/BottomNav';
 import MyPlacesHub from './src/components/MyPlacesHub';
 import SettingsPanel from './src/components/SettingsPanel';
 import DetailModal from './src/components/DetailModal';
@@ -1307,10 +1307,16 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   // shrinks proportionally right along with everything else, while the real
   // inset itself is left unscaled since it's already an accurate per-device
   // value, not a guess that needs shrinking.
-  // paddingBottom similarly adds insets.bottom (home-indicator/gesture-bar
-  // clearance) on top of the original 70*vscale bottom-of-screen buffer -
-  // see the paddingBottom history above this style used to have, now
-  // reclaimed as pure spacing rather than notch/gesture-bar clearance.
+  // paddingBottom adds insets.bottom (home-indicator/gesture-bar clearance)
+  // on top of BOTTOM_NAV_CLEARANCE - BottomNav.js's own real, unscaled
+  // dimensions (its bottom offset, height, and that same offset again as
+  // the requested gap above it - see that file's own comment), not a
+  // decorative buffer. Deliberately NOT multiplied by vscale like
+  // paddingTop's push-down is - this exists to clear a real, fixed-size UI
+  // element (the nav bar), and letting it shrink on short screens would
+  // just let the coin sit behind the bar again exactly where the shrinking
+  // hurts most (user report: "the coin is currently cut off by the bottom
+  // bar... it needs a little space from the bar").
   // REVERTED back to 'space-between' - briefly tried 'flex-end' (closing the
   // gap between Cuisines and the food strip, pulling the raccoon/panels down
   // with the coin) under a wrong reading of "move the coin down." Corrected
@@ -1325,7 +1331,7 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   homeScreen: {
     flex: 1, justifyContent: 'space-between',
     paddingTop: insets.top + 38 * vscale,
-    paddingBottom: insets.bottom + 70 * vscale,
+    paddingBottom: insets.bottom + BOTTOM_NAV_CLEARANCE,
   },
   // REVERTED to the original tuned negative margin (see homeScreen's comment
   // above for why the 'flex-end' experiment this was paired with got undone).
