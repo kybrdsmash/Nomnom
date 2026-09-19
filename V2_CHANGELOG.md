@@ -2,6 +2,20 @@
 
 What to actually test for on your phone, build by build. Newest at the top. Each entry lists what's NEW in that specific build; everything from earlier entries is still there too (this is cumulative, not a diff).
 
+## versionCode 28 — Settings drawer, Favorites↔History swap, layout correction, and real bug fixes
+
+Big batch from a fast back-and-forth session. Highlights:
+
+- **Settings is now a right-side slide-out drawer** (full height, scrollable) instead of a small bottom-left popup - room to grow as more preferences get added. The old fallback gear stays hidden behind BottomNav's own Settings icon, same as before.
+- **BottomNav swap: Favorites replaces History as the 4th icon** (heart, direct 1-tap shortcut - it's the most-used saved list). History moved into My Places' own tab set, replacing Favorites there.
+- **Minimum Rating moved from Home into Settings** as a rarely-touched preference (you said you never touch it) - Home no longer shows a dedicated ratings panel.
+- **Layout correction**: earlier tonight I mistakenly closed the gap between the Cuisines panel and the food strip, pulling the raccoon/travel/cuisines panels down with the coin. Reverted - those stay at the top (low-contact, thumb-reach doesn't matter for them) and the gap is preserved on purpose as room for the future falling-food animation.
+- **Real bugs fixed along the way**: the frosted-glass ring was blue-to-gold (a fixed, non-customizable color clashing with your actual accent) and visually "too strong" because a real background-layer bug let the gradient dominate instead of reading as a subtle edge - both fixed, and the ring is now tied to your existing Settings > Appearance color picker like everything else. Also fixed BottomNav's active-tab highlight never actually reaching "Settings" (a real data bug, not an animation bug - `activeNavTab` never considered `showSettingsMenu`).
+- Fave-cuisine-preset button moved to the right side of the Cuisines row (was reading as "wrong side"), with its text resized to better match the Cuisines label next to it.
+- BottomNav icons are 10% larger.
+
+Everything is crash-checked and screenshot-verified through the new free local WSL build pipeline - zero EAS cloud credits used for this whole batch.
+
 ## versionCode 24 — BottomNav highlight now slides between tabs
 
 The active-tab highlight used to snap instantly between icons - tap Places, it just teleported there with no sense of motion. It now animates: one shared highlight slides smoothly to whichever tab you tap, instead of each icon carrying its own on/off style. Static resting-state confirmed unchanged (screenshotted, matches v23 exactly) - the actual sliding motion needs to be checked live on your phone by tapping between tabs, since that can't be verified from a screenshot.

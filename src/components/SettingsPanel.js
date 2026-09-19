@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, Animated, Easing, ScrollView, Platform, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
@@ -24,19 +25,46 @@ const clampLight = (l) => Math.min(LIGHT_MAX, Math.max(LIGHT_MIN, l));
 const brightnessStops = (hue) =>
   Array.from({ length: 7 }, (_, i) => hslToHex(hue, PICKER_SAT, LIGHT_MIN + (i * (LIGHT_MAX - LIGHT_MIN)) / 6));
 
+// Fixed drawer width (not a screen-width fraction) - the slide animation
+// below drives translateX by exactly this amount, so it has to be a real
+// number rather than a percentage.
+const DRAWER_WIDTH = 300;
+
 /**
- * Bottom-left settings menu, mirroring FabMenu's bottom-right expand
- * behavior: tap the gear to expand a panel with Appearance (a soft hue
- * picker driving the whole app's accent color), Profile (a display name for
- * friend-spin chat/sessions), and a few Preference toggles. Tapping anywhere
- * outside the expanded panel closes it.
+ * Right-side slide-out settings drawer: tap the gear (or BottomNav's
+ * Settings icon) to slide it in over Appearance (a soft hue picker driving
+ * the whole app's accent color), Profile (a display name for friend-spin
+ * chat/sessions), and a few Preference toggles. Tapping the backdrop closes
+ * it. The gear trigger itself is hidden whenever BottomNav is showing (see
+ * hideTrigger below) - BottomNav's own Settings icon opens this exact same
+ * drawer now.
+ *
+ * Was a small bottom-left popup sized to its own content - moved to a full-
+ * height right-side drawer (user request: "makes more sense... so we can
+ * add more content as needed" - the popup was already getting cramped once
+ * Minimum Rating moved in here). The drawer itself stays mounted whenever
+ * `visible` is true and is animated off-screen via translateX rather than
+ * conditionally unmounted, so closing it can actually slide back out instead
+ * of just vanishing.
  */
 export default function SettingsPanel({
   visible, hideTrigger, showSettingsMenu, setShowSettingsMenu,
-  profile, setProfile, preferences, setPreferences, onOpenBugReport, onOpenHelp,
+  profile, setProfile, preferences, setPreferences, minRating, setMinRating,
+  onOpenBugReport, onOpenHelp,
 }) {
   const { colors, accentColor, setAccentColor } = useTheme();
-  const styles = makeStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = makeStyles(colors, insets);
+  const drawerX = useRef(new Animated.Value(DRAWER_WIDTH)).current;
+
+  useEffect(() => {
+    Animated.timing(drawerX, {
+      toValue: showSettingsMenu ? 0 : DRAWER_WIDTH,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [showSettingsMenu]);
   const [hue, setHue] = useState(() => hexToHsl(accentColor).h);
   const [lightness, setLightness] = useState(() => clampLight(hexToHsl(accentColor).l));
   // Tap the Color/Brightness chip (top-right of this section) to switch
@@ -136,6 +164,28 @@ export default function SettingsPanel({
     })
   ).current;
 
+  // Min-rating drag row - relocated from FilterPanel.js's Home screen (user
+  // feedback: "I never really touch it... most of the time that's food with
+  // 3.5 stars or higher" - moved here as a rarely-touched preference,
+  // matching Units' existing placement, rather than a permanently-visible
+  // Home screen control almost nobody adjusts after picking once).
+  const starRowRef = useRef(null);
+  const starBoundsRef = useRef({ pageX: 0, width: 0 });
+  const ratingFromPageX = (pageX) => {
+    const { pageX: originX, width } = starBoundsRef.current;
+    if (!width) return minRating;
+    const ratio = Math.min(1, Math.max(0, (pageX - originX) / width));
+    const raw = 1 + ratio * 4; // 5 stars spanning rating 1..5
+    return Math.min(5, Math.max(1, Math.round(raw * 10) / 10));
+  };
+  const starPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => setMinRating(ratingFromPageX(evt.nativeEvent.pageX)),
+      onPanResponderMove: (evt) => setMinRating(ratingFromPageX(evt.nativeEvent.pageX)),
+    })
+  ).current;
+
   if (!visible) return null;
 
   const previewColor = hslToHex(hue, PICKER_SAT, lightness);
@@ -146,18 +196,30 @@ export default function SettingsPanel({
       {showSettingsMenu && (
         <Pressable style={styles.backdrop} onPress={() => setShowSettingsMenu(false)} />
       )}
-      <View style={styles.wrapper}>
-        {showSettingsMenu && (
-          // 'position' behavior (not 'padding'/'height') suits a floating,
-          // absolutely-positioned panel like this rather than a full-screen
-          // layout - shifts the panel itself up above the keyboard instead
-          // of resizing/padding a parent that isn't meant to grow. This
-          // wrapper existed once already (see git history) but was lost in a
-          // later merge - regressed for both Profile and Report a Bug, not
-          // just the field most recently reported (user report: "when
-          // someone is adding their Profile name, the keyboard covers it").
-          <KeyboardAvoidingView behavior="position">
-          <View style={styles.panel}>
+      {/* Stays mounted whenever `visible` is true (not gated by
+          showSettingsMenu) and slides via translateX instead of being
+          conditionally rendered - so closing it actually animates back
+          off-screen instead of just vanishing. pointerEvents off while
+          closed so the off-screen drawer can't eat touches meant for
+          whatever's underneath it. behavior="height" (not the old
+          "position") suits a full-height container better - it resizes the
+          drawer's own height for the keyboard, letting the ScrollView
+          inside scroll the focused field into view naturally, rather than
+          shifting the whole drawer's Y position the way "position" did for
+          the old bottom-anchored popup. */}
+      <Animated.View
+        style={[styles.drawer, { transform: [{ translateX: drawerX }] }]}
+        pointerEvents={showSettingsMenu ? 'auto' : 'none'}
+      >
+        <KeyboardAvoidingView
+          style={styles.drawerFlex}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ScrollView
+            style={styles.drawerFlex}
+            contentContainerStyle={styles.drawerContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitleInline}>Appearance</Text>
               {/* The mode switch itself now, not just an indicator - tap to
@@ -248,6 +310,39 @@ export default function SettingsPanel({
               />
             </View>
 
+            {/* Relocated from the Home screen (see the hook comments above
+                for why) - full-width block like Appearance above, not the
+                compact label+control row Haptics/Units use, since 5 stars
+                need real horizontal room even at a smaller size than they
+                had on Home. */}
+            <View style={styles.minRatingSection}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionTitleInline}>Minimum Rating</Text>
+              </View>
+              <View style={styles.minRatingRow}>
+                <View
+                  ref={starRowRef}
+                  style={styles.minRatingStars}
+                  onLayout={() => {
+                    starRowRef.current?.measureInWindow((pageX, _pageY, width) => {
+                      starBoundsRef.current = { pageX, width };
+                    });
+                  }}
+                  {...starPan.panHandlers}
+                >
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    let iconName = 'star-outline';
+                    if (minRating >= star) iconName = 'star';
+                    else if (minRating >= star - 0.5) iconName = 'star-half';
+                    return (
+                      <Ionicons key={star} name={iconName} size={22} color={colors.gold} style={{ paddingHorizontal: 1 }} />
+                    );
+                  })}
+                </View>
+                <Text style={styles.minRatingCaption}>{minRating.toFixed(1)}+</Text>
+              </View>
+            </View>
+
             {/* The help icon doesn't depend on Firebase (it's static
                 in-app content) so it's not gated behind isFirebaseConfigured
                 the way Report a Bug is - own touch target, real gap
@@ -264,44 +359,64 @@ export default function SettingsPanel({
                 </Pressable>
               )}
             </View>
-          </View>
-          </KeyboardAvoidingView>
-        )}
-        {/* BottomNav's own Settings icon toggles this exact same
-            showSettingsMenu state now and sits almost exactly on top of this
-            wrapper's bottom-left corner (both anchor near bottom:22-30/
-            left:16-30) - a real visual collision, not just redundant
-            coexistence, since this button's opaque circle fully hid
-            BottomNav's Home icon underneath it (confirmed on-device). Hidden
-            whenever BottomNav is showing rather than deleted outright, since
-            hideTrigger is driven by the exact same flag (showBottomNav in
-            App.js) that gates BottomNav's own visibility - if that ever
-            changes, this button reappears as a safe fallback. */}
-        {!hideTrigger && (
-          <Pressable style={styles.gearBtn} onPress={() => setShowSettingsMenu(!showSettingsMenu)}>
-            <Ionicons name="settings-sharp" size={22} color={colors.textDark} />
-          </Pressable>
-        )}
-      </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Animated.View>
+      {/* BottomNav's own Settings icon toggles this exact same
+          showSettingsMenu state now and used to sit almost exactly on top of
+          this button's old bottom-left position (a real visual collision,
+          not just redundant coexistence - confirmed on-device). Hidden
+          whenever BottomNav is showing rather than deleted outright, since
+          hideTrigger is driven by the exact same flag (showBottomNav in
+          App.js) that gates BottomNav's own visibility - if that ever
+          changes, this button reappears as a safe fallback. Left in its
+          original bottom-left spot even though the drawer now opens from
+          the right - it's essentially always hidden today anyway (hideTrigger
+          is true whenever BottomNav shows, which is every time this is
+          visible at all), so it wasn't worth relocating for a path that
+          doesn't currently render. */}
+      {!hideTrigger && (
+        <Pressable style={styles.gearBtn} onPress={() => setShowSettingsMenu(!showSettingsMenu)}>
+          <Ionicons name="settings-sharp" size={22} color={colors.textDark} />
+        </Pressable>
+      )}
     </>
   );
 }
 
-const makeStyles = (colors) => StyleSheet.create({
+const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create({
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 },
-  wrapper: { position: 'absolute', bottom: 30, left: 30, alignItems: 'flex-start', zIndex: 50 },
-  gearBtn: { backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', ...buttonDepth },
-  // ...buttonDepth adds the shadowColor/shadowOffset/shadowOpacity/shadowRadius
-  // set iOS actually needs (bare elevation renders completely flat there) -
-  // elevation re-pinned to 6 after the spread to keep this panel's original
-  // Android depth unchanged.
-  panel: { backgroundColor: colors.card, borderRadius: 18, padding: 16, marginBottom: 12, width: 260, ...buttonDepth, elevation: 6 },
+  // Own absolute position now (used to be a child of `wrapper`, which also
+  // held the panel - that shared anchor is gone now that the drawer lives on
+  // the opposite edge of the screen from this fallback trigger).
+  gearBtn: {
+    position: 'absolute', bottom: 30, left: 30, zIndex: 50,
+    backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23,
+    alignItems: 'center', justifyContent: 'center', ...buttonDepth,
+  },
+  // Full height, fixed width, docked to the right edge - replaces the old
+  // content-sized bottom-left `panel` (user request: a real drawer "so we
+  // can add more content as needed" rather than a popup that keeps getting
+  // more cramped). shadowOffset points left (negative width) since the
+  // shadow should fall toward the screen's content, not off the right edge
+  // where nothing would ever see it.
+  drawer: {
+    position: 'absolute', top: 0, bottom: 0, right: 0, width: DRAWER_WIDTH,
+    backgroundColor: colors.card, zIndex: 55,
+    elevation: 20, shadowColor: '#000', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.4, shadowRadius: 12,
+  },
+  drawerFlex: { flex: 1 },
+  drawerContent: { padding: 20, paddingTop: insets.top + 20, paddingBottom: insets.bottom + 30 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 8 },
   modeIndicator: { flexDirection: 'row', alignItems: 'center' },
   modeIndicatorText: { color: colors.gold, fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
   modeHint: { color: colors.textMuted, fontSize: 11, fontStyle: 'italic', marginTop: 4 },
   sectionTitle: { color: colors.accent, fontWeight: 'bold', fontSize: 13, letterSpacing: 1, marginBottom: 8, marginTop: 10 },
   sectionTitleInline: { color: colors.accent, fontWeight: 'bold', fontSize: 13, letterSpacing: 1 },
+  minRatingSection: { marginTop: 4 },
+  minRatingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  minRatingStars: { flexDirection: 'row', paddingVertical: 6 },
+  minRatingCaption: { color: colors.textMuted, fontSize: 13, marginLeft: 8 },
   // Same tap-or-drag touch area as FilterPanel's distTouchArea - paddingVertical
   // gives the dial room to sit centered on the thin gradient bar without the
   // touch target itself being as thin as the bar.

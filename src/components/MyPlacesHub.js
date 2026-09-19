@@ -39,6 +39,18 @@ function relativeTime(ts) {
   if (days < 30) return `${days}d ago`;
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
+// Same helper as HistoryFavoritesOverlay.js's own copy - kept separate per
+// the same precedent as the other small helpers above.
+function formatDateLabel(timestamp) {
+  const d = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const isSameDay = (a, b) => a.toDateString() === b.toDateString();
+  if (isSameDay(d, today)) return 'Today';
+  if (isSameDay(d, yesterday)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 /**
  * "My Places" - the design canvas's consolidation of what used to be three
@@ -48,20 +60,29 @@ function relativeTime(ts) {
  * tab, matching JournalOverlay's existing Friends tab - not a new concept,
  * just relocated here.
  *
+ * Favorites itself moved OUT to become its own direct BottomNav icon (user
+ * request: "Favorites SHOULD be a bottom icon... it should replace
+ * history" - it's the single most-used saved list, worth a dedicated 1-tap
+ * shortcut rather than living behind this hub's tab selector). History took
+ * its old spot here instead ("History can replace favorites in my places") -
+ * day-grouped, same rendering approach as HistoryFavoritesOverlay's own
+ * History tab (that screen still owns the standalone Favorites-only view
+ * BottomNav's new icon opens directly).
+ *
  * "At the Table" (starting a brand-new review) isn't a fifth visible tab -
  * same as it wasn't a separately-branded destination before - it's reached
  * via the + button while on the Journal tab, exactly like JournalOverlay
  * did, just via a plain boolean here instead of a third segmented value.
  */
 export default function MyPlacesHub({
-  onBack, favorites, tryLater, journal, friends, location, travelType,
+  onBack, favorites, tryLater, history, journal, friends, location, travelType,
   onOpenMaps, onShowDetails, onRemoveTryLater, onAddFavorite, onSaveAtTheTable,
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors, insets);
 
-  const [tab, setTab] = useState('favorites'); // 'favorites' | 'tryLater' | 'journal' | 'friends'
+  const [tab, setTab] = useState('history'); // 'history' | 'tryLater' | 'journal' | 'friends'
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState(null);
   const [cityFilter, setCityFilter] = useState(null);
@@ -110,41 +131,47 @@ export default function MyPlacesHub({
     return () => { cancelled = true; };
   }, [tab, friends]);
 
-  const titles = { favorites: 'Favorites', tryLater: 'Try Later', journal: 'Journal', friends: 'Friends' };
+  const titles = { history: 'History', tryLater: 'Try Later', journal: 'Journal', friends: 'Friends' };
   const emptyMessages = {
-    favorites: 'No favorites saved yet.',
+    history: 'Nothing seen yet - flip or run a bracket to populate this.',
     tryLater: 'Nothing on your try list yet - tap + to search for a place, or add one from its detail view.',
     journal: 'No reviews yet - tap + to add one, or open any spot\'s details and tap the pencil.',
     friends: 'No friends yet - complete a session from Feast with Friends to connect with someone.',
   };
   const searchPlaceholders = {
-    favorites: 'Search favorites…',
+    history: 'Search history…',
     tryLater: 'Search try later…',
     journal: 'Filter your reviews…',
   };
 
-  const isFavTryTab = tab === 'favorites' || tab === 'tryLater';
+  // Both get a search box; only Try Later gets city grouping/chips - History
+  // is grouped by day instead (see the history branch of listContent below),
+  // which is the more useful axis there, same reasoning
+  // HistoryFavoritesOverlay's own History tab already established.
+  const isSearchableTab = tab === 'history' || tab === 'tryLater';
+  const showCityFilter = tab === 'tryLater';
 
   const sourceList =
-    tab === 'favorites' ? favorites
+    tab === 'history' ? history
     : tab === 'tryLater' ? tryLater
     : [];
-  const availableTypes = isFavTryTab
+  const availableTypes = isSearchableTab
     ? [...new Set(sourceList.map((s) => s.type).filter(Boolean))].sort()
     : [];
-  const availableCities = isFavTryTab
+  const availableCities = showCityFilter
     ? [...new Set(sourceList.map((s) => cityFromAddress(s.address)))].sort()
     : [];
-  const filtered = isFavTryTab
+  const filtered = isSearchableTab
     ? sourceList.filter((spot) => {
         const matchesQuery = !searchQuery.trim() || spot.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
         const matchesType = !typeFilter || spot.type === typeFilter;
-        const matchesCity = !cityFilter || cityFromAddress(spot.address) === cityFilter;
+        const matchesCity = !showCityFilter || !cityFilter || cityFromAddress(spot.address) === cityFilter;
         return matchesQuery && matchesType && matchesCity;
       })
     : [];
 
-  // renderRow - Favorites/Try Later, adapted from HistoryFavoritesOverlay.
+  // renderRow - Try Later only now (Favorites moved out to its own BottomNav
+  // icon/HistoryFavoritesOverlay screen), adapted from that same file.
   const renderRow = (spot, i, { showTryLaterToggle, rowRef } = {}) => {
     const isTry = tryLater.some((t) => t.id === spot.id);
     return (
@@ -199,6 +226,43 @@ export default function MyPlacesHub({
             onSelectLetter={(letter) => jumpToLetter(city, letter)}
           />
         )}
+      </View>
+    );
+  };
+
+  // History - day-grouped, adapted from HistoryFavoritesOverlay's own
+  // History tab. Shows both a favorite-heart and a try-later-bookmark quick
+  // toggle per row (unlike renderRow above, Try Later's own row, which only
+  // gets the bookmark) - matches that source file's reasoning: a place
+  // surfaced from search history hasn't been curated onto either list yet,
+  // so both quick actions are useful there.
+  const renderHistoryRow = (spot, i) => {
+    const isFav = favorites.some((f) => f.id === spot.id);
+    const isTry = tryLater.some((t) => t.id === spot.id);
+    return (
+      <View key={`${spot.id}-${i}`} style={styles.card}>
+        {spot.photoUrl ? (
+          <Pressable onPress={() => setFullscreenPhoto(spot.photoUrl)}>
+            <Image source={{ uri: spot.photoUrl }} style={styles.rowImage} />
+          </Pressable>
+        ) : (
+          <View style={styles.rowImagePlaceholder}>
+            <Ionicons name="restaurant" size={20} color={colors.textMuted} />
+          </View>
+        )}
+        <Pressable style={styles.rowTextCol} onPress={() => onShowDetails(spot)}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{spot.name}</Text>
+          <Text style={styles.rowSub} numberOfLines={1}>{joinParts([`⭐ ${spot.rating}`, spot.type])}</Text>
+        </Pressable>
+        <Pressable onPress={() => onAddFavorite(spot)} style={styles.rowIconBtn} hitSlop={6}>
+          <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={colors.danger} />
+        </Pressable>
+        <Pressable onPress={() => onRemoveTryLater(spot)} style={styles.rowIconBtn} hitSlop={6}>
+          <Ionicons name={isTry ? 'bookmark' : 'bookmark-outline'} size={20} color={colors.gold} />
+        </Pressable>
+        <Pressable onPress={() => onOpenMaps(spot)} style={styles.goBtn}>
+          <Ionicons name="navigate" size={22} color={colors.textDark} />
+        </Pressable>
       </View>
     );
   };
@@ -260,10 +324,21 @@ export default function MyPlacesHub({
     </Pressable>
   );
 
-  // History (dedup'd) + recently reviewed feed AddSpotModal's picker, same
-  // as HistoryFavoritesOverlay did - My Places has no History of its own
-  // (that's still its own BottomNav destination), so this hub is only ever
-  // adding TO favorites/tryLater, not reading history as a list.
+  // History can contain the same spot more than once (seen again on a
+  // different day) - deduped here (keep the first/most-recent occurrence,
+  // since history is already newest-first) for the AddSpotModal picker,
+  // same as HistoryFavoritesOverlay's own copy of this exact logic.
+  const dedupedHistory = [];
+  const seenHistoryIds = new Set();
+  (history || []).forEach((spot) => {
+    if (!seenHistoryIds.has(spot.id)) {
+      seenHistoryIds.add(spot.id);
+      dedupedHistory.push(spot);
+    }
+  });
+
+  // Recently-reviewed spots feed AddSpotModal's picker, same as
+  // HistoryFavoritesOverlay did.
   const recentlyReviewed = Object.values(journal || {})
     .filter((entries) => entries.length > 0)
     .map((entries) => entries.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0])
@@ -271,17 +346,37 @@ export default function MyPlacesHub({
     .map((entry) => entry.spot);
 
   let listContent;
-  if (tab === 'favorites' || tab === 'tryLater') {
+  if (tab === 'history' || tab === 'tryLater') {
     if (sourceList.length === 0) {
       listContent = <Text style={styles.emptyText}>{emptyMessages[tab]}</Text>;
     } else if (filtered.length === 0) {
       listContent = <Text style={styles.emptyText}>No matches - try a different search or filter.</Text>;
-    } else if (tab === 'favorites') {
-      listContent = groupByCity(filtered, location).map(({ city, spots }) => renderCitySection(city, spots));
-    } else {
+    } else if (tab === 'tryLater') {
       listContent = groupByCity(filtered, location).map(({ city, spots }) =>
         renderCitySection(city, spots, { showTryLaterToggle: true })
       );
+    } else {
+      // History - day-grouped in array order (App.js unshifts newest-first
+      // on every view, same as HistoryFavoritesOverlay's own History tab),
+      // not city-grouped - see isSearchableTab/showCityFilter above for why.
+      const dateGroups = [];
+      const groupByKey = new Map();
+      filtered.forEach((spot) => {
+        const key = new Date(spot.viewedAt || 0).toDateString();
+        let group = groupByKey.get(key);
+        if (!group) {
+          group = { key, spots: [] };
+          groupByKey.set(key, group);
+          dateGroups.push(group);
+        }
+        group.spots.push(spot);
+      });
+      listContent = dateGroups.map((group) => (
+        <View key={group.key} style={{ marginBottom: 8 }}>
+          <Text style={styles.categoryHeader}>{formatDateLabel(group.spots[0].viewedAt || 0)}</Text>
+          {group.spots.map((spot, i) => renderHistoryRow(spot, i))}
+        </View>
+      ));
     }
   } else if (tab === 'journal') {
     if (mineRows.length === 0) {
@@ -336,8 +431,11 @@ export default function MyPlacesHub({
     }
   }
 
-  const showSearch = (isFavTryTab && sourceList.length > 0) || (tab === 'journal' && mineRows.length > 0);
-  const showFab = (isFavTryTab || tab === 'journal') && !showAtTable;
+  const showSearch = (isSearchableTab && sourceList.length > 0) || (tab === 'journal' && mineRows.length > 0);
+  // History excluded - it's auto-populated by search activity, not manually
+  // curated, so an add-FAB doesn't apply there (matches
+  // HistoryFavoritesOverlay's own History tab, which never had one either).
+  const showFab = (tab === 'tryLater' || tab === 'journal') && !showAtTable;
 
   return (
     <View style={styles.overlayScreen}>
@@ -352,7 +450,7 @@ export default function MyPlacesHub({
       <View style={{ paddingHorizontal: 20 }}>
         <SlidableSegmented
           options={[
-            { value: 'favorites', label: 'Favorites' },
+            { value: 'history', label: 'History' },
             { value: 'tryLater', label: 'Try Later' },
             { value: 'journal', label: 'Journal' },
             { value: 'friends', label: 'Friends' },
@@ -389,7 +487,7 @@ export default function MyPlacesHub({
             />
           </View>
         )}
-        {isFavTryTab && availableCities.length > 1 && (
+        {showCityFilter && availableCities.length > 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <Pressable style={[styles.chip, !cityFilter && styles.chipActive]} onPress={() => setCityFilter(null)}>
               <Text style={[styles.chipText, !cityFilter && styles.chipTextActive]}>All Places</Text>
@@ -405,7 +503,7 @@ export default function MyPlacesHub({
             ))}
           </ScrollView>
         )}
-        {isFavTryTab && availableTypes.length > 1 && (
+        {isSearchableTab && availableTypes.length > 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <Pressable style={[styles.chip, !typeFilter && styles.chipActive]} onPress={() => setTypeFilter(null)}>
               <Text style={[styles.chipText, !typeFilter && styles.chipTextActive]}>All</Text>
@@ -433,14 +531,17 @@ export default function MyPlacesHub({
         </Pressable>
       )}
 
+      {/* mode/onToggle are unconditionally 'tryLater' now - the FAB that
+          opens this (showFab above) only ever renders for the Try Later tab,
+          Favorites having moved out to its own BottomNav destination. */}
       <AddSpotModal
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
-        mode={tab === 'tryLater' ? 'tryLater' : 'favorites'}
-        onToggle={tab === 'tryLater' ? onRemoveTryLater : onAddFavorite}
+        mode="tryLater"
+        onToggle={onRemoveTryLater}
         favorites={favorites}
         tryLater={tryLater}
-        history={[]}
+        history={dedupedHistory}
         recentlyReviewed={recentlyReviewed}
       />
 

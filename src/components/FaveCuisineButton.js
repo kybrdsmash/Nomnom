@@ -241,8 +241,10 @@ const makeStyles = (colors) => StyleSheet.create({
   // colors.card (not cardAlt) - matches the All/None/search row it shares
   // (see CuisineDropdown's topRow) so the whole control strip reads as one
   // distinct group, set apart from the cuisine bubbles below it.
+  // marginLeft spaces this from the Cuisines label to its left (this button
+  // now trails after it in the row - see FilterPanel.js's cuisineHeader).
   button: {
-    width: 92, paddingVertical: 10, paddingRight: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    width: 92, marginLeft: 12, paddingVertical: 10, paddingRight: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.card, overflow: 'hidden', ...buttonDepth, elevation: 0,
     borderWidth: 2, borderColor: 'transparent',
   },
@@ -250,7 +252,12 @@ const makeStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.accent, ...neonSelected(colors),
     elevation: 0,
   },
-  text: { color: colors.textMuted, fontWeight: '700', fontSize: 13 },
+  // Bumped from fontSize:13/textMuted to match the Cuisines label it now
+  // sits beside (user feedback: "fonts need to match... look too
+  // different") - textLight/16 reads at a much closer weight to
+  // cuisineHeaderText's 18/bold, as close as this button's fixed 92px width
+  // comfortably allows.
+  text: { color: colors.textLight, fontWeight: '700', fontSize: 16 },
   // The flash swaps the button's background to the bright accent color -
   // every other accent-background state in this app (cuisine bubbles, mode
   // toggle) pairs that with textDark for contrast; this one didn't, so
@@ -266,7 +273,7 @@ const makeStyles = (colors) => StyleSheet.create({
   // Same footprint as `button` so swapping into rename mode doesn't shift
   // any layout around it.
   renameBox: {
-    width: 92, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, justifyContent: 'center',
+    width: 92, marginLeft: 12, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, justifyContent: 'center',
     backgroundColor: colors.card, borderWidth: 2, borderColor: colors.neon, ...buttonDepth,
     elevation: 0,
   },

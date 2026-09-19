@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, TextInput, PanResponder, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Pressable, TextInput, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SPEEDS_MPH, neonSelected, buttonDepth, accentGradient, useVerticalScale } from '../constants';
 import { useTheme } from '../ThemeContext';
 import SlidableSegmented from './SlidableSegmented';
 import HelpModal from './HelpModal';
 import FaveCuisineButton from './FaveCuisineButton';
+import FrostedGlass from './FrostedGlass';
 
 const DIST_MAX = 20;
 // No one wants to walk more than ~2 hours to eat (user feedback) - cap each
@@ -28,8 +29,15 @@ const defaultDistanceForMode = (travelType) => {
 };
 
 /**
- * Travel-type toggle, distance slider, min-rating slider, and the collapsible
- * cuisine bubble picker. Fully controlled — all state lives in the parent.
+ * Travel-type toggle, distance/time control, and the collapsible cuisine
+ * bubble picker. Fully controlled — all state lives in the parent.
+ *
+ * Min-rating used to live here too (a 5-star drag row) - moved to
+ * SettingsPanel.js as a rarely-touched preference instead (user feedback:
+ * "I never really touch it... most of the time that's food with 3.5 stars
+ * or higher" - not worth a permanently-visible Home screen control for
+ * something almost nobody adjusts after picking once, matching Units'
+ * existing placement there).
  */
 export default function FilterPanel({
   travelType,
@@ -37,8 +45,6 @@ export default function FilterPanel({
   distance,
   setDistance,
   estimatedMaxTime,
-  minRating,
-  setMinRating,
   showCuisines,
   setShowCuisines,
   selectedCuisines,
@@ -84,23 +90,6 @@ export default function FilterPanel({
     if (distance > cap) setDistance(cap);
   }, [travelType]);
 
-  const starRowRef = useRef(null);
-  const starBoundsRef = useRef({ pageX: 0, width: 0 });
-  const ratingFromPageX = (pageX) => {
-    const { pageX: originX, width } = starBoundsRef.current;
-    if (!width) return minRating;
-    const ratio = Math.min(1, Math.max(0, (pageX - originX) / width));
-    const raw = 1 + ratio * 4; // 5 stars spanning rating 1..5
-    return Math.min(5, Math.max(1, Math.round(raw * 10) / 10));
-  };
-  const starPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => setMinRating(ratingFromPageX(evt.nativeEvent.pageX)),
-      onPanResponderMove: (evt) => setMinRating(ratingFromPageX(evt.nativeEvent.pageX)),
-    })
-  ).current;
-
   // Converts typed minutes back into the distance the sliders/searches use.
   const commitTime = () => {
     const mins = parseInt(timeText, 10);
@@ -113,7 +102,7 @@ export default function FilterPanel({
 
   return (
     <>
-      <View style={styles.sliderContainer}>
+      <FrostedGlass style={styles.sliderRing} contentStyle={styles.sliderContainer}>
         {/* Travel-type selector shrunk down and moved inline to the left of
             the time readout, rather than its own full-width row above (user
             request) - the "Travel Time:" wording is dropped too, since the
@@ -176,53 +165,22 @@ export default function FilterPanel({
             </Pressable>
           )}
         </View>
-      </View>
-
-      <View style={styles.starContainer}>
-        {/* No more standalone "Min Rating: X+ Stars" header line (user
-            request - it read as redundant with the stars themselves). The
-            numeric readout is now a small caption riding right at the end
-            of the star row, matching the distance slider's lightweight
-            "Search radius: X miles" caption above rather than a bold label
-            of its own (user request: combine the two ideas). It's a
-            sibling of the pan-handled star row, not nested inside it, so it
-            doesn't get counted into starBoundsRef's measured width - that
-            width has to stay exactly the 5 stars' span for
-            ratingFromPageX's drag math to stay correct. */}
-        <View style={styles.starRowWrapper}>
-          <View
-            ref={starRowRef}
-            style={styles.starRow}
-            onLayout={() => {
-              starRowRef.current?.measureInWindow((pageX, _pageY, width) => {
-                starBoundsRef.current = { pageX, width };
-              });
-            }}
-            {...starPan.panHandlers}
-          >
-            {[1, 2, 3, 4, 5].map((star) => {
-              let iconName = 'star-outline';
-              if (minRating >= star) iconName = 'star';
-              else if (minRating >= star - 0.5) iconName = 'star-half';
-              return (
-                <Ionicons key={star} name={iconName} size={28} color={colors.gold} style={{ paddingHorizontal: 2 }} />
-              );
-            })}
-          </View>
-          <Text style={styles.starCaption}>{minRating.toFixed(1)}+ stars</Text>
-        </View>
-      </View>
+      </FrostedGlass>
 
       {/* The bubble list itself now lives in CuisineDropdown.js - a frosted
           overlay anchored directly under this trigger (measured via
           cuisineTriggerRef, no gap) instead of expanding inline here, so
           this is just the trigger that opens it. Bottom corners square off
           while open so the two pieces read as one continuous panel rather
-          than two stacked cards with a visible seam. */}
-      <View
+          than two stacked cards with a visible seam - squareBottom below
+          drives that instead of a separate cuisineContainerOpen style, since
+          it has to override the ring/blur/tint layers together now. */}
+      <FrostedGlass
         ref={cuisineTriggerRef}
         collapsable={false}
-        style={[styles.cuisineContainer, showCuisines && styles.cuisineContainerOpen]}
+        squareBottom={showCuisines}
+        style={styles.cuisineRing}
+        contentStyle={styles.cuisineContainer}
       >
         <View style={styles.cuisineHeader}>
           {/* FaveCuisineButton drives its touch handling off a raw
@@ -232,16 +190,10 @@ export default function FilterPanel({
               e.g. SlidableSegmented's history). Keeping it a sibling of the
               toggle Pressable below, rather than nesting it inside, sidesteps
               that fight entirely - each owns its own bounding box, so there's
-              nothing to arbitrate. It sits here (not inside CuisineDropdown
-              anymore) so a saved cuisine preset can be hot-swapped in one tap
-              without ever opening the dropdown (design review). */}
-          <FaveCuisineButton
-            slots={faveCuisines}
-            onLoad={onLoadFave}
-            onSave={onSaveFave}
-            onRename={onRenameFave}
-            selectedCuisines={selectedCuisines}
-          />
+              nothing to arbitrate. Rendered AFTER cuisineHeaderMain now (user
+              feedback: read as "wrong side" sitting before the Cuisines
+              label - a secondary quick-swap control belongs trailing after
+              the primary label+chevron, not leading it). */}
           <Pressable
             style={styles.cuisineHeaderMain}
             onPress={() => {
@@ -260,7 +212,7 @@ export default function FilterPanel({
               {/* Only shown once the dropdown is actually open (user request) -
                   collapsed, this row is just the toggle; the icon would have
                   nothing to explain yet. A plain nested Pressable here is safe
-                  - unlike FaveCuisineButton above, this parent is an ordinary
+                  - unlike FaveCuisineButton below, this parent is an ordinary
                   Pressable, and RN resolves nested Pressables correctly (the
                   deeper one wins a touch landing on it, the outer only ever
                   sees what lands outside it) - no responder fight, no need
@@ -277,8 +229,15 @@ export default function FilterPanel({
             </View>
             <Ionicons name={showCuisines ? 'chevron-up' : 'chevron-down'} size={24} color={colors.accent} />
           </Pressable>
+          <FaveCuisineButton
+            slots={faveCuisines}
+            onLoad={onLoadFave}
+            onSave={onSaveFave}
+            onRename={onRenameFave}
+            selectedCuisines={selectedCuisines}
+          />
         </View>
-      </View>
+      </FrostedGlass>
 
       <HelpModal
         visible={showCuisinesHelp}
@@ -322,7 +281,11 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   // see RollingFoodStrip.js/App.js history). Touch targets (distTouchArea's
   // own paddingVertical below) deliberately aren't scaled - only decorative
   // spacing shrinks, never tappable area.
-  sliderContainer: { alignItems: 'center', backgroundColor: colors.card, padding: 14 * vscale, borderRadius: 15, width: '85%', marginBottom: 10 * vscale },
+  // Ring (outer, sizing) / Container (inner, padding+layout) split - see
+  // FrostedGlass.js's own doc comment for why. backgroundColor dropped from
+  // the inner style entirely now - the blur+tint layers provide it.
+  sliderRing: { width: '85%', marginBottom: 10 * vscale },
+  sliderContainer: { alignItems: 'center', padding: 14 * vscale },
   travelTimeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 * vscale },
   travelTimeEditRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
   travelTimeTextBtn: { marginLeft: 12 },
@@ -334,31 +297,24 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   timeValueDotted: { color: colors.textLight, fontSize: 18, fontWeight: 'bold', borderBottomWidth: 2, borderBottomColor: colors.accent, borderStyle: 'dotted', paddingBottom: 1 },
   timeUnitLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
 
-  starContainer: { alignItems: 'center', backgroundColor: colors.card, padding: 14 * vscale, borderRadius: 15, width: '85%', marginBottom: 10 * vscale },
-  starRowWrapper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  starRow: { flexDirection: 'row', paddingVertical: 10 },
-  // Same look as distCaptionInline (the search radius readout) - a muted,
-  // small readout rather than a bold header, riding right at the
-  // star row's end instead of on its own line.
-  starCaption: { color: colors.textMuted, fontSize: 14, marginLeft: 8 },
-
   // marginBottom scales with vscale too - this is the gap immediately
   // above the rolling food strip, so it's the most direct lever for keeping
   // real breathing room between them on shorter screens. cuisineHeader's own
   // padding below stays fixed - that's the trigger's tap target, not
   // decorative spacing.
-  cuisineContainer: { width: '85%', backgroundColor: colors.card, borderRadius: 15, overflow: 'hidden', marginBottom: 15 * vscale },
-  cuisineContainerOpen: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
-  // Plain row now, not itself a Pressable - FaveCuisineButton and the toggle
-  // Pressable below are touch siblings inside it (see the comment where
-  // they render for why). paddingLeft carries the trigger's old left inset;
-  // paddingRight is trimmed since FaveCuisineButton already has its own
-  // right-side padding for the dot indicator.
+  cuisineRing: { width: '85%', marginBottom: 15 * vscale },
+  cuisineContainer: {},
+  // Plain row now, not itself a Pressable - the toggle Pressable and
+  // FaveCuisineButton are touch siblings inside it (see the comment where
+  // they render for why). paddingRight is trimmed since FaveCuisineButton
+  // (now trailing, on the right) already has its own right-side padding for
+  // the dot indicator.
   cuisineHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20, paddingLeft: 20, paddingRight: 12 },
   // The actual toggle - everything that used to be cuisineHeader's own
-  // content, now just this Pressable's, with the button taking the space
-  // to its left instead of padding.
-  cuisineHeaderMain: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginLeft: 12 },
+  // content, now just this Pressable's, with the Fave button trailing after
+  // it (marginLeft on that button, not here, since it's the one now sitting
+  // second in the row).
+  cuisineHeaderMain: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cuisineHeaderLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   cuisineHeaderText: { color: colors.textLight, fontSize: 18, fontWeight: 'bold' },
   cuisineHeaderCount: { color: colors.textMuted, fontSize: 15, fontWeight: '400' },

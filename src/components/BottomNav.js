@@ -22,12 +22,11 @@ const BAR_PADDING = 8;
  * clicks-to-action goal, without the drawer's extra tap or the tab bar's
  * permanent full-width footprint).
  *
- * First increment: added alongside FabMenu.js, not replacing it yet -
- * FabMenu also carries the Open Now/Max Price/Favorites-only filter
- * toggles, which are out of scope for a pure navigation shell. Once the My
- * Places hub consolidates Favorites/Try Later/Journal into one destination,
- * FabMenu's remaining nav-only buttons (History/Favorites/TryLater/Journal)
- * become redundant with this and can come out.
+ * FabMenu.js (the old hamburger) has since been fully retired - its
+ * History/Favorites/TryLater/Journal shortcuts became redundant once
+ * MyPlacesHub existed, and its remaining Open Now/Max Price/Favorites-only
+ * filter toggles moved to QuickFilters.js as 3 always-visible buttons
+ * instead of a hamburger-expand menu.
  *
  * "Places" doesn't have its own activeView yet (it currently routes to
  * 'favorites', the closest existing screen) - the real My Places hub
@@ -35,8 +34,14 @@ const BAR_PADDING = 8;
  * follow-up increment, not part of this nav-shell pass.
  *
  * Frosted dual-tone-edge glass (design canvas review's pick over plain cool/
- * warm variants): a slim colors.neon-to-colors.gold gradient ring (built via
- * the standard RN "padding trick" - an outer LinearGradient sized to the
+ * warm variants): a slim colors.neon-to-colors.accentDeep gradient ring -
+ * both derived from the user's own customizable accent hue, so the ring
+ * stays personalized through the existing Settings > Appearance picker with
+ * no new UI, and never clashes the way pairing it with a fixed, unrelated
+ * hue could (an earlier version used colors.gold here - real hue mismatch
+ * for a non-gold accent, part of why it read as "too strong," user
+ * feedback). Built via the standard RN "padding trick" - an outer
+ * LinearGradient sized to the
  * ring thickness, an inner view inset by that much) around a real blurred
  * panel (expo-blur's BlurView, already proven elsewhere in this app -
  * CuisineDropdown.js - so no new native-module risk here) tinted with the
@@ -55,11 +60,16 @@ export default function BottomNav({ activeTab, onSelect }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
+  // 'favorites' replaces 'history' here (user request: "Favorites SHOULD be
+  // a bottom icon... it should replace history" - it's the single most-used
+  // saved list, worth its own 1-tap shortcut). History moved the other
+  // direction, into MyPlacesHub's tab set, replacing Favorites there
+  // ("History can replace favorites in my places").
   const items = [
     { key: 'home', label: 'Home' },
     { key: 'places', label: 'Places' },
     { key: 'feast', label: 'Feast' },
-    { key: 'history', label: 'History' },
+    { key: 'favorites', label: 'Favorites' },
     { key: 'settings', label: 'Settings' },
   ];
   const activeIndex = Math.max(0, items.findIndex((item) => item.key === activeTab));
@@ -100,7 +110,7 @@ export default function BottomNav({ activeTab, onSelect }) {
 
   return (
     <LinearGradient
-      colors={[colors.neon, colors.gold]}
+      colors={[colors.neon, colors.accentDeep]}
       start={{ x: 0.05, y: 0 }}
       end={{ x: 0.95, y: 1 }}
       style={styles.barRing}
@@ -153,16 +163,19 @@ export default function BottomNav({ activeTab, onSelect }) {
   );
 }
 
+// 10% larger than the original 22 (user request).
+const ICON_SIZE = 24;
+
 function NavIcon({ iconKey, active, colors }) {
   const color = active ? colors.neon : colors.textMuted;
-  const size = 22;
+  const size = ICON_SIZE;
   switch (iconKey) {
     case 'home':
       return <Ionicons name={active ? 'home' : 'home-outline'} size={size} color={color} />;
     case 'feast':
       return <Ionicons name={active ? 'people' : 'people-outline'} size={size} color={color} />;
-    case 'history':
-      return <Ionicons name={active ? 'book' : 'book-outline'} size={size} color={color} />;
+    case 'favorites':
+      return <Ionicons name={active ? 'heart' : 'heart-outline'} size={size} color={color} />;
     case 'settings':
       return <Ionicons name="settings-sharp" size={size} color={color} />;
     case 'places':
@@ -176,11 +189,12 @@ function NavIcon({ iconKey, active, colors }) {
 // canvas review: two flanking buildings with a gold pin standing in for the
 // center building, flush against its neighbors (one silhouette, not a house
 // icon bolted to a bookmark). Windows dropped at this size - they read as
-// noise once shrunk to a real 22px nav icon, same call made in the canvas
-// review itself.
+// noise once shrunk down to a real nav icon, same call made in the canvas
+// review itself. viewBox stays 24x24 regardless of the rendered size below
+// (ICON_SIZE) - it's the vector's own coordinate space, not a pixel size.
 function PlacesIcon({ color }) {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none">
       <Rect x={3} y={13} width={5} height={8} stroke={color} strokeWidth={1.6} />
       <Rect x={16} y={10} width={5} height={11} stroke={color} strokeWidth={1.6} />
       <Path d="M12 7a4 4 0 00-4 4c0 4.6 4 10 4 10s4-5.4 4-10a4 4 0 00-4-4z" stroke={color} strokeWidth={1.6} />

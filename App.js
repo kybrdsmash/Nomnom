@@ -39,7 +39,7 @@ import BrowseList from './src/components/BrowseList';
 import ResultCard from './src/components/ResultCard';
 import InviteFriendModal from './src/components/InviteFriendModal';
 import HistoryFavoritesOverlay from './src/components/HistoryFavoritesOverlay';
-import FabMenu from './src/components/FabMenu';
+import QuickFilters from './src/components/QuickFilters';
 import BottomNav from './src/components/BottomNav';
 import MyPlacesHub from './src/components/MyPlacesHub';
 import SettingsPanel from './src/components/SettingsPanel';
@@ -156,11 +156,10 @@ function AppInner() {
   // src/api/journal.js for the Firestore mirror friends read from.
   const [journal, setJournal] = useState({});
 
-  const [showFabMenu, setShowFabMenu] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeView, setActiveView] = useState('main');
   // 'main' | 'friend' | 'history' | 'places' | 'journal' are all reachable
-  // today (BottomNav/FabMenu). 'favorites' | 'tryLater' are dead values -
+  // today (via BottomNav). 'favorites' | 'tryLater' are dead values -
   // nothing sets them anymore since MyPlacesHub ('places') consolidated
   // those, but HistoryFavoritesOverlay.js still handles them correctly if
   // something ever does again.
@@ -252,7 +251,6 @@ function AppInner() {
   };
 
   const coinRef = useRef(null);
-  const filtersScrollRef = useRef(null);
   // Measured (not guessed) so the Cuisines dropdown lines up flush under the
   // trigger row with no gap, wherever that trigger actually sits on THIS
   // device - containerRef is the coordinate-space anchor (both measurements
@@ -842,25 +840,37 @@ function AppInner() {
     activeView === 'main' && !isSearching && !result &&
     eliminationList.length === 0 && browseList.length === 0;
 
-  // BottomNav is scoped to the Home screen for this first increment, same
-  // as FabMenu above - it doesn't yet appear on Places/History/Friend
-  // screens themselves.
+  // BottomNav is scoped to the Home screen - it doesn't yet appear on
+  // Places/History/Friend screens themselves (a known gap - see TODO.md).
   const showBottomNav = showFab;
-  // 'favorites'/'tryLater'/'journal' as raw activeView values are now dead
-  // (nothing sets them anymore - FabMenu's shortcuts to them were removed
-  // once MyPlacesHub existed) but HistoryFavoritesOverlay.js/
-  // JournalOverlay.js are left otherwise untouched rather than deleted.
+  // 'tryLater'/'journal' as raw activeView values are dead (nothing sets
+  // them anymore - FabMenu's shortcuts to them were removed once
+  // MyPlacesHub existed, and FabMenu itself has since been fully retired in
+  // favor of QuickFilters) but HistoryFavoritesOverlay.js/JournalOverlay.js
+  // are left otherwise untouched rather than deleted. 'favorites' is very
+  // much alive again though - BottomNav's own icon revived this path (user
+  // request: "Favorites SHOULD be a bottom icon... replace history" -
+  // History moved the other direction, into MyPlacesHub's tab set, so it's
+  // no longer a BottomNav destination itself).
+  //
+  // showSettingsMenu checked FIRST, ahead of activeView - Settings opens as
+  // an overlay ON TOP of Home (activeView stays 'main' the whole time), so
+  // without this check activeNavTab could never actually become 'settings'
+  // at all: BottomNav's sliding highlight had nothing to move toward when
+  // Settings was tapped, not an animation bug (caught on-device - "clicking
+  // the bottom 5 icons still doesn't move the selector as expected").
   const activeNavTab =
-    activeView === 'main' ? 'home'
+    showSettingsMenu ? 'settings'
+    : activeView === 'main' ? 'home'
     : activeView === 'friend' ? 'feast'
-    : activeView === 'history' ? 'history'
+    : activeView === 'favorites' ? 'favorites'
     : activeView === 'places' ? 'places'
     : null;
   const handleNavSelect = (key) => {
     if (key === 'home') setActiveView('main');
     else if (key === 'places') setActiveView('places');
     else if (key === 'feast') setActiveView('friend');
-    else if (key === 'history') setActiveView('history');
+    else if (key === 'favorites') setActiveView('favorites');
     else if (key === 'settings') setShowSettingsMenu(true);
   };
 
@@ -931,6 +941,7 @@ function AppInner() {
           onBack={() => setActiveView('main')}
           favorites={favorites}
           tryLater={tryLater}
+          history={history}
           journal={journal}
           friends={friends}
           location={location}
@@ -951,12 +962,15 @@ function AppInner() {
             : 'auto'
         }
       >
-        <ScrollView
-          ref={filtersScrollRef}
-          style={styles.topControlsScroll}
-          contentContainerStyle={styles.topControlsContent}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
+        {/* Plain View now, not a ScrollView - scrollEnabled was already false
+            (filtersScrollRef is never actually called with .scrollTo
+            anywhere in this file, confirmed dead) and a ScrollView's own
+            sizing behavior was the suspected cause of Cluster Height C's
+            layout fix (below) not visibly moving anything: removing this
+            component's own sizing quirks from the equation entirely, rather
+            than fighting them, is the more robust fix. */}
+        <View
+          style={[styles.topControlsScroll, styles.topControlsContent]}
         >
           <DaydreamRaccoon
             onLongPressFood={(food) => setFoodDetailFood(food)}
@@ -968,8 +982,6 @@ function AppInner() {
             distance={distance}
             setDistance={setDistance}
             estimatedMaxTime={estimatedMaxTime}
-            minRating={minRating}
-            setMinRating={setMinRating}
             showCuisines={showCuisines}
             setShowCuisines={setShowCuisines}
             selectedCuisines={selectedCuisines}
@@ -981,7 +993,7 @@ function AppInner() {
             onSaveFave={handleSaveFave}
             onRenameFave={handleRenameFave}
           />
-        </ScrollView>
+        </View>
 
         {/* Hidden while the Cuisines dropdown is open - a trial run of
             leaving it visible (relying purely on elevation to stay behind
@@ -1109,6 +1121,8 @@ function AppInner() {
         setProfile={setProfile}
         preferences={preferences}
         setPreferences={setPreferences}
+        minRating={minRating}
+        setMinRating={setMinRating}
         myUid={myUid}
         onOpenBugReport={() => setShowBugReport(true)}
         onOpenHelp={() => setShowHelp(true)}
@@ -1126,10 +1140,8 @@ function AppInner() {
 
       {showBottomNav && <BottomNav activeTab={activeNavTab} onSelect={handleNavSelect} />}
 
-      <FabMenu
+      <QuickFilters
         visible={showFab}
-        showFabMenu={showFabMenu}
-        setShowFabMenu={setShowFabMenu}
         openNowOnly={openNowOnly}
         onToggleOpenNow={() => {
           setOpenNowOnly((prev) => {
@@ -1299,15 +1311,24 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   // clearance) on top of the original 70*vscale bottom-of-screen buffer -
   // see the paddingBottom history above this style used to have, now
   // reclaimed as pure spacing rather than notch/gesture-bar clearance.
+  // REVERTED back to 'space-between' - briefly tried 'flex-end' (closing the
+  // gap between Cuisines and the food strip, pulling the raccoon/panels down
+  // with the coin) under a wrong reading of "move the coin down." Corrected
+  // by the user directly: the raccoon/travel-selector/cuisines panels are
+  // deliberately LOW-CONTACT and belong pinned at the TOP regardless of
+  // thumb-reach - only the coin/mode-toggle/QuickFilters cluster (already
+  // bottom-anchored by this exact 'space-between' + topControlsScroll's
+  // flex:1 below) needed to be reachable. The gap this leaves in the middle
+  // is deliberate, not dead space - it's the runway the future feather-drift
+  // food animation needs to actually fall and drift before reaching the
+  // coin, so it's staying wide rather than being closed up.
   homeScreen: {
     flex: 1, justifyContent: 'space-between',
     paddingTop: insets.top + 38 * vscale,
     paddingBottom: insets.bottom + 70 * vscale,
   },
-  // Same ~38dp/cm conversion this file already uses elsewhere (see
-  // paddingTop's history above) - pulls the strip up out of the exact
-  // center of its flex gap, closer to the Cuisines trigger above it, per
-  // user feedback that centered-by-flex still read as sitting too low.
+  // REVERTED to the original tuned negative margin (see homeScreen's comment
+  // above for why the 'flex-end' experiment this was paired with got undone).
   rollingFoodWrap: { marginTop: -38 * vscale },
   // elevation here (not just document order) is what makes this reliably
   // paint above RollingFoodStrip on Android - same reasoning as
@@ -1324,6 +1345,9 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   // compositing behavior varies enough across manufacturers/drivers that a
   // margin tuned on one device isn't guaranteed to hold on another. Still
   // comfortably under bottomControls' 25 and the Cuisines dropdown's own 60.
+  // flex:1 RESTORED (see homeScreen's comment above - the gap this creates
+  // between the Cuisines panel and the food strip below is deliberate, the
+  // future food-drift animation's fall runway, not dead space to close up).
   topControlsScroll: { flex: 1, width: '100%', zIndex: 15, elevation: 15 },
   topControlsContent: { alignItems: 'center', paddingBottom: 20 },
   // elevation here (not the coin's own internal one) is what actually
