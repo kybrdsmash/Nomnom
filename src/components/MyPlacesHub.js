@@ -549,7 +549,10 @@ export default function MyPlacesHub({
             behind it. Plain style-prop padding on the ScrollView itself
             wouldn't do this - that constrains the outer viewport, not how
             far the content can actually scroll. */}
-        <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
+        {/* insets.bottom added - BottomNav.js's own position now includes
+            it too, so this needs to match or it'd under-reserve by exactly
+            that amount on a device with a real bottom inset. */}
+        <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
 
       {showFab && (

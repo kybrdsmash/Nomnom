@@ -29,6 +29,15 @@ module.exports = {
     },
     android: {
       package: 'com.peach.nomnomapp',
+      // Registers this app with Firebase natively on Android - without it,
+      // getExpoPushTokenAsync() fails outright ("Default FirebaseApp is
+      // not initialized") since only a Web app was ever registered in this
+      // Firebase project before now (that's what the EXPO_PUBLIC_FIREBASE_*
+      // env vars are - fine for Firestore/Auth/Storage via the JS SDK, but
+      // native push notifications specifically need this file). Root-caused
+      // while debugging why zero Android devices ever successfully received
+      // a push notification, tonight or before.
+      googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',

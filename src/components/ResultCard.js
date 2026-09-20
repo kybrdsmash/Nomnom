@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, Animated, Easing, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { neonSelected, buttonDepth } from '../constants';
 import { useTheme } from '../ThemeContext';
 import { joinParts } from '../utils/format';
@@ -46,6 +47,7 @@ export default function ResultCard({
   onOpenInvite,     // opens InviteFriendModal for this result - omitted entirely if the caller doesn't support it
 }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -269,7 +271,7 @@ export default function ResultCard({
           mode so solo's own already-tuned marginBottom is untouched (user
           report: "Try again" partially hidden by the bottom bar on the
           Feast results page). */}
-      <View style={[styles.resultActionRow, gameMode === 'friend' && { marginBottom: 76 + BOTTOM_NAV_CLEARANCE }]}>
+      <View style={[styles.resultActionRow, gameMode === 'friend' && { marginBottom: insets.bottom + 76 + BOTTOM_NAV_CLEARANCE }]}>
         {gameMode === 'friend' ? (
           <Pressable onPress={onReroll} style={styles.friendPrimaryBtn}>
             <Text style={styles.friendPrimaryText}>Try Again 🔄</Text>

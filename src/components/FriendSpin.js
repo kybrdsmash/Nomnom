@@ -706,7 +706,11 @@ export default function FriendSpin({
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
               </Pressable>
             ))}
-            <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
+            {/* insets.bottom added - BottomNav.js's own position now
+                includes it too, so this needs to match or it'd
+                under-reserve by exactly that amount on a device with a
+                real bottom inset. */}
+            <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
           </ScrollView>
         </View>
       )}
@@ -975,7 +979,7 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   headerTitle: { color: colors.accent, fontSize: 20, fontWeight: 'bold', letterSpacing: 1 },
   // paddingBottom added so BottomNav (now persists over this screen, not
   // just Home) doesn't sit on top of this content's last element.
-  centerCol: { flex: 1, alignItems: 'center', paddingHorizontal: 30, paddingTop: 30, paddingBottom: 30 + BOTTOM_NAV_CLEARANCE },
+  centerCol: { flex: 1, alignItems: 'center', paddingHorizontal: 30, paddingTop: 30, paddingBottom: insets.bottom + 30 + BOTTOM_NAV_CLEARANCE },
   bodyText: { color: colors.textLight, fontSize: 16, textAlign: 'center', marginTop: 10 },
   bigBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, paddingVertical: 13, paddingHorizontal: 26, borderRadius: 30 },
   bigBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 16, marginLeft: 8 },

@@ -351,8 +351,11 @@ export default function HistoryFavoritesOverlay({
         {filterBar}
         {listContent}
         {/* Same reasoning as MyPlacesHub's identical spacer - BottomNav now
-            persists over this screen (was Home-only before). */}
-        <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
+            persists over this screen (was Home-only before). insets.bottom
+            added on top - BottomNav.js's own position now includes it too
+            (see that file), so this needs to match or it'd under-reserve by
+            exactly that amount on a device with a real bottom inset. */}
+        <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
 
       {/* Opens AddSpotModal: search any restaurant by name, or pick straight

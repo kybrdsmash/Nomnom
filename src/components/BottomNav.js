@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import Svg, { Rect, Path, Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { frostedGlow } from '../constants';
 import { BUDDY_AVATARS } from '../buddyAvatars';
@@ -80,7 +81,8 @@ export const BOTTOM_NAV_CLEARANCE = BAR_BOTTOM_OFFSET * 2 + BAR_HEIGHT;
  */
 export default function BottomNav({ activeTab, onSelect, buddyAvatar }) {
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = makeStyles(colors, insets);
 
   // 'favorites' replaces 'history' here (user request: "Favorites SHOULD be
   // a bottom icon... it should replace history" - it's the single most-used
@@ -242,7 +244,7 @@ function PlacesIcon({ color }) {
 
 const BAR_RADIUS = 26;
 
-const makeStyles = (colors) => StyleSheet.create({
+const makeStyles = (colors, insets) => StyleSheet.create({
   // The chosen buddy's small round avatar (settings-tab icon replacement) -
   // sized close to ICON_SIZE so it carries about the same visual weight as
   // the other 4 icons rather than looking oversized. Border color swaps
@@ -272,7 +274,15 @@ const makeStyles = (colors) => StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: BAR_BOTTOM_OFFSET,
+    // Was a flat BAR_BOTTOM_OFFSET with no insets.bottom at all - every
+    // screen that reserves clearance ABOVE this bar already adds
+    // insets.bottom on top of BOTTOM_NAV_CLEARANCE (see App.js's
+    // homeScreen), but the bar's own position never got the matching
+    // adjustment, so on a device with a real 3-button nav bar (or a tall
+    // gesture pill) the bar sat low enough to actually collide with it
+    // (user report, via a friend on a Galaxy phone: "half the bottom bar
+    // is covered by the 3 default buttons").
+    bottom: insets.bottom + BAR_BOTTOM_OFFSET,
     // Now a persistent sibling over Places/Favorites/Feast too, not just
     // Home - those screens' own root Views are explicitly zIndex:90/100
     // (see MyPlacesHub/HistoryFavoritesOverlay/FriendSpin's `overlayScreen`/

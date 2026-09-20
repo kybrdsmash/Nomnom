@@ -4,6 +4,7 @@ import {
   Alert, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { searchNearbyByKeyword } from '../api/places';
@@ -39,6 +40,7 @@ const OCCASION_PRESETS = ['Date Night', 'Anniversary', 'Celebration', 'First Tim
  */
 export default function AtTheTableCompose({ location, travelType, onSave }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const [loaded, setLoaded] = useState(false);
   const [spot, setSpot] = useState(null);
@@ -247,8 +249,11 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
           content clears BottomNav's own fixed-position bar - this screen was
           the one missed, using a flat 30px instead, which left Save to
           Journal genuinely sitting behind the bar (user report: "the save
-          button... is behind the current bottom bar"). */}
-      <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
+          button... is behind the current bottom bar"). insets.bottom added
+          on top - BottomNav.js's own position now includes it too, so this
+          needs to match or it'd under-reserve by exactly that amount on a
+          device with a real bottom inset. */}
+      <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
