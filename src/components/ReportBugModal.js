@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Modal, View, Text, Pressable, TextInput, Image, ActivityIndicator,
-  KeyboardAvoidingView, Platform, ScrollView, StyleSheet,
+  KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -40,9 +40,31 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
   // almost always already sitting in the photo library (the OS's own
   // screenshot shortcut), not something worth photographing off the screen.
   const pickScreenshot = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
-    if (result.canceled || !result.assets?.[0]) return;
-    setScreenshotUri(result.assets[0].uri);
+    try {
+      // launchImageLibraryAsync is SUPPOSED to prompt for permission itself
+      // on first use, but a previously-denied permission (no system prompt
+      // shown again, per both platforms' own conventions) makes it just
+      // silently do nothing - checking first means a denial gets a real,
+      // visible explanation instead of a tap that looks like it did nothing
+      // at all (user report: "I can select 'add a screenshot' nothing is
+      // working").
+      const perm = await ImagePicker.getMediaLibraryPermissionsAsync();
+      let granted = perm.granted;
+      if (!granted && perm.canAskAgain) {
+        const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        granted = req.granted;
+      }
+      if (!granted) {
+        Alert.alert('Photo access needed', 'Turn on photo access for Nomnom in your device Settings to attach a screenshot.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+      if (result.canceled || !result.assets?.[0]) return;
+      setScreenshotUri(result.assets[0].uri);
+    } catch (e) {
+      console.warn('pickScreenshot failed:', e);
+      Alert.alert("Couldn't open photos", 'Something went wrong opening your photo library - try again.');
+    }
   };
 
   const submitBug = async () => {

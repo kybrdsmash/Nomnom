@@ -1,6 +1,7 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+const logger = require('firebase-functions/logger');
 
 initializeApp();
 const db = getFirestore();
@@ -33,9 +34,20 @@ exports.onPingCreated = onDocumentCreated('users/{uid}/pings/{pingId}', async (e
 
   const userSnap = await db.doc(`users/${uid}`).get();
   const expoPushToken = userSnap.data()?.expoPushToken;
-  if (!expoPushToken) return;
+  if (!expoPushToken) {
+    logger.warn('onPingCreated: recipient has no registered push token', { uid });
+    return;
+  }
 
-  await fetch('https://exp.host/--/api/v2/push/send', {
+  // Was a bare, unchecked fetch - a request Expo's push service actually
+  // REJECTS (expired/invalid token, malformed payload, etc.) still counts
+  // as this function running "successfully" with nothing in its own logs to
+  // say so, which is exactly what made a real on-device test undiagnosable
+  // (a fresh invocation showed, but nothing ever arrived). Expo's response
+  // shape for a single recipient is {data: {status: 'ok'|'error', ...}} -
+  // logging it either way means the NEXT test tells us definitively whether
+  // Expo actually accepted this, instead of just "it ran."
+  const response = await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
@@ -47,4 +59,10 @@ exports.onPingCreated = onDocumentCreated('users/{uid}/pings/{pingId}', async (e
       priority: 'high',
     }),
   });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || result?.data?.status === 'error') {
+    logger.error('onPingCreated: Expo push request failed', { uid, httpStatus: response.status, result });
+    return;
+  }
+  logger.info('onPingCreated: push sent', { uid, result });
 });
