@@ -63,14 +63,30 @@ export default function QuickFilters({
   const halfHeight = stackHalfHeight != null ? stackHalfHeight : STACK_HALF_HEIGHT_FALLBACK;
   // Was a hardcoded +25dp correction, tuned from ONE screenshot on ONE
   // device (a Pixel) - a second device (a tablet) confirmed that same
-  // constant overshoots the OTHER direction there (user report: "now
-  // they're all too low" on the tablet after being too high on the Pixel).
-  // That rules out a fixed-size cause (a shadow's dp offset would be
-  // roughly constant across devices) and confirms this needs a real,
-  // device-independent root cause instead of a tuned number - removed
-  // until that's found. See App.js's measureCoin for the new comparative
-  // debug logging.
-  const verticalStyle = centerY != null ? { top: centerY - halfHeight } : { bottom: 170 };
+  // constant overshoots the OTHER direction there. Removed, then verified
+  // via real measureInWindow data (App.js's measureCoin + this component's
+  // own onLayout, both logging their true window-absolute center) that the
+  // plain centerY - halfHeight formula lands EXACTLY on the coin's true
+  // geometric center on a Pixel - the two independently-measured
+  // trueCenterY values matched to the fraction. So the bounding-box math
+  // itself was never wrong.
+  //
+  // What's still off is the coin's PERCEIVED visual center vs. its
+  // geometric one - CoinSpinner.js's groundShadow sits mostly below the
+  // coin's own 160px box (top: 150, height: 24, i.e. ~14px of it hangs past
+  // the coin's bottom edge), and that extra dark visual mass reads as part
+  // of "the coin" to the eye, pulling its perceived center down without
+  // moving its measured bounding box at all (user report, live: "the quick
+  // menu is hovering higher than it should if it were centered on the
+  // coin"). Nudging down by half that overhang (~7dp) targets the coin's
+  // visual weight instead of its box - and unlike the old +25dp hack, this
+  // number comes from a fixed, unscaled asset dimension in CoinSpinner.js
+  // (never run through vscale), not a screenshot guess, so it should hold
+  // up across devices the same +25dp never did.
+  const COIN_SHADOW_VISUAL_OFFSET = 7;
+  const verticalStyle = centerY != null
+    ? { top: centerY - halfHeight + COIN_SHADOW_VISUAL_OFFSET }
+    : { bottom: 170 };
 
   return (
     <View

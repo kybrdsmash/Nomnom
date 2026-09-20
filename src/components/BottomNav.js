@@ -196,8 +196,9 @@ export default function BottomNav({ activeTab, onSelect, buddyAvatar }) {
   );
 }
 
-// 10% larger than the original 22 (user request).
-const ICON_SIZE = 24;
+// 20% larger than 24 (user request) - 24 was itself already 10% larger
+// than the original 22.
+const ICON_SIZE = 29;
 
 function NavIcon({ iconKey, active, colors, buddyAvatar, styles }) {
   const color = active ? colors.neon : colors.textMuted;
@@ -261,7 +262,7 @@ const makeStyles = (colors, insets) => StyleSheet.create({
   // border here (not a glow/shadow) since Android can't render a colored
   // shadow well on a fully opaque small circle.
   buddyRing: {
-    width: 26, height: 26, borderRadius: 13, overflow: 'hidden',
+    width: 31, height: 31, borderRadius: 15.5, overflow: 'hidden',
     borderWidth: 1.5, borderColor: colors.textMuted,
   },
   buddyImage: { width: '100%', height: '100%' },

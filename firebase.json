@@ -1,4 +1,15 @@
 {
+  "auth": {
+    "authorizedDomains": ["nom-nom-83f11.firebaseapp.com", "nom-nom-83f11.web.app", "localhost"],
+    "providers": {
+      "anonymous": true,
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Nomnom",
+        "supportEmail": "nomnom1app@gmail.com"
+      }
+    }
+  },
   "functions": [
     {
       "source": "functions",

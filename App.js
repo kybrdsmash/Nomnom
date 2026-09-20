@@ -545,9 +545,18 @@ function AppInner() {
       // is exactly this same [[], [], []] shape), which is why
       // DEFAULT_FAVE_NAMES (not a generic "Fave N") ends up as every new
       // user's starting slot names.
-      setFaveCuisines((faves || []).map((slot, i) =>
-        Array.isArray(slot) ? { name: DEFAULT_FAVE_NAMES[i] || `Fave ${i + 1}`, cuisines: slot } : slot
-      ));
+      setFaveCuisines((faves || []).map((slot, i) => {
+        if (Array.isArray(slot)) return { name: DEFAULT_FAVE_NAMES[i] || `Fave ${i + 1}`, cuisines: slot };
+        // Saves from before DEFAULT_FAVE_NAMES existed already have the
+        // {name, cuisines} shape (so the branch above never fires) but with
+        // the plain "Fave N" name baked in from the old useState default -
+        // upgrade just the label the same way a brand-new install gets it,
+        // without touching whatever cuisines are already saved to that slot
+        // (user report: "the latest update doesn't have the faves 1,2,3
+        // updated to the new names").
+        if (slot?.name === `Fave ${i + 1}` && DEFAULT_FAVE_NAMES[i]) return { ...slot, name: DEFAULT_FAVE_NAMES[i] };
+        return slot;
+      }));
       setFriends(frnds);
       setJournal(jrnl);
       setNavTapCounts(navCounts);

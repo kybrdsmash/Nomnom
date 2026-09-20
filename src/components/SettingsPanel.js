@@ -8,7 +8,7 @@ import { neonSelected, buttonDepth, accentGradient } from '../constants';
 import { hexToHsl, hslToHex } from '../utils/color';
 import { isFirebaseConfigured } from '../api/firebase';
 import SlidableSegmented from './SlidableSegmented';
-import GoogleSignInRow from './GoogleSignInRow';
+import AccountSection from './AccountSection';
 import { BUDDY_AVATARS } from '../buddyAvatars';
 
 // Fixed saturation keeps every pick in the same soft, glowing pastel
@@ -380,7 +380,7 @@ export default function SettingsPanel({
               placeholderTextColor="#777"
               maxLength={24}
             />
-            <GoogleSignInRow />
+            <AccountSection />
 
             {/* Reopens the same BuddyPicker shown on first launch (see
                 App.js's showBuddyPickerManual) - dismissible this time,
