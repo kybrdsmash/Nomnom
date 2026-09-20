@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, Pressable, TextInput, ActivityIndicator,
-  Image, ScrollView, StyleSheet, Share, Platform, KeyboardAvoidingView,
+  Image, ScrollView, StyleSheet, Share, Platform, KeyboardAvoidingView, Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -395,7 +395,31 @@ export default function FriendSpin({
       setMyUid(uid);
       subscribe(c);
       saveActiveFriendSession(c);
-      if (pingTarget) sendPing(pingTarget.uid, uid, displayName, c);
+      // Was fire-and-forget with no catch of its own - inside an ALREADY-
+      // resolved try block by the time this promise settles, so a failure
+      // here became an unhandled rejection instead of hitting the catch
+      // below, completely invisible (no error to the user, nothing
+      // reliably in logs either) - exactly the kind of silent failure that
+      // would explain zero real invocations of the onPingCreated Cloud
+      // Function despite a real on-device test (user report). The session
+      // itself already succeeded at this point (the code above worked), so
+      // a ping failure specifically shouldn't blow away that success via
+      // setStep('error') - just surface it and let the host still share
+      // the code manually if the automatic ping didn't land.
+      if (pingTarget) {
+        try {
+          await sendPing(pingTarget.uid, uid, displayName, c);
+        } catch (pingError) {
+          // Not setErrorMsg/step - that Text only ever renders on
+          // step==='error', which this path deliberately never sets (the
+          // session itself is fine). An Alert actually gets seen.
+          console.warn('sendPing failed:', pingError);
+          Alert.alert(
+            'Ping not sent',
+            `The session started, but the ping to ${pingTarget.name || 'your friend'} failed to send. Share the code with them another way instead.`
+          );
+        }
+      }
     } catch (e) {
       setErrorMsg('Could not create session. Check your connection.');
       setStep('error');

@@ -54,7 +54,9 @@ import HelpModal from './src/components/HelpModal';
 import OnboardingOverlay from './src/components/OnboardingOverlay';
 import BuddyPicker from './src/components/BuddyPicker';
 import MapsLeaveWarningModal from './src/components/MapsLeaveWarningModal';
-import { isFirebaseConfigured, ensureSignedIn } from './src/api/firebase';
+import { isFirebaseConfigured, ensureSignedIn, auth } from './src/api/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { pushSavedLists, fetchSavedLists, mergeById, mergeFaveCuisines } from './src/api/savedLists';
 import { watchPings, dismissPing } from './src/api/friendSession';
 import { registerForPushNotifications, addNotificationTapListener } from './src/api/push';
 import {
@@ -222,7 +224,21 @@ function AppInner() {
   const [myUid, setMyUid] = useState(null);
   const [pings, setPings] = useState([]);
   useEffect(() => {
-    if (isFirebaseConfigured && !myUid) ensureSignedIn().then(setMyUid);
+    if (isFirebaseConfigured) ensureSignedIn();
+  }, []);
+  // Was a one-shot ensureSignedIn().then(setMyUid) - myUid then never
+  // changed again for the rest of the session. That's wrong the moment
+  // Google sign-in switches accounts: linking usually upgrades the SAME
+  // anonymous uid in place, but signInWithGoogleIdToken's own fallback
+  // (this exact Google account was already linked on a DIFFERENT device
+  // first) calls signInWithCredential instead, which swaps in that OTHER,
+  // pre-existing uid entirely - exactly the cross-device restore case this
+  // feature is FOR. Listening to onAuthStateChanged instead means myUid
+  // (and everything keyed off it - pings, the sync effects below) always
+  // reflects whichever account is actually signed in right now.
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    return onAuthStateChanged(auth, (user) => setMyUid(user?.uid || null));
   }, []);
   useEffect(() => {
     if (!myUid) return;
@@ -527,6 +543,39 @@ function AppInner() {
   useEffect(() => { if (storageLoaded) saveFaveCuisines(faveCuisines); }, [faveCuisines, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveFriends(friends); }, [friends, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveJournal(journal); }, [journal, storageLoaded]);
+
+  // Favorites/History/Try Later/fave cuisine slots syncing to Firestore -
+  // GoogleSignInRow.js already tells the user this happens ("Keeps your
+  // favorites, journal, and history saved to your account"), but only
+  // Journal actually did (user report: "I don't want to have to keep
+  // re-adding info... this should be able to be transferred between
+  // phones"). Gated on a real (non-anonymous) sign-in - an anonymous
+  // session's data has nowhere durable to sync TO yet, and pushing it would
+  // just mean overwriting savedLists/{uid} under a throwaway uid nobody can
+  // ever sign back into.
+  useEffect(() => {
+    if (!storageLoaded || !myUid || auth.currentUser?.isAnonymous) return;
+    pushSavedLists(myUid, { favorites, history, tryLater, faveCuisines });
+  }, [storageLoaded, myUid, favorites, history, tryLater, faveCuisines]);
+
+  // Pulls the account's remote copy and merges it into local state whenever
+  // myUid settles on a real signed-in account - covers both "fresh install,
+  // just signed in" (local is empty, remote wins entirely) and "signed in
+  // on a second device" (myUid's own onAuthStateChanged listener above
+  // already swapped in the ORIGINAL account's uid via signInWithCredential's
+  // fallback, so this fires for that switch too). mergeById/mergeFaveCuisines
+  // never drop local-only data, so this can safely run every time myUid
+  // changes to a real account, not just "the first time ever."
+  useEffect(() => {
+    if (!storageLoaded || !myUid || auth.currentUser?.isAnonymous) return;
+    fetchSavedLists(myUid).then((remote) => {
+      if (!remote) return;
+      setFavorites((prev) => mergeById(prev, remote.favorites));
+      setHistory((prev) => mergeById(prev, remote.history, MAX_HISTORY));
+      setTryLater((prev) => mergeById(prev, remote.tryLater));
+      setFaveCuisines((prev) => mergeFaveCuisines(prev, remote.faveCuisines));
+    });
+  }, [storageLoaded, myUid]);
   useEffect(() => { if (storageLoaded) saveTravelType(travelType); }, [travelType, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveNavTapCounts(navTapCounts); }, [navTapCounts, storageLoaded]);
   useEffect(() => { if (storageLoaded && buddyAvatar) saveBuddyAvatar(buddyAvatar); }, [buddyAvatar, storageLoaded]);
