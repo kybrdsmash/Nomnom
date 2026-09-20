@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "442371665761-76a0oqv5juehpgjih310mijj7mdvejuu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.peach.nomnomapp",
+            "certificate_hash": "854e357b5fc90446e1ec6750ab402698b58ea0ab"
+          }
+        },
+        {
           "client_id": "442371665761-t0bq00atiecnbim4gu5gmmcl154p8fk8.apps.googleusercontent.com",
           "client_type": 3
         }
