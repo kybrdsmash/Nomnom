@@ -49,16 +49,20 @@
         "track": "internal"
       }
     },
-    // Same key, targets Play's Closed testing track instead ("alpha" is
-    // Play's API name for it) - eas submit has no CLI flag to override
-    // track per-run, so this is its own profile: `eas submit --profile
-    // closedTesting`. Needed until the app clears Google's closed-testing
-    // requirement (12+ testers opted in, running 14+ days) and Production
-    // unlocks.
+    // Same key, targets the actual closed-testing track our real testers
+    // are on. Was "alpha" (Play's legacy default closed-testing track name)
+    // - but Play Developer API's edits.tracks.list confirmed this app's
+    // real testers (all our friends' emails) are on a separate, custom-
+    // named track called "Friends Beta", not "alpha" - "alpha" exists but
+    // has never had a release. Submitting to "alpha" also failed outright
+    // ("Release in track targeting no countries") since it was never
+    // configured with a testing region. eas submit has no CLI flag to
+    // override track per-run, so this is its own profile: `eas submit
+    // --profile closedTesting`.
     "closedTesting": {
       "android": {
         "serviceAccountKeyPath": "C:/Users/Isaac/keys/nomnom-play-submit.json",
-        "track": "alpha"
+        "track": "Friends Beta"
       }
     }
   }

@@ -67,6 +67,7 @@ client_secret_*.apps.googleusercontent.com.json
 # Downloaded .aab/.apks build artifacts from the bundletool/adb crash-check
 # process - large binaries, not source, regenerated fresh each time.
 /.build-verify/
+*.aab
 
 # Working files for the Claude Design canvas mockup (.dc.html artboards,
 # canvas.json, the seeded output) - design scratch space, not app source.
