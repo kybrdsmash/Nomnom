@@ -519,7 +519,12 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // updates every render, including mid-drag (see the comment where this is
   // used).
   pickerDial: { position: 'absolute', top: 5, width: 28, height: 28, borderRadius: 14, ...neonSelected(colors) },
-  input: { backgroundColor: colors.cardAlt, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: colors.textLight, fontSize: 14 },
+  // marginBottom matches `row`'s own spacing below (10) - this had none,
+  // so GoogleSignInRow sat flush against it while every other section kept
+  // the same even rhythm (user report: "google sign in block needs a
+  // little space from the profile your name box... space it out equally
+  // like the other gaps").
+  input: { backgroundColor: colors.cardAlt, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: colors.textLight, fontSize: 14, marginBottom: 10 },
   bugReportRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   helpBtn: {
     width: 40, height: 40, borderRadius: 14, marginRight: 10,
