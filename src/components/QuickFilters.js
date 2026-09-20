@@ -85,7 +85,18 @@ export default function QuickFilters({
     >
       <Toggle active={maxPrice != null} onPress={cyclePrice} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={0}>
         {maxPrice != null ? (
-          <Text style={[styles.priceText, { color: colors.neon }]}>{'$'.repeat(maxPrice)}</Text>
+          // $$$$ (4 characters) didn't fit this toggle's small circle
+          // (user report) - $4 shows a money bag emoji instead of a 4th $,
+          // guaranteed to render without needing to guess an exact glyph
+          // name from whichever icon font happens to have one.
+          maxPrice === 4 ? (
+            // priceText's fontSize:13 was tuned for $/$$/$$$ text width, not
+            // a single emoji glyph - a bit bigger here reads clearly at the
+            // same visual weight as the other toggles' 20-24px icons.
+            <Text style={{ fontSize: 18 }}>💰</Text>
+          ) : (
+            <Text style={[styles.priceText, { color: colors.neon }]}>{'$'.repeat(maxPrice)}</Text>
+          )
         ) : (
           <Ionicons name="cash-outline" size={20} color={colors.textMuted} />
         )}

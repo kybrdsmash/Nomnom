@@ -180,7 +180,13 @@ export default function ResultCard({
         )}
 
         {displayPhotoUrl && (
-          <Pressable onPress={() => setFullscreen(true)}>
+          // Was onPress -> fullscreen photo viewer - now opens the detail
+          // page instead (user request: "when a user clicks on the result
+          // picture - it goes to the detailed info page"), freeing the
+          // icon row below of its own separate info button. Fullscreen
+          // photo view isn't gone, just demoted to a long-press so nothing
+          // that worked before stops working.
+          <Pressable onPress={onShowDetails} onLongPress={() => setFullscreen(true)}>
             <Animated.View
               style={{
                 transform: [
@@ -190,6 +196,15 @@ export default function ResultCard({
               }}
             >
               <Image source={{ uri: displayPhotoUrl }} style={styles.foodImage} resizeMode="cover" />
+              {/* Small visual hint that the photo itself opens details -
+                  bottom-right per thumb-zone research (Hoober's UXmatters
+                  study: bottom-right is the reachable "green zone" for
+                  one-handed use; top corners are the hardest to reach) and
+                  standard badge-corner convention when there's no separate
+                  footer to attach it to. */}
+              <View style={styles.photoInfoBadge} pointerEvents="none">
+                <Ionicons name="information-circle" size={20} color="#FFF" />
+              </View>
             </Animated.View>
           </Pressable>
         )}
@@ -206,18 +221,18 @@ export default function ResultCard({
           <Pressable style={styles.iconBtn} onPress={onToggleTryLater}>
             <Ionicons name={isTryLater ? 'bookmark' : 'bookmark-outline'} size={24} color={colors.gold} />
           </Pressable>
-          {/* Was 3 dots (ellipsis-horizontal) - user request: an "i in a
-              circle" reads more clearly as "details/info". Same icon this
-              file already uses for the unconfirmedCuisine badge above,
-              which keeps "info" meaning one consistent icon throughout. */}
-          <Pressable style={styles.iconBtn} onPress={onShowDetails}>
-            <Ionicons name="information-circle-outline" size={24} color={colors.accent} />
-          </Pressable>
-          {/* Solo-mode only (not gated on gameMode==='friend', which already
-              has its own schedule/calendar icon for the CURRENT partner
-              below) - "invite a friend to THIS spot" for a result found
-              without a friend already in the loop. Only rendered where the
-              caller actually wires up InviteFriendModal (user request). */}
+          {/* Was a separate "i in a circle" info button - removed now that
+              the photo itself opens details (see the photo Pressable above),
+              which frees this slot for the friend-invite icon to actually
+              be the second thing people see, not something tucked after an
+              info button that did the same job the photo now does (user
+              request: "the information icon gets replaced with a friends
+              icon"). Solo-mode only (not gated on gameMode==='friend',
+              which already has its own schedule/calendar icon for the
+              CURRENT partner below) - "invite a friend to THIS spot" for a
+              result found without a friend already in the loop. Only
+              rendered where the caller actually wires up InviteFriendModal
+              (user request). */}
           {onOpenInvite && (
             <Pressable style={styles.iconBtn} onPress={onOpenInvite}>
               <Ionicons name="paper-plane-outline" size={22} color={colors.accent} />
@@ -294,6 +309,14 @@ const makeStyles = (colors) => StyleSheet.create({
   resultBox: { alignItems: 'center', paddingHorizontal: 20, paddingTop: 38 },
   winnerHeader: { color: colors.accent, fontSize: 22, fontWeight: '900', marginBottom: 10, letterSpacing: 2 },
   foodImage: { width: 220, height: 140, borderRadius: 15, marginTop: 14, borderWidth: 2, borderColor: colors.accentDark, backgroundColor: '#333' },
+  // Bottom-right - see the comment where this renders for the thumb-zone/
+  // badge-convention research behind that choice. A soft dark backing
+  // (not just a bare icon) keeps the white glyph readable over any photo,
+  // bright or dark.
+  photoInfoBadge: {
+    position: 'absolute', bottom: 8, right: 8, width: 26, height: 26, borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center',
+  },
   // Favorite/Try later/Details (and, in friend mode, Schedule) now live in a
   // row below the photo instead of stacked as absolute badges over its
   // corners - user feedback: title/rating/photo read better top-to-bottom

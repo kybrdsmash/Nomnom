@@ -78,29 +78,17 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
 
   useEffect(() => {
     if (!attractPulse) return;
-    // Two soft pulses (bounce + glow together) then settle - see the
-    // docstring above for why this is capped at a fixed run rather than a
-    // loop.
-    Animated.sequence([
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulseScale, { toValue: 1.08, duration: 220, useNativeDriver: true }),
-          Animated.timing(pulseScale, { toValue: 1, duration: 220, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(pulseGlow, { toValue: 1, duration: 220, useNativeDriver: true }),
-          Animated.timing(pulseGlow, { toValue: 0, duration: 220, useNativeDriver: true }),
-        ]),
+    // Was two pulses back-to-back - read as excessive (user request, same
+    // fix as QuickFilters.js's own attract-pulse). One soft bounce + glow
+    // is enough to draw the eye without nagging.
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(pulseScale, { toValue: 1.08, duration: 220, useNativeDriver: true }),
+        Animated.timing(pulseScale, { toValue: 1, duration: 220, useNativeDriver: true }),
       ]),
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulseScale, { toValue: 1.08, duration: 220, useNativeDriver: true }),
-          Animated.timing(pulseScale, { toValue: 1, duration: 220, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(pulseGlow, { toValue: 1, duration: 220, useNativeDriver: true }),
-          Animated.timing(pulseGlow, { toValue: 0, duration: 220, useNativeDriver: true }),
-        ]),
+      Animated.sequence([
+        Animated.timing(pulseGlow, { toValue: 1, duration: 220, useNativeDriver: true }),
+        Animated.timing(pulseGlow, { toValue: 0, duration: 220, useNativeDriver: true }),
       ]),
     ]).start();
   }, [attractPulse]);

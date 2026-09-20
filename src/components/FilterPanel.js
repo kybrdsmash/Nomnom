@@ -256,7 +256,15 @@ export default function FilterPanel({
             onSave={onSaveFave}
             onRename={onRenameFave}
             selectedCuisines={selectedCuisines}
-            attractPulse={showCuisines}
+            // Was `showCuisines` alone - pulsed every single time the
+            // dropdown opened forever, even for someone who'd already
+            // learned and used the feature (user request: stop once they've
+            // actually committed a saved set to a slot). Derived from the
+            // real saved data (any slot with real cuisines in it) rather
+            // than a separate "have they saved before" flag - no slot ever
+            // has content until a real save happens, so this is exactly the
+            // same thing with no new state to keep in sync.
+            attractPulse={showCuisines && !faveCuisines.some((slot) => slot?.cuisines?.length > 0)}
           />
         </View>
       </FrostedGlass>

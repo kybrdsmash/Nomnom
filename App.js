@@ -53,6 +53,7 @@ import ReportBugModal from './src/components/ReportBugModal';
 import HelpModal from './src/components/HelpModal';
 import OnboardingOverlay from './src/components/OnboardingOverlay';
 import BuddyPicker from './src/components/BuddyPicker';
+import MapsLeaveWarningModal from './src/components/MapsLeaveWarningModal';
 import { isFirebaseConfigured, ensureSignedIn } from './src/api/firebase';
 import { watchPings, dismissPing } from './src/api/friendSession';
 import { registerForPushNotifications, addNotificationTapListener } from './src/api/push';
@@ -196,7 +197,9 @@ function AppInner() {
   const [reallyGoodOnly, setReallyGoodOnly] = useState(false);
 
   const [profile, setProfile] = useState({ displayName: '' });
-  const [preferences, setPreferences] = useState({ haptics: true, units: 'mi' });
+  // mapsWarning defaults true (warn before leaving the app for Maps) - see
+  // openMaps below for why this was added.
+  const [preferences, setPreferences] = useState({ haptics: true, units: 'mi', mapsWarning: true });
 
   // InviteFriendModal - a one-way "here's where/when" share to one friend,
   // distinct from the live joint Feast with Friends session flow. Opened
@@ -934,7 +937,10 @@ function AppInner() {
     });
   };
 
-  const openMaps = (spot) => {
+  // The actual navigation-away action - only ever called once the user has
+  // confirmed (or already turned the warning off), never directly from a
+  // tap anymore. See openMaps below.
+  const doOpenMaps = (spot) => {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`;
     Linking.canOpenURL(url)
       .then((supported) => {
@@ -943,6 +949,30 @@ function AppInner() {
       })
       .catch((err) => console.error('An error occurred opening maps', err));
   };
+
+  // Leaving the app to open Maps used to happen with zero warning - a
+  // friend's report: "it surprised them that it was taking them to their
+  // maps app." Every caller (ResultCard, FriendSpin, HistoryFavoritesOverlay,
+  // MyPlacesHub) already goes through this ONE function, so gating it here
+  // covers all of them at once rather than touching each screen separately.
+  // `pendingMapsSpot` holds the spot mid-confirmation; null means the modal
+  // is closed. Tapping the modal's backdrop (same as Cancel) just leaves
+  // this null forever for that tap - the original action is voided, not
+  // queued or retried.
+  const [pendingMapsSpot, setPendingMapsSpot] = useState(null);
+  const openMaps = (spot) => {
+    if (preferences.mapsWarning === false) {
+      doOpenMaps(spot);
+      return;
+    }
+    setPendingMapsSpot(spot);
+  };
+  const confirmOpenMaps = (dontAskAgain) => {
+    if (dontAskAgain) setPreferences((prev) => ({ ...prev, mapsWarning: false }));
+    if (pendingMapsSpot) doOpenMaps(pendingMapsSpot);
+    setPendingMapsSpot(null);
+  };
+  const cancelOpenMaps = () => setPendingMapsSpot(null);
 
   const resetApp = () => {
     fadeOutAnim.setValue(1);
@@ -1362,6 +1392,12 @@ function AppInner() {
         currentKey={buddyAvatar}
         onPick={handlePickBuddy}
         onClose={showBuddyPickerManual ? () => setShowBuddyPickerManual(false) : undefined}
+      />
+
+      <MapsLeaveWarningModal
+        visible={pendingMapsSpot != null}
+        onConfirm={confirmOpenMaps}
+        onCancel={cancelOpenMaps}
       />
 
       {showBottomNav && <BottomNav activeTab={activeNavTab} onSelect={handleNavSelect} buddyAvatar={buddyAvatar} />}

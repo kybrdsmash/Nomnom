@@ -386,6 +386,20 @@ export default function SettingsPanel({
               />
             </View>
 
+            {/* Re-enables the "leaving Nomnom" Maps confirmation after
+                someone's dismissed it with "Don't ask me again" - undefined
+                (never saved before) reads as on, same treatment as the
+                warning's own check in App.js's openMaps. */}
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Confirm before opening Maps</Text>
+              <Switch
+                value={preferences.mapsWarning !== false}
+                onValueChange={(mapsWarning) => setPreferences((prev) => ({ ...prev, mapsWarning }))}
+                trackColor={{ false: colors.cardAlt, true: colors.accent }}
+                thumbColor={colors.textLight}
+              />
+            </View>
+
             {/* Relocated from the Home screen (see the hook comments above
                 for why) - full-width block like Appearance above, not the
                 compact label+control row Haptics/Units use, since 5 stars
