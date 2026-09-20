@@ -22,7 +22,7 @@ import { submitCuisineFeedback } from '../api/cuisineFeedback';
  * one-way mailbox, not a live filter). Only settles into a flat statement
  * ("Not a {cuisine} place") once someone has actually said so.
  */
-export default function CuisineMatchBadge({ cuisine, spotId, spotName }) {
+export default function CuisineMatchBadge({ cuisine, spotId, spotName, onConfirmed }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [vote, setVote] = useState(null); // null | 'yes' | 'no'
@@ -32,6 +32,12 @@ export default function CuisineMatchBadge({ cuisine, spotId, spotName }) {
     if (submitting || vote) return;
     setSubmitting(true);
     setVote(matches ? 'yes' : 'no');
+    // Logging the vote to Firestore (below) is for future filter tuning -
+    // it does nothing to what THIS card shows right now. onConfirmed is the
+    // separate, immediate update: a "yes" should make the type label on
+    // screen reflect it right away, not just get noted for later (user
+    // report: confirmed yes, the label stayed blank/unconfirmed).
+    if (matches) onConfirmed?.(cuisine);
     let uid = null;
     try {
       uid = await ensureSignedIn();

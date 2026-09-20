@@ -64,10 +64,17 @@ export default function ResultCard({
   const [displayPhotoUrl, setDisplayPhotoUrl] = useState(result.photoUrl);
   const photoFlip = useRef(new Animated.Value(0)).current;
   const prevResultId = useRef(result.id);
+  // Set when the user confirms "Yes, it is {cuisine}" on this exact result -
+  // CuisineMatchBadge only logs that vote to Firestore for later filter
+  // tuning, it never touches what THIS card shows, so confirming left the
+  // type label sitting blank/unconfirmed even seconds after saying yes
+  // (user report). Reset on every new result below, same as the photo flip.
+  const [confirmedType, setConfirmedType] = useState(null);
 
   useEffect(() => {
     if (result.id === prevResultId.current) return;
     prevResultId.current = result.id;
+    setConfirmedType(null);
     Animated.timing(photoFlip, {
       toValue: 90, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true,
     }).start(() => {
@@ -132,7 +139,7 @@ export default function ResultCard({
         {gameMode === 'friend' && <Text style={styles.winnerHeader}>YOU BOTH GOT…</Text>}
 
         <Text style={styles.foodName}>{result.name}</Text>
-        <Text style={styles.details}>{joinParts([`⭐ ${result.rating}`, result.type])}</Text>
+        <Text style={styles.details}>{joinParts([`⭐ ${result.rating}`, confirmedType || result.type])}</Text>
         <Text style={styles.blurbText}>{result.blurb}</Text>
         {/* Only set when this spot was NOT a genuine match for the selected
             cuisine - Google had zero real matches nearby, so this is the
@@ -153,7 +160,13 @@ export default function ResultCard({
             a fresh instance (and fresh state) per spot, same as any other
             per-item React state reset. */}
         {result.unconfirmedCuisine && (
-          <CuisineMatchBadge key={result.id} cuisine={result.unconfirmedCuisine} spotId={result.id} spotName={result.name} />
+          <CuisineMatchBadge
+            key={result.id}
+            cuisine={result.unconfirmedCuisine}
+            spotId={result.id}
+            spotName={result.name}
+            onConfirmed={(cuisine) => setConfirmedType(cuisine.toUpperCase())}
+          />
         )}
         {/* Favorites-only mode reaching past the distance setting to still
             offer a real choice (see places.js's pickFromFavorites) - always

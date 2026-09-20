@@ -60,7 +60,22 @@ export default function QuickFilters({
   // midpoint instead; falls back to the old fixed value for the one frame
   // before that measurement resolves, so nothing jumps on mount.
   const halfHeight = stackHalfHeight != null ? stackHalfHeight : STACK_HALF_HEIGHT_FALLBACK;
-  const verticalStyle = centerY != null ? { top: centerY - halfHeight } : { bottom: 170 };
+  // TEMP EMPIRICAL CORRECTION - the box math (coinCenterY vs. this stack's
+  // own measured half-height) has been verified exactly correct via direct
+  // on-device measurement, twice, yet a real screenshot pixel-crop still
+  // shows this stack sitting ~25dp too high against the coin's own visual
+  // center (user report, confirmed by measurement this time, not eyeballed).
+  // Leading theory: something paints outside this stack's measured 38x38-
+  // per-toggle LAYOUT box without affecting that measurement at all - a
+  // shadow/glow (frostedGlow, the attract-pulse ring) extending asymmetrically
+  // rather than the box position itself being wrong. Nudging down by the
+  // measured gap now per explicit user request while that gets root-caused
+  // for real - remove this constant once the actual cause is fixed, don't
+  // just leave it stacked on top of a real fix later.
+  const EMPIRICAL_Y_CORRECTION = 25;
+  const verticalStyle = centerY != null
+    ? { top: centerY - halfHeight + EMPIRICAL_Y_CORRECTION }
+    : { bottom: 170 - EMPIRICAL_Y_CORRECTION };
 
   return (
     <View
