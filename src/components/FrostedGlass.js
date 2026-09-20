@@ -79,10 +79,18 @@ const FrostedGlass = React.forwardRef(function FrostedGlass({
 
   return (
     <View ref={ref} collapsable={collapsable} style={[cornerStyle, style]}>
+      {/* Was a 2-color diagonal gradient (neon top-left -> accentDeep
+          bottom-right) - read as a light source off to one side, brightest
+          at one corner (user report: "bright on the left and dark on the
+          right"). Now a symmetric 3-stop gradient, dead horizontal, neon
+          sitting exactly at the midpoint - reads like light catching the
+          crest of a gently curved surface instead (user-approved
+          direction). */}
       <LinearGradient
-        colors={[colors.neon, colors.accentDeep]}
-        start={{ x: 0.05, y: 0 }}
-        end={{ x: 0.95, y: 1 }}
+        colors={[colors.accentDeep, colors.neon, colors.accentDeep]}
+        locations={[0, 0.5, 1]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
         style={[StyleSheet.absoluteFillObject, cornerStyle]}
       />
       {/* BlurView + tint need their OWN matching border radius +

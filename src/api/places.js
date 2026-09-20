@@ -921,12 +921,39 @@ const CUISINE_TYPE_REQUIREMENTS = {
  * this exact fallback path, mislabeled with the search keyword instead of
  * being left honestly unlabeled).
  */
+// Some cuisines share enough vocabulary/types with another that a search
+// for one turns up places that are unmistakably the OTHER (user report:
+// searching BBQ kept surfacing Chinese char siu/roast-meat shops and
+// Vietnamese grilled-meat spots - both legitimately describe themselves
+// with "BBQ"/grill language, but aren't what most people mean by a "BBQ"
+// search). Reuses each excluded cuisine's OWN CUISINE_TYPE_REQUIREMENTS/
+// NAME_HINTS entries rather than duplicating a second keyword list - if a
+// place already qualifies as a confirmed or name-hinted match for one of
+// these, it's excluded here regardless of also matching the searched
+// cuisine's own criteria.
+const CUISINE_EXCLUDES = {
+  BBQ: ['Chinese', 'Vietnamese'],
+};
+
+function isExcludedForCuisine(spot, cuisineLabel) {
+  const excludeCuisines = CUISINE_EXCLUDES[cuisineLabel];
+  if (!excludeCuisines) return false;
+  const name = (spot.name || '').toLowerCase();
+  return excludeCuisines.some((excludeCuisine) => {
+    const excludeTypes = CUISINE_TYPE_REQUIREMENTS[excludeCuisine] || [];
+    if ((spot.types || []).some((t) => excludeTypes.includes(t))) return true;
+    const hints = NAME_HINTS[excludeCuisine] || [];
+    return hints.some((hint) => name.includes(hint));
+  });
+}
+
 function applyTypeAllowlist(results, cuisineLabel) {
+  const eligible = results.filter((r) => !isExcludedForCuisine(r, cuisineLabel));
   const requirement = CUISINE_TYPE_REQUIREMENTS[cuisineLabel];
-  if (!requirement) return results;
-  const matched = results.filter((r) => (r.types || []).some((t) => requirement.includes(t)));
+  if (!requirement) return eligible;
+  const matched = eligible.filter((r) => (r.types || []).some((t) => requirement.includes(t)));
   if (matched.length > 0) return matched;
-  return results.map((r) => ({ ...r, _unconfirmedCuisine: true }));
+  return eligible.map((r) => ({ ...r, _unconfirmedCuisine: true }));
 }
 
 // Last-resort cuisine guess from the place's NAME, used only when Google

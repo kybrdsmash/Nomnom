@@ -133,10 +133,19 @@ export default function BottomNav({ activeTab, onSelect, buddyAvatar }) {
   }, [activeIndex, itemWidth]);
 
   return (
+    // Was a 2-color diagonal gradient - see FrostedGlass.js's matching
+    // change for the full reasoning (user report: "bright on the left and
+    // dark on the right"; approved direction: dull -> bright middle -> dull,
+    // dead horizontal). Kept as BottomNav's own copy rather than switching
+    // this to render via FrostedGlass itself - this bar's ring sits directly
+    // on `barRing` (sized/shadowed for the bar specifically), not the
+    // ref-forwarding host View FrostedGlass needs for CuisineDropdown-style
+    // measurement, which this component doesn't use.
     <LinearGradient
-      colors={[colors.neon, colors.accentDeep]}
-      start={{ x: 0.05, y: 0 }}
-      end={{ x: 0.95, y: 1 }}
+      colors={[colors.accentDeep, colors.neon, colors.accentDeep]}
+      locations={[0, 0.5, 1]}
+      start={{ x: 0, y: 0.5 }}
+      end={{ x: 1, y: 0.5 }}
       style={styles.barRing}
     >
       {/* BlurView + tint need their OWN matching border radius +
