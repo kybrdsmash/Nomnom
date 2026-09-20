@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, Animated, Easing, ScrollView, Platform, StyleSheet } from 'react-native';
+import { View, Text, Image, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, Animated, Easing, ScrollView, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { hexToHsl, hslToHex } from '../utils/color';
 import { isFirebaseConfigured } from '../api/firebase';
 import SlidableSegmented from './SlidableSegmented';
 import GoogleSignInRow from './GoogleSignInRow';
+import { BUDDY_AVATARS } from '../buddyAvatars';
 
 // Fixed saturation keeps every pick in the same soft, glowing pastel
 // family (matching the current Frost blue's feel) regardless of hue or
@@ -78,6 +79,7 @@ export default function SettingsPanel({
   showSettingsMenu, setShowSettingsMenu,
   profile, setProfile, preferences, setPreferences, minRating, setMinRating,
   navTapCounts = {},
+  buddyAvatar, onChangeBuddy,
   onOpenBugReport, onOpenHelp,
 }) {
   const { colors, accentColor, setAccentColor } = useTheme();
@@ -350,6 +352,17 @@ export default function SettingsPanel({
             />
             <GoogleSignInRow />
 
+            {/* Reopens the same BuddyPicker shown on first launch (see
+                App.js's showBuddyPickerManual) - dismissible this time,
+                since a buddy already exists to fall back to. */}
+            {buddyAvatar && BUDDY_AVATARS[buddyAvatar] && (
+              <Pressable style={styles.buddyRow} onPress={onChangeBuddy}>
+                <Image source={BUDDY_AVATARS[buddyAvatar].source} style={styles.buddyRowImage} resizeMode="cover" />
+                <Text style={styles.buddyRowLabel}>Change your buddy ({BUDDY_AVATARS[buddyAvatar].label})</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            )}
+
             <Text style={styles.sectionTitle}>Preferences</Text>
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Haptics</Text>
@@ -497,6 +510,12 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   modeHint: { color: colors.textMuted, fontSize: 11, fontStyle: 'italic', marginTop: 4 },
   sectionTitle: { color: colors.accent, fontWeight: 'bold', fontSize: 13, letterSpacing: 1, marginBottom: 8, marginTop: 10 },
   sectionTitleInline: { color: colors.accent, fontWeight: 'bold', fontSize: 13, letterSpacing: 1 },
+  buddyRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card,
+    borderRadius: 14, padding: 10, marginBottom: 10, gap: 10,
+  },
+  buddyRowImage: { width: 34, height: 34, borderRadius: 8 },
+  buddyRowLabel: { flex: 1, color: colors.textLight, fontSize: 13, fontWeight: '600' },
   // Nav Usage list - plain rows, sorted most-tapped first by the caller.
   navUsageBox: { backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 4 },
   navUsageRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },

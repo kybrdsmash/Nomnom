@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Pressable, Animated, Easing, StyleSheet } from 'react-native';
+import { View, Image, Pressable, Animated, Easing, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import Svg, { Rect, Path, Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
 import { frostedGlow } from '../constants';
+import { BUDDY_AVATARS } from '../buddyAvatars';
 
 const ITEM_COUNT = 5;
 // Must match barInner's own `gap` and `padding` below - the highlight's
@@ -77,7 +78,7 @@ export const BOTTOM_NAV_CLEARANCE = BAR_BOTTOM_OFFSET * 2 + BAR_HEIGHT;
  * ring) instead of textDark, since a fully opaque icon color would lose
  * contrast against the highlight's translucent fill.
  */
-export default function BottomNav({ activeTab, onSelect }) {
+export default function BottomNav({ activeTab, onSelect, buddyAvatar }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
@@ -175,7 +176,7 @@ export default function BottomNav({ activeTab, onSelect }) {
               onPress={() => onSelect(item.key)}
               hitSlop={4}
             >
-              <NavIcon iconKey={item.key} active={active} colors={colors} />
+              <NavIcon iconKey={item.key} active={active} colors={colors} buddyAvatar={buddyAvatar} styles={styles} />
             </Pressable>
           );
         })}
@@ -187,7 +188,7 @@ export default function BottomNav({ activeTab, onSelect }) {
 // 10% larger than the original 22 (user request).
 const ICON_SIZE = 24;
 
-function NavIcon({ iconKey, active, colors }) {
+function NavIcon({ iconKey, active, colors, buddyAvatar, styles }) {
   const color = active ? colors.neon : colors.textMuted;
   const size = ICON_SIZE;
   switch (iconKey) {
@@ -198,6 +199,20 @@ function NavIcon({ iconKey, active, colors }) {
     case 'favorites':
       return <Ionicons name={active ? 'heart' : 'heart-outline'} size={size} color={color} />;
     case 'settings':
+      // A picked buddy replaces the plain gear (see BuddyPicker.js) - a
+      // small round avatar reads as "this is your corner of the app"
+      // rather than an admin icon, same reasoning most social apps use a
+      // profile picture in this exact tab slot instead of a settings icon.
+      // Falls back to the gear for the brief window before a first-launch
+      // pick exists (buddyAvatar null/''), which shouldn't actually be
+      // reachable in practice since BuddyPicker forces a pick first.
+      if (buddyAvatar && BUDDY_AVATARS[buddyAvatar]) {
+        return (
+          <View style={[styles.buddyRing, active && { borderColor: colors.neon }]}>
+            <Image source={BUDDY_AVATARS[buddyAvatar].source} style={styles.buddyImage} resizeMode="cover" />
+          </View>
+        );
+      }
       return <Ionicons name="settings-sharp" size={size} color={color} />;
     case 'places':
       return <PlacesIcon color={color} />;
@@ -228,6 +243,17 @@ function PlacesIcon({ color }) {
 const BAR_RADIUS = 26;
 
 const makeStyles = (colors) => StyleSheet.create({
+  // The chosen buddy's small round avatar (settings-tab icon replacement) -
+  // sized close to ICON_SIZE so it carries about the same visual weight as
+  // the other 4 icons rather than looking oversized. Border color swaps
+  // active/inactive same as the plain icons' own color prop, kept as a
+  // border here (not a glow/shadow) since Android can't render a colored
+  // shadow well on a fully opaque small circle.
+  buddyRing: {
+    width: 26, height: 26, borderRadius: 13, overflow: 'hidden',
+    borderWidth: 1.5, borderColor: colors.textMuted,
+  },
+  buddyImage: { width: '100%', height: '100%' },
   // Shadow/elevation live here (not barInner) - Android's elevation needs
   // an opaque backing to clip its shadow against, and a LinearGradient
   // fully fills its own bounds, so it qualifies same as any solid View.

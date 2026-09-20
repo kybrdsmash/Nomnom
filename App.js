@@ -52,6 +52,7 @@ import FoodDetailModal from './src/components/FoodDetailModal';
 import ReportBugModal from './src/components/ReportBugModal';
 import HelpModal from './src/components/HelpModal';
 import OnboardingOverlay from './src/components/OnboardingOverlay';
+import BuddyPicker from './src/components/BuddyPicker';
 import { isFirebaseConfigured, ensureSignedIn } from './src/api/firebase';
 import { watchPings, dismissPing } from './src/api/friendSession';
 import { registerForPushNotifications, addNotificationTapListener } from './src/api/push';
@@ -67,6 +68,7 @@ import {
   loadJournal, saveJournal,
   loadTravelType, saveTravelType,
   loadOnboardingSeen, saveOnboardingSeen,
+  loadBuddyAvatar, saveBuddyAvatar,
   loadInstallReferrerChecked, saveInstallReferrerChecked,
   loadNavTapCounts, saveNavTapCounts,
 } from './src/storage';
@@ -115,6 +117,16 @@ function AppInner() {
   // it only ever gets set false below once loadOnboardingSeen() genuinely
   // confirms a brand new install hasn't seen it yet.
   const [onboardingSeen, setOnboardingSeen] = useState(true);
+  // Same "default true so it can't flash visible before storage loads"
+  // reasoning as onboardingSeen just above - null here specifically means
+  // "no buddy chosen yet," so this starts as a non-null placeholder
+  // ('') rather than null, until loadBuddyAvatar() confirms the real
+  // (possibly still-null, brand-new-install) value.
+  const [buddyAvatar, setBuddyAvatar] = useState('');
+  // Reopening the picker from Settings > Profile ("Change your buddy") is a
+  // separate flag from "never picked one yet" (!buddyAvatar) below, since
+  // only the manual-reopen case should be dismissible without picking.
+  const [showBuddyPickerManual, setShowBuddyPickerManual] = useState(false);
   const [distance, setDistance] = useState(3);
   const [minRating, setMinRating] = useState(4.0);
   const [location, setLocation] = useState(null);
@@ -282,19 +294,22 @@ function AppInner() {
   // containerRef's other children, not nested inside the coin's own
   // wrapping Views.
   const [coinCenterY, setCoinCenterY] = useState(null);
-  useEffect(() => {
-    // rAF, not a bare synchronous call - ensures homeScreen's flex layout has
-    // actually committed at least one pass before measuring (the coin's Y
-    // position isn't known until then).
-    const raf = requestAnimationFrame(() => {
-      containerRef.current?.measureInWindow((_containerX, containerY) => {
-        coinWrapperRef.current?.measureInWindow((_coinX, coinY, _coinW, coinHeight) => {
-          setCoinCenterY(coinY - containerY + coinHeight / 2);
-        });
+  // Was a single requestAnimationFrame right after mount - not a reliable
+  // guarantee real layout had settled (fonts/the coin's own image can still
+  // shift things a frame or two later), and with no dependency array this
+  // never re-measured, so it could get permanently stuck on a stale/zero
+  // reading (user report: the QuickFilters stack still wasn't centered on
+  // the coin after this was supposedly fixed). measureCoin is now called
+  // from the coin wrapper's own onLayout below instead, which React Native
+  // guarantees fires every time that view's real layout is actually
+  // computed - including if it ever shifts later, not just once at mount.
+  const measureCoin = () => {
+    containerRef.current?.measureInWindow((_containerX, containerY) => {
+      coinWrapperRef.current?.measureInWindow((_coinX, coinY, _coinW, coinHeight) => {
+        setCoinCenterY(coinY - containerY + coinHeight / 2);
       });
     });
-    return () => cancelAnimationFrame(raf);
-  }, []);
+  };
   const fadeOutAnim = useRef(new Animated.Value(1)).current;
   const fadeInAnim = useRef(new Animated.Value(0)).current;
 
@@ -462,11 +477,11 @@ function AppInner() {
   // Load persisted lists once on startup.
   useEffect(() => {
     (async () => {
-      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel, onboarded, navCounts] = await Promise.all([
+      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel, onboarded, navCounts, buddy] = await Promise.all([
         loadHistory(), loadFavorites(), loadTryLater(), loadSeenIds(),
         loadProfile(), loadPreferences(), loadFaveCuisines(),
         loadFriends(), loadJournal(), loadTravelType(), loadOnboardingSeen(),
-        loadNavTapCounts(),
+        loadNavTapCounts(), loadBuddyAvatar(),
       ]);
       setHistory(h);
       setFavorites(f);
@@ -489,6 +504,7 @@ function AppInner() {
       setFriends(frnds);
       setJournal(jrnl);
       setNavTapCounts(navCounts);
+      setBuddyAvatar(buddy || null);
       setStorageLoaded(true);
     })();
   }, []);
@@ -505,6 +521,7 @@ function AppInner() {
   useEffect(() => { if (storageLoaded) saveJournal(journal); }, [journal, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveTravelType(travelType); }, [travelType, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveNavTapCounts(navTapCounts); }, [navTapCounts, storageLoaded]);
+  useEffect(() => { if (storageLoaded && buddyAvatar) saveBuddyAvatar(buddyAvatar); }, [buddyAvatar, storageLoaded]);
 
   // Hides the overlay for the rest of THIS session either way, but only
   // persists "seen" (so it stays gone on future opens too) if the user left
@@ -514,6 +531,15 @@ function AppInner() {
   const dismissOnboarding = (dontShowAgain) => {
     setOnboardingSeen(true);
     if (dontShowAgain) saveOnboardingSeen(true);
+  };
+
+  // Handles both call sites of BuddyPicker (see its own render below):
+  // first-launch (showBuddyPickerManual false, picking is the only way out)
+  // and Settings > Profile's "Change your buddy" (showBuddyPickerManual
+  // true, picking also closes it).
+  const handlePickBuddy = (key) => {
+    setBuddyAvatar(key);
+    setShowBuddyPickerManual(false);
   };
 
   // Mirrors the local journal (plus who's allowed to read it) up to
@@ -1142,7 +1168,7 @@ function AppInner() {
             gradientColors={accentGradient(colors).colors}
           />
 
-          <View ref={coinWrapperRef} collapsable={false}>
+          <View ref={coinWrapperRef} collapsable={false} onLayout={measureCoin}>
             <CoinSpinner
               ref={coinRef}
               isSearching={isSearching}
@@ -1243,6 +1269,8 @@ function AppInner() {
         setMinRating={setMinRating}
         myUid={myUid}
         navTapCounts={navTapCounts}
+        buddyAvatar={buddyAvatar}
+        onChangeBuddy={() => setShowBuddyPickerManual(true)}
         onOpenBugReport={() => setShowBugReport(true)}
         onOpenHelp={() => setShowHelp(true)}
       />
@@ -1265,9 +1293,24 @@ function AppInner() {
       />
 
       <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
-      <OnboardingOverlay visible={storageLoaded && !onboardingSeen} onDismiss={dismissOnboarding} />
+      {/* Gated on !!buddyAvatar - the walkthrough waits for a buddy to
+          actually be chosen first (see BuddyPicker just below) rather than
+          both first-launch overlays racing to show at once. */}
+      <OnboardingOverlay visible={storageLoaded && !onboardingSeen && !!buddyAvatar} onDismiss={dismissOnboarding} />
 
-      {showBottomNav && <BottomNav activeTab={activeNavTab} onSelect={handleNavSelect} />}
+      {/* First launch (buddyAvatar still null/not-yet-loaded - the '' init
+          value keeps this from flashing true before storage resolves) forces
+          a pick with no close button; showBuddyPickerManual (Settings >
+          Profile's "Change your buddy") reopens the exact same picker but
+          dismissible. */}
+      <BuddyPicker
+        visible={(storageLoaded && !buddyAvatar) || showBuddyPickerManual}
+        currentKey={buddyAvatar}
+        onPick={handlePickBuddy}
+        onClose={showBuddyPickerManual ? () => setShowBuddyPickerManual(false) : undefined}
+      />
+
+      {showBottomNav && <BottomNav activeTab={activeNavTab} onSelect={handleNavSelect} buddyAvatar={buddyAvatar} />}
 
       <QuickFilters
         visible={showFab}

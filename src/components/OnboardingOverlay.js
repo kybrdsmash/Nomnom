@@ -28,7 +28,10 @@ const STEPS = [
   {
     icon: 'settings-outline',
     title: 'Make it yours',
-    body: 'The gear icon in Settings has appearance, travel method, and a full help guide whenever you need it.',
+    // Was "The gear icon in Settings..." - stale once a picked buddy
+    // replaces that icon (see BuddyPicker.js); "your Profile tab" describes
+    // the destination without assuming what its icon looks like.
+    body: 'Your Profile tab has appearance, travel method, and a full help guide whenever you need it.',
   },
 ];
 

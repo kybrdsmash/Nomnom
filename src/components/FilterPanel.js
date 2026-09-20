@@ -296,7 +296,11 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   // FrostedGlass.js's own doc comment for why. backgroundColor dropped from
   // the inner style entirely now - the blur+tint layers provide it.
   sliderRing: { width: '85%', marginBottom: 10 * vscale },
-  sliderContainer: { alignItems: 'center', padding: 14 * vscale },
+  // paddingVertical trimmed from a flat 14 - the box was noticeably taller
+  // than the travelTimeRow it actually holds (user report: "too tall...
+  // just big enough for the content"). Horizontal padding kept at 14 so the
+  // row doesn't crowd the ring's own rounded corners.
+  sliderContainer: { alignItems: 'center', paddingVertical: 8 * vscale, paddingHorizontal: 14 * vscale },
   travelTimeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 * vscale },
   travelTimeEditRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
   travelTimeTextBtn: { marginLeft: 12 },
@@ -310,17 +314,19 @@ const makeStyles = (colors, vscale = 1) => StyleSheet.create({
 
   // marginBottom scales with vscale too - this is the gap immediately
   // above the rolling food strip, so it's the most direct lever for keeping
-  // real breathing room between them on shorter screens. cuisineHeader's own
-  // padding below stays fixed - that's the trigger's tap target, not
-  // decorative spacing.
+  // real breathing room between them on shorter screens.
   cuisineRing: { width: '85%', marginBottom: 15 * vscale },
   cuisineContainer: {},
   // Plain row now, not itself a Pressable - the toggle Pressable and
   // FaveCuisineButton are touch siblings inside it (see the comment where
   // they render for why). paddingRight is trimmed since FaveCuisineButton
   // (now trailing, on the right) already has its own right-side padding for
-  // the dot indicator.
-  cuisineHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20, paddingLeft: 20, paddingRight: 12 },
+  // the dot indicator. paddingVertical trimmed from 20 to 10 - was a fixed
+  // "keep the tap target generous" choice, but that left this box noticeably
+  // taller than the row's actual content (user report: "too tall... just
+  // big enough for the content") - 10 still clears Android's ~48dp minimum
+  // touch target once the row's own content height is added in.
+  cuisineHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingLeft: 20, paddingRight: 12 },
   // The actual toggle - everything that used to be cuisineHeader's own
   // content, now just this Pressable's, with the Fave button trailing after
   // it (marginLeft on that button, not here, since it's the one now sitting

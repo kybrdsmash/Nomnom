@@ -25,6 +25,7 @@ const KEYS = {
   onboardingSeen: '@nomnom/onboardingSeen',
   installReferrerChecked: '@nomnom/installReferrerChecked',
   navTapCounts: '@nomnom/navTapCounts',
+  buddyAvatar: '@nomnom/buddyAvatar',
 };
 
 async function load(key, fallback) {
@@ -158,3 +159,11 @@ export const clearAtTheTableDraft = () => save(KEYS.atTheTableDraft, null);
 // {key: count} object, incremented on every BottomNav tap.
 export const loadNavTapCounts = () => load(KEYS.navTapCounts, {});
 export const saveNavTapCounts = (counts) => save(KEYS.navTapCounts, counts);
+
+// Which of BUDDY_AVATARS (src/buddyAvatars.js) is shown as the Settings
+// tab's icon in BottomNav - null until the first-launch BuddyPicker has
+// ever been completed, at which point App.js stops showing it
+// automatically (same "seen once" pattern as loadOnboardingSeen). Still
+// reachable afterward from Settings > Profile to change it.
+export const loadBuddyAvatar = () => load(KEYS.buddyAvatar, null);
+export const saveBuddyAvatar = (key) => save(KEYS.buddyAvatar, key);
