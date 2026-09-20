@@ -30,14 +30,32 @@ const brightnessStops = (hue) =>
 // number rather than a percentage.
 const DRAWER_WIDTH = 300;
 
+// Same keys/labels as BottomNav.js's own `items` array - kept as a separate
+// list here (not imported) since BottomNav doesn't export its items, and
+// duplicating 5 short strings is simpler than adding an export just for this.
+const NAV_USAGE_ITEMS = [
+  { key: 'home', label: 'Home' },
+  { key: 'places', label: 'Places' },
+  { key: 'feast', label: 'Feast' },
+  { key: 'favorites', label: 'Favorites' },
+  { key: 'settings', label: 'Settings' },
+];
+
 /**
- * Right-side slide-out settings drawer: tap the gear (or BottomNav's
- * Settings icon) to slide it in over Appearance (a soft hue picker driving
- * the whole app's accent color), Profile (a display name for friend-spin
- * chat/sessions), and a few Preference toggles. Tapping the backdrop closes
- * it. The gear trigger itself is hidden whenever BottomNav is showing (see
- * hideTrigger below) - BottomNav's own Settings icon opens this exact same
- * drawer now.
+ * Right-side slide-out settings drawer: tap BottomNav's Settings icon to
+ * slide it in over Appearance (a soft hue picker driving the whole app's
+ * accent color), Profile (a display name for friend-spin chat/sessions),
+ * and a few Preference toggles. Tapping the backdrop closes it.
+ *
+ * Used to have its own floating gear trigger too, hidden via a `hideTrigger`
+ * prop whenever BottomNav was showing - but BottomNav itself hides during
+ * Home's busy states (searching/result/elimination/browse - see App.js's
+ * showFab), which made hideTrigger false and resurrected this stray gear
+ * button ON TOP of the results page (user report: "the old settings button
+ * is sitting on the results page of eliminate... also there on surprise
+ * me"). Removed outright - BottomNav's own Settings icon is the only
+ * trigger now; App.js has its own dedicated back button for leaving results
+ * entirely, which is what people actually wanted out of that stray icon.
  *
  * Was a small bottom-left popup sized to its own content - moved to a full-
  * height right-side drawer (user request: "makes more sense... so we can
@@ -57,8 +75,9 @@ const DRAWER_WIDTH = 300;
  * completion and its resting value is always trustworthy.
  */
 export default function SettingsPanel({
-  hideTrigger, showSettingsMenu, setShowSettingsMenu,
+  showSettingsMenu, setShowSettingsMenu,
   profile, setProfile, preferences, setPreferences, minRating, setMinRating,
+  navTapCounts = {},
   onOpenBugReport, onOpenHelp,
 }) {
   const { colors, accentColor, setAccentColor } = useTheme();
@@ -386,6 +405,26 @@ export default function SettingsPanel({
               </View>
             </View>
 
+            {/* Anonymous, local-only tap counts per BottomNav destination
+                (see App.js's navTapCounts / src/storage.js's
+                loadNavTapCounts) - user request, real usage data (sorted
+                most-tapped first) to inform whether the bottom nav's
+                current 5-slot layout actually matches how it gets used,
+                rather than going purely on general UX convention. Never
+                leaves the device - no analytics SDK, no user id. */}
+            <Text style={styles.sectionTitle}>Nav Usage (this device)</Text>
+            <View style={styles.navUsageBox}>
+              {NAV_USAGE_ITEMS
+                .map((item) => ({ ...item, count: navTapCounts[item.key] || 0 }))
+                .sort((a, b) => b.count - a.count)
+                .map((item) => (
+                  <View key={item.key} style={styles.navUsageRow}>
+                    <Text style={styles.navUsageLabel}>{item.label}</Text>
+                    <Text style={styles.navUsageCount}>{item.count}</Text>
+                  </View>
+                ))}
+            </View>
+
             {/* The help icon doesn't depend on Firebase (it's static
                 in-app content) so it's not gated behind isFirebaseConfigured
                 the way Report a Bug is - own touch target, real gap
@@ -405,24 +444,6 @@ export default function SettingsPanel({
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
-      {/* BottomNav's own Settings icon toggles this exact same
-          showSettingsMenu state now and used to sit almost exactly on top of
-          this button's old bottom-left position (a real visual collision,
-          not just redundant coexistence - confirmed on-device). Hidden
-          whenever BottomNav is showing rather than deleted outright, since
-          hideTrigger is driven by the exact same flag (showBottomNav in
-          App.js) that gates BottomNav's own visibility - if that ever
-          changes, this button reappears as a safe fallback. Left in its
-          original bottom-left spot even though the drawer now opens from
-          the right - it's essentially always hidden today anyway (hideTrigger
-          is true whenever BottomNav shows, which is every time this is
-          visible at all), so it wasn't worth relocating for a path that
-          doesn't currently render. */}
-      {!hideTrigger && (
-        <Pressable style={styles.gearBtn} onPress={() => setShowSettingsMenu(!showSettingsMenu)}>
-          <Ionicons name="settings-sharp" size={22} color={colors.textDark} />
-        </Pressable>
-      )}
     </>
   );
 }
@@ -441,14 +462,6 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // gear correctly but the drawer itself never appeared - it was painting
   // underneath HistoryFavoritesOverlay the whole time).
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 240 },
-  // Own absolute position now (used to be a child of `wrapper`, which also
-  // held the panel - that shared anchor is gone now that the drawer lives on
-  // the opposite edge of the screen from this fallback trigger).
-  gearBtn: {
-    position: 'absolute', bottom: 30, left: 30, zIndex: 250,
-    backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23,
-    alignItems: 'center', justifyContent: 'center', ...buttonDepth,
-  },
   // Full height, fixed width, docked to the right edge - replaces the old
   // content-sized bottom-left `panel` (user request: a real drawer "so we
   // can add more content as needed" rather than a popup that keeps getting
@@ -462,9 +475,9 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // was vertically centered, wanted it "down low, close to the bottom left
   // inside corner" instead) - insets.bottom keeps it clear of any gesture
   // bar, same convention as drawerContent's own bottom padding just below.
-  // backgroundColor+color both use colors.accent/textDark (same pairing as
-  // gearBtn) so it reads as "part of the settings affordance," not a random
-  // stray button.
+  // backgroundColor+color both use colors.accent/textDark (App.js's own
+  // accent-pill convention, e.g. its backFromResultsBtn) so it reads as
+  // "part of the settings affordance," not a random stray button.
   closeTab: {
     position: 'absolute', left: 14, bottom: insets.bottom + 40, zIndex: 256,
     width: 36, height: 36, borderRadius: 18,
@@ -484,6 +497,11 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   modeHint: { color: colors.textMuted, fontSize: 11, fontStyle: 'italic', marginTop: 4 },
   sectionTitle: { color: colors.accent, fontWeight: 'bold', fontSize: 13, letterSpacing: 1, marginBottom: 8, marginTop: 10 },
   sectionTitleInline: { color: colors.accent, fontWeight: 'bold', fontSize: 13, letterSpacing: 1 },
+  // Nav Usage list - plain rows, sorted most-tapped first by the caller.
+  navUsageBox: { backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 4 },
+  navUsageRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  navUsageLabel: { color: colors.textLight, fontSize: 14 },
+  navUsageCount: { color: colors.textMuted, fontSize: 14, fontWeight: 'bold' },
   minRatingSection: { marginTop: 4 },
   minRatingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   minRatingStars: { flexDirection: 'row', paddingVertical: 6 },

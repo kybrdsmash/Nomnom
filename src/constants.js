@@ -76,6 +76,14 @@ export const CUISINES = [
   'Thai', 'Turkish', 'Vegan', 'Vegetarian', 'Vietnamese',
 ];
 
+// Default names for the 3 Fave-cuisine-preset slots (see FaveCuisineButton.js)
+// on a brand-new install, before the user ever renames one - "Fave 1/2/3"
+// was purely mechanical labeling with no personality (user request: give
+// each user something friendlier out of the box). Still fully renameable
+// via the button's own long-press-to-rename gesture; this only changes what
+// a never-touched slot starts out as.
+export const DEFAULT_FAVE_NAMES = ['My Faves', 'Besties', 'The Cosmos'];
+
 export const SPEEDS_MPH = { walk: 3, bike: 10, transit: 12, drive: 25 };
 
 // Total time (ms) the coin animation takes: anticipation dip, toss/spin to

@@ -24,6 +24,7 @@ const KEYS = {
   travelType: '@nomnom/travelType',
   onboardingSeen: '@nomnom/onboardingSeen',
   installReferrerChecked: '@nomnom/installReferrerChecked',
+  navTapCounts: '@nomnom/navTapCounts',
 };
 
 async function load(key, fallback) {
@@ -148,3 +149,12 @@ export const saveJournal = (journal) => save(KEYS.journal, journal);
 export const loadAtTheTableDraft = () => load(KEYS.atTheTableDraft, null);
 export const saveAtTheTableDraft = (draft) => save(KEYS.atTheTableDraft, draft);
 export const clearAtTheTableDraft = () => save(KEYS.atTheTableDraft, null);
+
+// Anonymous, local-only tap counts per BottomNav destination (home/places/
+// feast/favorites/settings) - no analytics SDK, no user id, never leaves the
+// device (user request: real usage data to inform whether the bottom nav's
+// current layout - e.g. Settings occupying one of only 5 slots - is actually
+// worth its spot, since neither of us has real data on that today). Plain
+// {key: count} object, incremented on every BottomNav tap.
+export const loadNavTapCounts = () => load(KEYS.navTapCounts, {});
+export const saveNavTapCounts = (counts) => save(KEYS.navTapCounts, counts);

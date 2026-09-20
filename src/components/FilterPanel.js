@@ -203,11 +203,21 @@ export default function FilterPanel({
             }}
           >
             <View style={styles.cuisineHeaderLeft}>
-              <Text style={styles.cuisineHeaderText}>
-                Cuisines{' '}
-                <Text style={styles.cuisineHeaderCount}>
-                  {selectedCuisines.length > 0 ? `(${selectedCuisines.length})` : '(Any)'}
-                </Text>
+              {/* "Cuisines (2)" doesn't actually tell you what's selected
+                  without opening the dropdown (user request: show the real
+                  name(s) when there's few enough to fit). Threshold is 2 -
+                  this row also holds the Fave button and a chevron, so two
+                  short cuisine words (e.g. "Thai, Indian") comfortably fits
+                  the remaining width; three or more risks crowding/wrapping,
+                  so that falls back to the compact "Cuisines (N)" form. */}
+              <Text style={styles.cuisineHeaderText} numberOfLines={1}>
+                {selectedCuisines.length === 0 ? (
+                  <>Cuisines <Text style={styles.cuisineHeaderCount}>(Any)</Text></>
+                ) : selectedCuisines.length <= 2 ? (
+                  selectedCuisines.join(', ')
+                ) : (
+                  <>Cuisines <Text style={styles.cuisineHeaderCount}>({selectedCuisines.length})</Text></>
+                )}
               </Text>
               {/* Only shown once the dropdown is actually open (user request) -
                   collapsed, this row is just the toggle; the icon would have

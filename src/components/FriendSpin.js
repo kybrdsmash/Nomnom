@@ -801,10 +801,12 @@ export default function FriendSpin({
                     <Text style={styles.cardSub} numberOfLines={1}>{joinParts([`⭐ ${spot.rating}`, spot.type])}</Text>
                     {/* Only set when this slot wasn't a genuine match for the
                         selected cuisine (see places.js's unconfirmedCuisine) -
-                        same treatment as solo Elimination mode's bracket. */}
+                        same treatment as solo Elimination mode's bracket,
+                        including the "No ... Match Nearby" wording fix (see
+                        ResultCard.js's identical fix for the full reasoning). */}
                     {spot.unconfirmedCuisine && (
                       <Text style={styles.cardUnconfirmed} numberOfLines={1}>
-                        {spot.unconfirmedCuisine} Spots Nearby
+                        No {spot.unconfirmedCuisine} Match Nearby
                       </Text>
                     )}
                     {isProposed && <Text style={styles.proposedTag}>👉 Proposed</Text>}

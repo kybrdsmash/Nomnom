@@ -3,7 +3,7 @@ import { View, Animated, TextInput, PanResponder, StyleSheet } from 'react-nativ
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../ThemeContext';
-import { buttonDepth, neonSelected, accentGradient } from '../constants';
+import { buttonDepth, neonSelected, accentGradient, DEFAULT_FAVE_NAMES } from '../constants';
 
 // No elevation anywhere in this file's styles, on purpose - this button
 // lives nested inside CuisineDropdown's clipped card, and elevation on a
@@ -130,7 +130,7 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
 
   const triggerLongPress = () => {
     const idx = activeIndexRef.current;
-    const slot = slotsRef.current[idx] || { name: `Fave ${idx + 1}`, cuisines: [] };
+    const slot = slotsRef.current[idx] || { name: DEFAULT_FAVE_NAMES[idx] || `Fave ${idx + 1}`, cuisines: [] };
     const current = selectedCuisinesRef.current || [];
     if (sameCuisines(current, slot.cuisines || [])) {
       // Saving would be a no-op (nothing's changed) - repurpose the
@@ -228,7 +228,7 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
     })
   ).current;
 
-  const activeSlot = slots[activeIndex] || { name: `Fave ${activeIndex + 1}`, cuisines: [] };
+  const activeSlot = slots[activeIndex] || { name: DEFAULT_FAVE_NAMES[activeIndex] || `Fave ${activeIndex + 1}`, cuisines: [] };
 
   if (renaming) {
     return (

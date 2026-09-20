@@ -22,9 +22,14 @@ const PRICE_LEVELS = [1, 2, 3, 4];
  * them (1→2→3→4→off→1...), showing the current level as its own label so it
  * never needs to expand into anything.
  */
+// Half the stack's own real height (3 toggles at toggleRing's 38px, plus
+// stack's own 10px gap between them: 38*3 + 10*2 = 134) - used to center it
+// on the coin's midpoint rather than its top edge.
+const STACK_HALF_HEIGHT = 67;
+
 export default function QuickFilters({
   visible, openNowOnly, onToggleOpenNow, favoritesOnly, onToggleFavoritesOnly,
-  maxPrice, setMaxPrice, hapticsEnabled = true,
+  maxPrice, setMaxPrice, hapticsEnabled = true, centerY,
 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -37,8 +42,18 @@ export default function QuickFilters({
     setMaxPrice(idx === PRICE_LEVELS.length - 1 ? null : PRICE_LEVELS[idx + 1]);
   };
 
+  // Was a fixed `bottom: 170` in `stack` itself - close on the device it was
+  // tuned against, but the coin's real Y comes out of flex layout
+  // (space-between, vscale-dependent padding), so a hand-picked number
+  // drifted off-center elsewhere (user report: "the 3 small selector...
+  // are not centered with the nom nom coin"). `centerY` (App.js measures it
+  // off the coin's own wrapper) lets this center on the coin's actual
+  // midpoint instead; falls back to the old fixed value for the one frame
+  // before that measurement resolves, so nothing jumps on mount.
+  const verticalStyle = centerY != null ? { top: centerY - STACK_HALF_HEIGHT } : { bottom: 170 };
+
   return (
-    <View style={styles.stack} pointerEvents="box-none">
+    <View style={[styles.stack, verticalStyle]} pointerEvents="box-none">
       <Toggle active={maxPrice != null} onPress={cyclePrice} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={0}>
         {maxPrice != null ? (
           <Text style={[styles.priceText, { color: colors.neon }]}>{'$'.repeat(maxPrice)}</Text>
@@ -129,7 +144,8 @@ const makeStyles = (colors) => StyleSheet.create({
   // occupy - right:30 lines up with FabMenu's old anchor; bottom:170 clears
   // both the coin (roughly centered above BottomNav) and BottomNav's own
   // ~94px-tall footprint at the very bottom of the screen.
-  stack: { position: 'absolute', bottom: 170, right: 30, alignItems: 'center', gap: 10, zIndex: 45 },
+  // No bottom/top here - that's applied dynamically via verticalStyle above.
+  stack: { position: 'absolute', right: 30, alignItems: 'center', gap: 10, zIndex: 45 },
   toggleRing: { width: 38, height: 38 },
   toggleInner: { flex: 1 },
   toggleTouch: {

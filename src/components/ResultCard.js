@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, Pressable, Image, ScrollView, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, Image, Animated, Easing, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { neonSelected, buttonDepth } from '../constants';
 import { useTheme } from '../ThemeContext';
@@ -47,6 +47,36 @@ export default function ResultCard({
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [fullscreen, setFullscreen] = useState(false);
+
+  // "Flip Again" now fetches a new spot and swaps `result` in place instead
+  // of leaving this screen (user request) - this card stays mounted the
+  // whole time, so an instant photo swap would just be a jarring cut. A
+  // real card-flip instead: rotate the photo to 90deg (edge-on, invisible),
+  // swap the photo source at that exact moment, then continue from -90deg
+  // back to 0 (NOT onward to 180 - a flat image rotated past 90 the normal
+  // way renders mirrored, since the "back" of the card is being viewed;
+  // jumping the driving value to -90 lands on the same edge-on angle with
+  // no visible pop, and animating -90->0 reveals the new photo the right
+  // way round). Only the photo does this - the rest of the card's text/
+  // icons just re-render normally on the new `result` prop, which reads as
+  // fine since none of that changes are as visually jarring as a photo cut.
+  const [displayPhotoUrl, setDisplayPhotoUrl] = useState(result.photoUrl);
+  const photoFlip = useRef(new Animated.Value(0)).current;
+  const prevResultId = useRef(result.id);
+
+  useEffect(() => {
+    if (result.id === prevResultId.current) return;
+    prevResultId.current = result.id;
+    Animated.timing(photoFlip, {
+      toValue: 90, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true,
+    }).start(() => {
+      setDisplayPhotoUrl(result.photoUrl);
+      photoFlip.setValue(-90);
+      Animated.timing(photoFlip, {
+        toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+      }).start();
+    });
+  }, [result.id]);
 
   // This card used to have no scroll container at all - just sat inside
   // App.js's full-screen centered view, so content taller than the screen
@@ -106,11 +136,15 @@ export default function ResultCard({
         {/* Only set when this spot was NOT a genuine match for the selected
             cuisine - Google had zero real matches nearby, so this is the
             closest option instead (see places.js's unconfirmedCuisine). Never
-            silently present a fallback result as if it were a real match. */}
+            silently present a fallback result as if it were a real match.
+            Wording was "{Cuisine} Spots Nearby" - read as "there ARE spots
+            nearby" (the opposite of what this badge means) rather than "we
+            couldn't find any" (user feedback: "that's a little confusing").
+            "No ... Match Nearby" says the actual thing plainly. */}
         {result.unconfirmedCuisine && (
           <View style={styles.unconfirmedBadge}>
             <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.unconfirmedText}>{result.unconfirmedCuisine} Spots Nearby</Text>
+            <Text style={styles.unconfirmedText}>No {result.unconfirmedCuisine} Match Nearby</Text>
           </View>
         )}
         {/* Favorites-only mode reaching past the distance setting to still
@@ -124,9 +158,18 @@ export default function ResultCard({
           </View>
         )}
 
-        {result.photoUrl && (
+        {displayPhotoUrl && (
           <Pressable onPress={() => setFullscreen(true)}>
-            <Image source={{ uri: result.photoUrl }} style={styles.foodImage} resizeMode="cover" />
+            <Animated.View
+              style={{
+                transform: [
+                  { perspective: 800 },
+                  { rotateY: photoFlip.interpolate({ inputRange: [-90, 90], outputRange: ['-90deg', '90deg'] }) },
+                ],
+              }}
+            >
+              <Image source={{ uri: displayPhotoUrl }} style={styles.foodImage} resizeMode="cover" />
+            </Animated.View>
           </Pressable>
         )}
         <FullscreenImageViewer

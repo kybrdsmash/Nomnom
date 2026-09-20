@@ -25,7 +25,7 @@ import * as Application from 'expo-application';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { COIN_ANIMATION_MS, CUISINES, neonSelected, accentGradient, useVerticalScale } from './src/constants';
+import { COIN_ANIMATION_MS, CUISINES, DEFAULT_FAVE_NAMES, neonSelected, accentGradient, useVerticalScale, buttonDepth } from './src/constants';
 import { ThemeProvider, useTheme } from './src/ThemeContext';
 import { estimateMaxTimeMinutes } from './src/utils/geo';
 import { fetchLocalFood, pickFromFavorites } from './src/api/places';
@@ -68,6 +68,7 @@ import {
   loadTravelType, saveTravelType,
   loadOnboardingSeen, saveOnboardingSeen,
   loadInstallReferrerChecked, saveInstallReferrerChecked,
+  loadNavTapCounts, saveNavTapCounts,
 } from './src/storage';
 import { pushJournal } from './src/api/journal';
 import { uploadJournalPhoto, deleteJournalPhoto } from './src/api/journalPhotos';
@@ -147,6 +148,12 @@ function AppInner() {
   // other DetailModal entry point (those close straight to their screen).
   const [detailSpotReturnsTo, setDetailSpotReturnsTo] = useState(null);
   const [storageLoaded, setStorageLoaded] = useState(false);
+  // Anonymous, local-only tap counts per BottomNav destination (see
+  // src/storage.js's loadNavTapCounts) - user request, to have real data on
+  // whether the bottom nav's current layout (5 slots: Home/Places/Feast/
+  // Favorites/Settings) actually matches how it gets used, rather than
+  // guessing from general UX convention alone.
+  const [navTapCounts, setNavTapCounts] = useState({});
   // People previously played a friend-spin session with, keyed by their
   // persisted anonymous auth uid - lives here (not FriendSpin.js, its
   // original home) since the food journal below needs the same list.
@@ -263,6 +270,31 @@ function AppInner() {
   const coinWrapperRef = useRef(null);
   const [cuisineDropdownTop, setCuisineDropdownTop] = useState(0);
   const [cuisineDropdownHeight, setCuisineDropdownHeight] = useState(150);
+  // QuickFilters' 3-toggle stack was pinned to a hand-picked `bottom: 170` -
+  // close enough to the coin's own vertical center on the device it was
+  // tuned against, but the coin's real Y position comes out of homeScreen's
+  // flex layout (space-between, vscale-dependent paddings), so a fixed
+  // number drifts out of alignment on anything else (user report: "the 3
+  // small selector... are not centered with the nom nom coin"). Measured
+  // the same way cuisineDropdownTop/Height already are just above -
+  // containerRef is the shared coordinate-space anchor both this and the
+  // coin are measured against, since QuickFilters is a sibling of
+  // containerRef's other children, not nested inside the coin's own
+  // wrapping Views.
+  const [coinCenterY, setCoinCenterY] = useState(null);
+  useEffect(() => {
+    // rAF, not a bare synchronous call - ensures homeScreen's flex layout has
+    // actually committed at least one pass before measuring (the coin's Y
+    // position isn't known until then).
+    const raf = requestAnimationFrame(() => {
+      containerRef.current?.measureInWindow((_containerX, containerY) => {
+        coinWrapperRef.current?.measureInWindow((_coinX, coinY, _coinW, coinHeight) => {
+          setCoinCenterY(coinY - containerY + coinHeight / 2);
+        });
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
   const fadeOutAnim = useRef(new Animated.Value(1)).current;
   const fadeInAnim = useRef(new Animated.Value(0)).current;
 
@@ -430,10 +462,11 @@ function AppInner() {
   // Load persisted lists once on startup.
   useEffect(() => {
     (async () => {
-      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel, onboarded] = await Promise.all([
+      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel, onboarded, navCounts] = await Promise.all([
         loadHistory(), loadFavorites(), loadTryLater(), loadSeenIds(),
         loadProfile(), loadPreferences(), loadFaveCuisines(),
         loadFriends(), loadJournal(), loadTravelType(), loadOnboardingSeen(),
+        loadNavTapCounts(),
       ]);
       setHistory(h);
       setFavorites(f);
@@ -445,12 +478,17 @@ function AppInner() {
       setOnboardingSeen(onboarded);
       // Older saves stored each slot as a bare cuisine array ([[], [], []])
       // from before slots had names - normalize those up to the current
-      // { name, cuisines } shape rather than crashing on the old data.
+      // { name, cuisines } shape rather than crashing on the old data. Also
+      // covers a genuinely brand-new install (loadFaveCuisines' own default
+      // is exactly this same [[], [], []] shape), which is why
+      // DEFAULT_FAVE_NAMES (not a generic "Fave N") ends up as every new
+      // user's starting slot names.
       setFaveCuisines((faves || []).map((slot, i) =>
-        Array.isArray(slot) ? { name: `Fave ${i + 1}`, cuisines: slot } : slot
+        Array.isArray(slot) ? { name: DEFAULT_FAVE_NAMES[i] || `Fave ${i + 1}`, cuisines: slot } : slot
       ));
       setFriends(frnds);
       setJournal(jrnl);
+      setNavTapCounts(navCounts);
       setStorageLoaded(true);
     })();
   }, []);
@@ -466,6 +504,7 @@ function AppInner() {
   useEffect(() => { if (storageLoaded) saveFriends(friends); }, [friends, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveJournal(journal); }, [journal, storageLoaded]);
   useEffect(() => { if (storageLoaded) saveTravelType(travelType); }, [travelType, storageLoaded]);
+  useEffect(() => { if (storageLoaded) saveNavTapCounts(navTapCounts); }, [navTapCounts, storageLoaded]);
 
   // Hides the overlay for the rest of THIS session either way, but only
   // persists "seen" (so it stays gone on future opens too) if the user left
@@ -678,7 +717,7 @@ function AppInner() {
   const handleLoadFave = (index) => {
     const slot = faveCuisines[index];
     const saved = slot?.cuisines || [];
-    const label = slot?.name || `Fave ${index + 1}`;
+    const label = slot?.name || DEFAULT_FAVE_NAMES[index] || `Fave ${index + 1}`;
     if (saved.length === 0) {
       showToast(`${label} is empty - long-press to save`);
       return;
@@ -687,7 +726,7 @@ function AppInner() {
     showToast(`Loaded ${label}`);
   };
   const handleSaveFave = (index) => {
-    const label = faveCuisines[index]?.name || `Fave ${index + 1}`;
+    const label = faveCuisines[index]?.name || DEFAULT_FAVE_NAMES[index] || `Fave ${index + 1}`;
     setFaveCuisines((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], cuisines: selectedCuisines };
@@ -836,9 +875,56 @@ function AppInner() {
     setEliminatedStack([]);
   };
 
+  // ResultCard's "Flip Again" used to call resetApp - dumping the user all
+  // the way back to the idle coin screen just to get another pick (user
+  // request: "Flip Again should do exactly that - just give the user a new
+  // place"). Now fetches one new spot directly and swaps `result` in place;
+  // ResultCard.js reacts to that change with its own photo-flip transition
+  // (see its own useEffect on result.id), so this function itself doesn't
+  // need to know anything about that animation. Same single-spot fetch
+  // shape startRandomizer uses for gameMode 'random', but skips the coin
+  // spin/isSearching state entirely - staying on the results screen is the
+  // whole point here. allowRepeats: true (not gated on gameMode the way
+  // startRandomizer's is) since this always operates on an already-shown
+  // single result, never the list mode's own distinct Refresh button.
+  const handleFlipAgain = async () => {
+    if (!location) return;
+    if (favoritesOnly && favorites.length === 0) return;
+    try {
+      const selectedFoods = favoritesOnly
+        ? pickFromFavorites({ favorites, location, distance, travelType, count: 1 })
+        : await fetchLocalFood({
+            location, distance, minRating, selectedCuisines, travelType,
+            count: 1, openNowOnly, maxPrice, allowRepeats: true,
+          });
+      if (selectedFoods.length > 0) {
+        const marked = [...selectedFoods];
+        marked.forEach((s) => seenIdsRef.current.add(s.id));
+        saveSeenIds(seenIdsRef.current);
+        addToHistory(marked);
+        setResult(marked[0]);
+      }
+    } catch (error) {
+      console.error('handleFlipAgain failed:', error);
+      alert('Something went wrong finding a spot. Please try again.');
+    }
+  };
+
   const showFab =
     activeView === 'main' && !isSearching && !result &&
     eliminationList.length === 0 && browseList.length === 0;
+
+  // Exactly the states showFab excludes, minus isSearching (nothing useful
+  // to "go back" from mid-spin) - a result, an in-progress elimination
+  // bracket, or a Curated list. BottomNav hides here (see showBottomNav
+  // right below), which used to resurrect SettingsPanel's own stray gear-
+  // trigger fallback in this same bottom-left spot (user report: "the old
+  // setting button is sitting on the results page of eliminate... also on
+  // surprise me") - that fallback is gone now; this is its real replacement,
+  // an actual way out of the results/bracket/list flow back to idle Home.
+  const showBackFromResults =
+    activeView === 'main' && !isSearching &&
+    (!!result || eliminationList.length > 0 || browseList.length > 0);
 
   // BottomNav now also persists across Places/Favorites/Feast, not just
   // Home (closes the gap TODO.md documented) - it used to unmount the
@@ -875,6 +961,11 @@ function AppInner() {
     : activeView === 'places' ? 'places'
     : null;
   const handleNavSelect = (key) => {
+    // Anonymous, local-only usage tracking (see src/storage.js's
+    // loadNavTapCounts) - every destination counted the same way regardless
+    // of which branch below it takes.
+    setNavTapCounts((prev) => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
+
     if (key === 'settings') {
       setShowSettingsMenu(true);
       return;
@@ -1115,7 +1206,7 @@ function AppInner() {
             onOpenMaps={() => openMaps(result)}
             canUndo={eliminatedStack.length > 0}
             onUndo={handleUndo}
-            onReset={resetApp}
+            onReset={handleFlipAgain}
             onShowDetails={() => setDetailSpot(result)}
             onBackToBracket={handleBackToBracket}
             onOpenInvite={isFirebaseConfigured ? () => { setInviteSpot(result); setShowInviteModal(true); } : undefined}
@@ -1142,7 +1233,6 @@ function AppInner() {
         // Home and the drawer reopens by itself" - confirmed via a screen
         // recording showing BottomNav's own highlight tracking correctly
         // the whole time, so this was never a nav-state bug).
-        hideTrigger={showBottomNav}
         showSettingsMenu={showSettingsMenu}
         setShowSettingsMenu={setShowSettingsMenu}
         profile={profile}
@@ -1152,9 +1242,20 @@ function AppInner() {
         minRating={minRating}
         setMinRating={setMinRating}
         myUid={myUid}
+        navTapCounts={navTapCounts}
         onOpenBugReport={() => setShowBugReport(true)}
         onOpenHelp={() => setShowHelp(true)}
       />
+
+      {/* Same bottom-left spot the old stray gear button used to occupy
+          (see SettingsPanel.js's own docstring) - a real way out of
+          results/bracket/list back to idle Home, since none existed there
+          before. */}
+      {showBackFromResults && (
+        <Pressable style={styles.backFromResultsBtn} onPress={resetApp} hitSlop={6}>
+          <Ionicons name="arrow-back" size={22} color={colors.textDark} />
+        </Pressable>
+      )}
 
       <ReportBugModal
         visible={showBugReport}
@@ -1171,6 +1272,7 @@ function AppInner() {
       <QuickFilters
         visible={showFab}
         hapticsEnabled={preferences.haptics}
+        centerY={coinCenterY}
         openNowOnly={openNowOnly}
         onToggleOpenNow={() => {
           setOpenNowOnly((prev) => {
@@ -1306,6 +1408,15 @@ function AppInner() {
 
 const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, right: 0 }) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Same bottom-left spot SettingsPanel's old stray gear-trigger fallback
+  // used to occupy (bottom:30, left:30, before insets.bottom was added
+  // here) - see showBackFromResults above for why this exists and when it
+  // shows.
+  backFromResultsBtn: {
+    position: 'absolute', bottom: insets.bottom + 30, left: 30, zIndex: 250,
+    backgroundColor: colors.accent, width: 46, height: 46, borderRadius: 23,
+    alignItems: 'center', justifyContent: 'center', ...buttonDepth,
+  },
   // paddingBottom trimmed from 100 - topControlsScroll below is flex:1 with
   // scrolling deliberately disabled (the filter panel must stay static), so
   // ANY growth in bottomControls' own height (like the Friend Spin button

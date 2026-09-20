@@ -72,11 +72,24 @@ async function fetchPlacesPage(url) {
  * still real and still worth solving, just needs a safer approach (e.g.
  * multiple ring-radius queries) tested before shipping again - see TODO.md. */
 async function searchOnce({ location, radiusInMeters, keyword, openNowOnly }) {
+  // No `&type=restaurant` here anymore - Google treats `restaurant` as its
+  // own category, a SIBLING of (not a parent of) cafe/bakery/acai_shop/
+  // juice_shop/coffee_shop/ice_cream_shop/bagel_shop/candy_store/
+  // chocolate_shop/donut_shop/tea_house/dessert_shop, none of which
+  // typically also carry `restaurant` in their own types. Requiring it on
+  // every search - regardless of which cuisine was actually picked - was
+  // silently excluding real matches for roughly a third of CUISINES before
+  // Google's response even reached our own code (user report: a real, known
+  // nearby Acai place never appeared at all, not just mislabeled). NON_FOOD_
+  // TYPES below is what actually keeps non-food places out - that was
+  // already doing the real work; this `type` param was just an extra,
+  // overly-narrow restriction on top of it. Slightly more raw results per
+  // search (a worthwhile, deliberate tradeoff - user: "worth doing more
+  // calls just to increase accuracy").
   const baseUrl =
     `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
     `?location=${location.latitude},${location.longitude}` +
     `&radius=${radiusInMeters}` +
-    `&type=restaurant` +
     `&keyword=${encodeURIComponent(keyword)}` +
     (openNowOnly ? `&opennow=true` : '') +
     `&key=${GOOGLE_API_KEY}`;
