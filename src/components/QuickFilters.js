@@ -42,6 +42,7 @@ export default function QuickFilters({
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [stackHalfHeight, setStackHalfHeight] = useState(null);
+  const stackRef = useRef(null);
 
   if (!visible) return null;
 
@@ -60,28 +61,34 @@ export default function QuickFilters({
   // midpoint instead; falls back to the old fixed value for the one frame
   // before that measurement resolves, so nothing jumps on mount.
   const halfHeight = stackHalfHeight != null ? stackHalfHeight : STACK_HALF_HEIGHT_FALLBACK;
-  // TEMP EMPIRICAL CORRECTION - the box math (coinCenterY vs. this stack's
-  // own measured half-height) has been verified exactly correct via direct
-  // on-device measurement, twice, yet a real screenshot pixel-crop still
-  // shows this stack sitting ~25dp too high against the coin's own visual
-  // center (user report, confirmed by measurement this time, not eyeballed).
-  // Leading theory: something paints outside this stack's measured 38x38-
-  // per-toggle LAYOUT box without affecting that measurement at all - a
-  // shadow/glow (frostedGlow, the attract-pulse ring) extending asymmetrically
-  // rather than the box position itself being wrong. Nudging down by the
-  // measured gap now per explicit user request while that gets root-caused
-  // for real - remove this constant once the actual cause is fixed, don't
-  // just leave it stacked on top of a real fix later.
-  const EMPIRICAL_Y_CORRECTION = 25;
-  const verticalStyle = centerY != null
-    ? { top: centerY - halfHeight + EMPIRICAL_Y_CORRECTION }
-    : { bottom: 170 - EMPIRICAL_Y_CORRECTION };
+  // Was a hardcoded +25dp correction, tuned from ONE screenshot on ONE
+  // device (a Pixel) - a second device (a tablet) confirmed that same
+  // constant overshoots the OTHER direction there (user report: "now
+  // they're all too low" on the tablet after being too high on the Pixel).
+  // That rules out a fixed-size cause (a shadow's dp offset would be
+  // roughly constant across devices) and confirms this needs a real,
+  // device-independent root cause instead of a tuned number - removed
+  // until that's found. See App.js's measureCoin for the new comparative
+  // debug logging.
+  const verticalStyle = centerY != null ? { top: centerY - halfHeight } : { bottom: 170 };
 
   return (
     <View
+      ref={stackRef}
       style={[styles.stack, verticalStyle]}
       pointerEvents="box-none"
-      onLayout={(e) => setStackHalfHeight(e.nativeEvent.layout.height / 2)}
+      onLayout={(e) => {
+        setStackHalfHeight(e.nativeEvent.layout.height / 2);
+        // TEMP DEBUG - remove alongside App.js's matching log once the
+        // device-dependent discrepancy is root-caused. This stack's own
+        // true window-absolute center, measured completely independently
+        // of centerY/containerY - a direct, assumption-free ground truth
+        // to compare against the coin's own trueCenterY (App.js's log) on
+        // BOTH devices from the same build.
+        stackRef.current?.measureInWindow((x, y, w, h) => {
+          console.log('[QuickFilters]', { centerY, halfHeight, stackY: y, stackHeight: h, trueCenterY: y + h / 2 });
+        });
+      }}
     >
       <Toggle active={maxPrice != null} onPress={cyclePrice} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={0}>
         {maxPrice != null ? (
