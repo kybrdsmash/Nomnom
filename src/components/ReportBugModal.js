@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { submitBugReport } from '../api/bugReports';
+import { ensureSignedIn } from '../api/firebase';
 
 /**
  * Its own top-level Modal (was inline inside SettingsPanel's floating,
@@ -47,7 +48,22 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
   const submitBug = async () => {
     if (!bugText.trim() || bugSubmitting) return;
     setBugSubmitting(true);
-    const ok = await submitBugReport({ uid: myUid, description: bugText, displayName, screenshotUri });
+    // Was just `myUid` (a prop, set once App.js's own ensureSignedIn() call
+    // resolves) - on a brand-new install there's a real window where
+    // someone can open this and hit Send before that finishes, sending a
+    // null uid right as Firestore's rules reject an unauthenticated write
+    // (user report: a friend's fresh install couldn't send a bug report at
+    // all). ensureSignedIn() is cheap to call again if already signed in
+    // (it just returns auth.currentUser.uid immediately) - calling it here
+    // guarantees a real, completed sign-in before this ever tries to write.
+    let uid = myUid;
+    try {
+      uid = await ensureSignedIn();
+    } catch (e) {
+      // Falls through with whatever myUid already was (possibly null) -
+      // submitBugReport below still tries, same as before this fix existed.
+    }
+    const ok = await submitBugReport({ uid, description: bugText, displayName, screenshotUri });
     setBugSubmitting(false);
     if (ok) {
       setBugText('');
