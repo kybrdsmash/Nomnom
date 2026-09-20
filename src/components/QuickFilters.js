@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Pressable, Text, Animated, StyleSheet } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -22,10 +22,17 @@ const PRICE_LEVELS = [1, 2, 3, 4];
  * them (1→2→3→4→off→1...), showing the current level as its own label so it
  * never needs to expand into anything.
  */
-// Half the stack's own real height (3 toggles at toggleRing's 38px, plus
-// stack's own 10px gap between them: 38*3 + 10*2 = 134) - used to center it
-// on the coin's midpoint rather than its top edge.
-const STACK_HALF_HEIGHT = 67;
+// Fallback only, used for the one frame before onLayout below reports the
+// stack's REAL rendered height - was the only source of truth before (3
+// toggles at toggleRing's declared 38px, plus stack's own 10px gap: 38*3 +
+// 10*2 = 134, half 67), which left a small but real ~18px residual offset
+// on-device (measured directly against the coin's own pixels) once the
+// coin-centering fix itself was already working - the declared 38px
+// doesn't necessarily match how tall the toggle actually paints once
+// FrostedGlass/frostedGlow's own rendering is factored in. Measuring is
+// exact regardless of why the guess was off; guessing a corrected constant
+// would just trade one unverified number for another.
+const STACK_HALF_HEIGHT_FALLBACK = 67;
 
 export default function QuickFilters({
   visible, openNowOnly, onToggleOpenNow, favoritesOnly, onToggleFavoritesOnly,
@@ -33,6 +40,7 @@ export default function QuickFilters({
 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const [stackHalfHeight, setStackHalfHeight] = useState(null);
 
   if (!visible) return null;
 
@@ -50,10 +58,15 @@ export default function QuickFilters({
   // off the coin's own wrapper) lets this center on the coin's actual
   // midpoint instead; falls back to the old fixed value for the one frame
   // before that measurement resolves, so nothing jumps on mount.
-  const verticalStyle = centerY != null ? { top: centerY - STACK_HALF_HEIGHT } : { bottom: 170 };
+  const halfHeight = stackHalfHeight != null ? stackHalfHeight : STACK_HALF_HEIGHT_FALLBACK;
+  const verticalStyle = centerY != null ? { top: centerY - halfHeight } : { bottom: 170 };
 
   return (
-    <View style={[styles.stack, verticalStyle]} pointerEvents="box-none">
+    <View
+      style={[styles.stack, verticalStyle]}
+      pointerEvents="box-none"
+      onLayout={(e) => setStackHalfHeight(e.nativeEvent.layout.height / 2)}
+    >
       <Toggle active={maxPrice != null} onPress={cyclePrice} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={0}>
         {maxPrice != null ? (
           <Text style={[styles.priceText, { color: colors.neon }]}>{'$'.repeat(maxPrice)}</Text>
