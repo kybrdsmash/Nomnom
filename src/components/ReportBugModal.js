@@ -27,7 +27,7 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
   const [bugText, setBugText] = useState('');
   const [screenshotUri, setScreenshotUri] = useState(null);
   const [bugSubmitting, setBugSubmitting] = useState(false);
-  const [bugStatus, setBugStatus] = useState('idle'); // 'idle' | 'sent' | 'error'
+  const [bugStatus, setBugStatus] = useState('idle'); // 'idle' | 'sent' | 'sentNoPhoto' | 'error'
 
   useEffect(() => {
     if (!visible) return;
@@ -63,12 +63,16 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
       // Falls through with whatever myUid already was (possibly null) -
       // submitBugReport below still tries, same as before this fix existed.
     }
-    const ok = await submitBugReport({ uid, description: bugText, displayName, screenshotUri });
+    // submitBugReport now returns {ok, screenshotFailed} instead of a plain
+    // boolean - a broken screenshot upload used to take the whole report
+    // down with it (user report: "seems to be after someone adds a
+    // photo") rather than degrading to a text-only report.
+    const { ok, screenshotFailed } = await submitBugReport({ uid, description: bugText, displayName, screenshotUri });
     setBugSubmitting(false);
     if (ok) {
       setBugText('');
       setScreenshotUri(null);
-      setBugStatus('sent');
+      setBugStatus(screenshotFailed ? 'sentNoPhoto' : 'sent');
     } else {
       setBugStatus('error');
     }
@@ -127,6 +131,7 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
               )}
             </Pressable>
             {bugStatus === 'sent' && <Text style={styles.statusSent}>Sent - thanks!</Text>}
+            {bugStatus === 'sentNoPhoto' && <Text style={styles.statusSent}>Sent (photo didn't attach) - thanks!</Text>}
             {bugStatus === 'error' && <Text style={styles.statusError}>Couldn't send - try again</Text>}
           </View>
         </View>
