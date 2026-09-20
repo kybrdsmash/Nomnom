@@ -57,6 +57,12 @@ exports.onPingCreated = onDocumentCreated('users/{uid}/pings/{pingId}', async (e
       data: { code: ping.code },
       sound: 'default',
       priority: 'high',
+      // Must match push.js's registerForPushNotifications channel ID - a
+      // push with no channelId falls back to Android's own "Miscellaneous"
+      // default, not the app's HIGH-importance one, silently losing the
+      // heads-up banner/vibration on Android specifically (iOS has no
+      // channel concept and is unaffected either way).
+      channelId: 'pings-v2',
     }),
   });
   const result = await response.json().catch(() => null);

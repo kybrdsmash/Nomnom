@@ -33,9 +33,21 @@ export async function registerForPushNotifications(uid) {
   if (!uid) return;
   try {
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
+      // Channel ID 'pings-v2', not 'default' - Android locks a channel's
+      // settings (importance, sound, vibration) at creation and silently
+      // ignores every later setNotificationChannelAsync call with the same
+      // ID, even across app updates. A device that had ever created a
+      // 'default' channel before this HIGH-importance config existed would
+      // be stuck on whatever it got that first time, with no code-only way
+      // to fix it (user report: notification arrived - badge incremented -
+      // but no heads-up banner or vibration, exactly what a
+      // lower-than-HIGH-importance channel looks like). A new ID forces a
+      // fresh channel with the settings actually specified here.
+      await Notifications.setNotificationChannelAsync('pings-v2', {
+        name: 'Pings',
         importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
       });
     }
     const { status: existing } = await Notifications.getPermissionsAsync();
