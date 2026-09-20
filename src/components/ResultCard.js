@@ -6,6 +6,7 @@ import { useTheme } from '../ThemeContext';
 import { joinParts } from '../utils/format';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import SpotsMap from './SpotsMap';
+import CuisineMatchBadge from './CuisineMatchBadge';
 import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
 
 // Was an inline ternary chain that defaulted to 'car' for anything that
@@ -137,15 +138,22 @@ export default function ResultCard({
             cuisine - Google had zero real matches nearby, so this is the
             closest option instead (see places.js's unconfirmedCuisine). Never
             silently present a fallback result as if it were a real match.
-            Wording was "{Cuisine} Spots Nearby" - read as "there ARE spots
-            nearby" (the opposite of what this badge means) rather than "we
-            couldn't find any" (user feedback: "that's a little confusing").
-            "No ... Match Nearby" says the actual thing plainly. */}
+            Was flat "No {Cuisine} Match Nearby" text - read as "there's
+            nothing here" while looking straight at a real result, especially
+            confusing on a Flip Again reroll after already seeing genuine
+            matches earlier in the same search (user feedback: "kinda doesn't
+            feel right" unless it's literally the first result). Now asks
+            instead of asserts, and the answer becomes free crowdsourced
+            signal for tuning the filter later - see CuisineMatchBadge. */}
         {result.unconfirmedCuisine && (
-          <View style={styles.unconfirmedBadge}>
-            <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.unconfirmedText}>No {result.unconfirmedCuisine} Match Nearby</Text>
-          </View>
+          {/* Keyed by spotId - CuisineMatchBadge keeps its own yes/no vote
+              state locally, and without a key React just reuses the same
+              instance across a Flip Again reroll, leaving the PREVIOUS
+              spot's "Thanks - noted..." message stuck on screen for a
+              completely different result (user report). A key change forces
+              a fresh instance (and fresh state) per spot, same as any other
+              per-item React state reset. */}
+          <CuisineMatchBadge key={result.id} cuisine={result.unconfirmedCuisine} spotId={result.id} spotName={result.name} />
         )}
         {/* Favorites-only mode reaching past the distance setting to still
             offer a real choice (see places.js's pickFromFavorites) - always

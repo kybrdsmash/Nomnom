@@ -37,6 +37,7 @@ const STACK_HALF_HEIGHT_FALLBACK = 67;
 export default function QuickFilters({
   visible, openNowOnly, onToggleOpenNow, favoritesOnly, onToggleFavoritesOnly,
   maxPrice, setMaxPrice, hapticsEnabled = true, centerY,
+  reallyGoodOnly, onToggleReallyGood,
 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -88,6 +89,15 @@ export default function QuickFilters({
           color={favoritesOnly ? colors.neon : colors.textMuted}
         />
       </Toggle>
+      {/* "Really Freaking Good" (user request) - a much stricter quality bar
+          than the normal minRating slider, see places.js's filterReallyGood. */}
+      <Toggle active={reallyGoodOnly} onPress={onToggleReallyGood} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={3}>
+        <Ionicons
+          name={reallyGoodOnly ? 'flame' : 'flame-outline'}
+          size={22}
+          color={reallyGoodOnly ? colors.neon : colors.textMuted}
+        />
+      </Toggle>
     </View>
   );
 }
@@ -119,7 +129,12 @@ function Toggle({ active, onPress, children, colors, styles, hapticsEnabled, ord
         Animated.timing(pulseGlow, { toValue: 0, duration: 220, useNativeDriver: true }),
       ]),
     ]);
-    Animated.sequence([Animated.delay(order * 90), onePulse(), onePulse()]).start();
+    // Was two onePulse() calls back-to-back ("two soft glow + scale
+    // bounces") - since QuickFilters fully unmounts/remounts every time you
+    // leave and return to Home, that meant a real double-bounce every single
+    // time (user report: "they do a click wave thing... but they do it
+    // twice"). One is enough to draw the eye without reading as excessive.
+    Animated.sequence([Animated.delay(order * 90), onePulse()]).start();
   }, []);
 
   const handlePress = () => {

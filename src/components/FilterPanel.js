@@ -8,12 +8,23 @@ import HelpModal from './HelpModal';
 import FaveCuisineButton from './FaveCuisineButton';
 import FrostedGlass from './FrostedGlass';
 
-const DIST_MAX = 20;
+// Was 20 - that flat mileage ceiling was actually the BINDING constraint for
+// drive/transit despite MAX_TRAVEL_HOURS below saying 2 hours everywhere
+// (user report: "the travel radius caps out... why is it limited") - at
+// drive's 25mph, 20mi is only 48 minutes, and transit only reaches 20mi in
+// 100 minutes, neither anywhere near the 2 hours the setting implies. 30
+// is the real practical ceiling instead: Google's Places nearbysearch API
+// hard-caps its own `radius` param at 50,000m (~31.07mi, see places.js's
+// matching MAX_RADIUS_METERS clamp) - going higher than that wouldn't
+// actually search any farther, just show a distance number the API can't
+// honor.
+const DIST_MAX = 30;
 // No one wants to walk more than ~2 hours to eat (user feedback) - cap each
 // travel mode's selectable distance at 2 hours of travel at that mode's
-// speed. Transit (12mph) and drive (25mph) are already well under 2 hours
-// at the 20mi ceiling, so this only actually changes anything for walking
-// (3mph * 2h = 6mi) - one rule, no special-cased mode.
+// speed. Drive now actually reaches close to a real 2 hours (25mph * 2h =
+// 50mi, clamped to DIST_MAX's 30mi ceiling above); transit reaches its full
+// 2 hours uncapped (12mph * 2h = 24mi, under 30); walking still maxes out
+// naturally at 6mi (3mph * 2h) well before DIST_MAX matters at all.
 const MAX_TRAVEL_HOURS = 2;
 const distMaxForMode = (travelType) => Math.min(DIST_MAX, SPEEDS_MPH[travelType] * MAX_TRAVEL_HOURS);
 

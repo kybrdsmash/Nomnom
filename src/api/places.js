@@ -1,10 +1,20 @@
 import { SPEEDS_MPH, MIN_REVIEW_COUNT, STATS_FILTER_MIN_POOL, STATS_FILTER_SIGMA } from '../constants';
 import { getTrueDistance, getSpecificType, estimateTripTimeMinutes } from '../utils/geo';
 import { recordFeedPhotos } from './feedPhotos';
+import { fetchPlaceDetails } from './details';
 
 // EXPO_PUBLIC_ prefix means Expo bakes this in from your .env file (locally)
 // or from EAS's environment variable store (in cloud builds).
 const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY;
+
+// Google's Places nearbysearch API hard-caps its own `radius` param at
+// 50,000 meters (~31.07mi) - documented behavior, not a guess. Clamped here
+// (not just relied on via FilterPanel.js's own DIST_MAX ceiling) as a second,
+// independent safety net - this file has two separate call sites that
+// compute a radius from a distance in miles, and neither should ever be able
+// to send Google a value it can't honor regardless of what any UI constant
+// says now or after a future change.
+const MAX_RADIUS_METERS = 50000;
 
 // ---- Session result cache ----------------------------------------------
 // Each Google pull returns up to 20 places but we only show 1 or 5, so we
@@ -31,14 +41,14 @@ let cacheShowCounts = new Map();
 // calls that hit the cache for other reasons.
 let lastSelectedCuisines = [];
 
-function makeFilterKey({ location, distance, minRating, selectedCuisines, travelType, openNowOnly, maxPrice }) {
+function makeFilterKey({ location, distance, minRating, selectedCuisines, travelType, openNowOnly, maxPrice, reallyGoodOnly }) {
   // Location rounded to ~100m so tiny GPS drift doesn't nuke the cache.
   const lat = location.latitude.toFixed(3);
   const lng = location.longitude.toFixed(3);
   return JSON.stringify({
     lat, lng, distance, minRating,
     cuisines: [...selectedCuisines].sort(),
-    travelType, openNowOnly, maxPrice,
+    travelType, openNowOnly, maxPrice, reallyGoodOnly,
   });
 }
 
@@ -152,6 +162,15 @@ export async function fetchLocalFood({
   count = 1,
   openNowOnly = false,
   maxPrice = null,
+  // "Really Freaking Good" - a much stricter quality bar (see
+  // filterReallyGood below) than the normal minRating slider, meant to
+  // guarantee a locally-loved standout rather than just "meets your
+  // minimum." Auto-broadens the search radius to MAX_RADIUS_METERS
+  // regardless of the user's own distance setting (user request: "it might
+  // even be worth broadening the travel radius" - the whole premise of this
+  // toggle is being willing to go further for something exceptional, so a
+  // normal short radius could come up empty for no good reason).
+  reallyGoodOnly = false,
   // List mode wants "up to `count`, whatever's actually left in the pool" on
   // a refresh - not padded out with repeats the way a single flip or an
   // elimination bracket wants a full, consistent-sized set every time.
@@ -187,7 +206,13 @@ export async function fetchLocalFood({
   // Serve from cache when filters haven't changed. Fresh (never-shown) spots
   // are ALWAYS used first; repeats only fill the remainder once fresh ones
   // run short, and only then does shown-tracking reset.
-  const filterKey = makeFilterKey({ location, distance, minRating, selectedCuisines, travelType, openNowOnly, maxPrice });
+  const filterKey = makeFilterKey({ location, distance, minRating, selectedCuisines, travelType, openNowOnly, maxPrice, reallyGoodOnly });
+  // The distance actually SEARCHED - broadened to the practical max when
+  // reallyGoodOnly is on (see the param's own comment above), otherwise
+  // exactly the user's own setting. Used for both the API radius below and
+  // the withinDistance backstop filter further down, so the two always
+  // agree on how far this particular search is allowed to reach.
+  const searchDistance = reallyGoodOnly ? MAX_RADIUS_METERS / 1609.34 : distance;
   if (filterKey === cachedKey && cachedPool.length > 0) {
     const unshown = cachedPool.filter((s) => !cacheShownIds.has(s.id));
     if (unshown.length >= count) {
@@ -215,7 +240,7 @@ export async function fetchLocalFood({
   }
 
   // Cache miss (first search, or a filter changed): do the real fetch.
-  const radiusInMeters = Math.round(distance * 1609.34);
+  const radiusInMeters = Math.min(MAX_RADIUS_METERS, Math.round(searchDistance * 1609.34));
 
   // One search per selected cuisine (capped at 5 parallel calls), or a single
   // generic search if none selected. We fetch ALL cuisines even in randomizer
@@ -318,7 +343,7 @@ export async function fetchLocalFood({
   // should already bound everything, but isn't always perfectly precise at
   // the edge) - reuses _chainDistance (already computed above, same
   // true-distance calc shapeSpot uses) rather than recomputing it.
-  const withinDistance = deduped.filter((spot) => parseFloat(spot._chainDistance) <= distance);
+  const withinDistance = deduped.filter((spot) => parseFloat(spot._chainDistance) <= searchDistance);
 
   // Basic quality filter: minimum star rating + hard review floor backstop.
   // Price is also filtered here (client-side) rather than via Google's own
@@ -358,7 +383,7 @@ export async function fetchLocalFood({
   // one 8,000-review anchor would wreck a raw mean. This self-calibrates: in
   // a city the effective floor might be ~200 reviews, rural might be ~15.
   // Skipped entirely for small pools where the stats would just be noise.
-  const validSpots = filterByReviewStats(basicValid);
+  let validSpots = filterByReviewStats(basicValid);
 
   if (validSpots.length === 0) {
     if (!silent) {
@@ -367,6 +392,23 @@ export async function fetchLocalFood({
       );
     }
     return [];
+  }
+
+  // "Really Freaking Good" - a further, much stricter pass on top of the
+  // normal quality bar above, not a replacement for it. Applied here (not
+  // folded into basicValid/filterByReviewStats) since it's an optional,
+  // user-toggled mode, not a baseline every search should apply.
+  if (reallyGoodOnly) {
+    const standoutSpots = filterReallyGood(validSpots);
+    if (standoutSpots.length === 0) {
+      if (!silent) {
+        alert(
+          `No 🔥 Really Freaking Good spots found, even after widening the search. Try a different cuisine, or turn this off for more options.`
+        );
+      }
+      return [];
+    }
+    validSpots = standoutSpots;
   }
 
   // Sort by review count so the most-vetted spots surface first (user
@@ -404,7 +446,15 @@ const FAVORITES_OVERFLOW_CAP = 2;
  * options to choose from, not quietly expanding someone's 10-minute setting
  * to 20-30 without telling them).
  */
-export function pickFromFavorites({ favorites, location, distance, travelType, count }) {
+// Now async (was sync) - openNowOnly needs a live Place Details lookup per
+// candidate, since a saved favorite is just a cached snapshot (name/lat/lng/
+// rating from whenever it was favorited) with no live hours data of its own.
+// Was silently ignoring openNowOnly entirely (user report: "if I have
+// favorites only on and open now on... even if the place is closed it still
+// shows me a favorite result") - both call sites (App.js's startRandomizer/
+// handleFlipAgain) already `await` this for the coin-animation Promise.all,
+// so making it properly async doesn't change anything about how it's called.
+export async function pickFromFavorites({ favorites, location, distance, travelType, count, openNowOnly = false }) {
   if (!favorites || favorites.length === 0 || !location) return [];
 
   const withLiveDistance = favorites
@@ -436,7 +486,26 @@ export function pickFromFavorites({ favorites, location, distance, travelType, c
   // Shuffled, not just the closest-first order above - otherwise the same
   // handful of nearest favorites would win every single spin.
   const shuffled = [...pool].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count).map(({ liveMiles, ...spot }) => spot);
+
+  if (!openNowOnly) {
+    return shuffled.slice(0, count).map(({ liveMiles, ...spot }) => spot);
+  }
+
+  // Checked one at a time, stopping once `count` confirmed-open favorites
+  // are found - avoids spending a Place Details call (cached 24h, but still
+  // a real network round-trip) on favorites past the ones actually needed.
+  // Missing hours data (Google doesn't always have it) passes through
+  // un-punished, same leniency this codebase already uses for missing
+  // price_level - only an explicit `false` (confirmed closed right now)
+  // excludes a favorite.
+  const openPicks = [];
+  for (const spot of shuffled) {
+    if (openPicks.length >= count) break;
+    const details = await fetchPlaceDetails(spot.id).catch(() => null);
+    if (details?.openNow === false) continue;
+    openPicks.push(spot);
+  }
+  return openPicks.map(({ liveMiles, ...spot }) => spot);
 }
 
 // Groups a pool by which cuisine filter it's confirmed to match
@@ -659,6 +728,61 @@ function filterGroupByReviewStats(spots) {
   return filtered.length >= 5 ? filtered : spots;
 }
 
+// "Really Freaking Good" toggle's quality bar (user request - see the
+// criteria discussion in chat). Three layers, each doing a distinct job:
+//  1. A high, absolute rating floor - review COUNT alone rewards chains,
+//     not beloved places, so a real minimum star rating is non-negotiable.
+//  2. A review-count floor well above the app's normal MIN_REVIEW_COUNT (5)
+//     - a 4.9-star place with 6 reviews is luck, not "locally loved."
+//  3. Locally exceptional, not just globally above the floor - reuses
+//     filterGroupByReviewStats' exact statistical approach (grouped by
+//     cuisine, log-scale local mean/stddev) but in the OPPOSITE direction:
+//     require STANDING above the local mean, not merely not-below it. This
+//     is what makes the bar fair between a dense city (where "exceptional"
+//     might mean 800+ reviews) and a small town (where 40 might already be
+//     the most any local spot has) rather than using one fixed number
+//     everywhere.
+const RFG_MIN_RATING = 4.5;
+const RFG_MIN_REVIEW_COUNT = 30;
+const RFG_SIGMA_ABOVE_MEAN = 0.5;
+
+function filterReallyGood(spots) {
+  const groups = new Map();
+  for (const spot of spots) {
+    const key = spot._searchCuisine || 'food';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(spot);
+  }
+  const result = [];
+  for (const group of groups.values()) {
+    result.push(...filterGroupReallyGood(group));
+  }
+  return result;
+}
+
+function filterGroupReallyGood(spots) {
+  const eligible = spots.filter(
+    (s) => (s.rating || 0) >= RFG_MIN_RATING && (s.user_ratings_total || 0) >= RFG_MIN_REVIEW_COUNT
+  );
+  if (eligible.length === 0) return [];
+  // Too few to compute meaningful local statistics on - the flat
+  // rating+review-count floor above already did the real work here.
+  if (eligible.length < STATS_FILTER_MIN_POOL) return eligible;
+
+  const logs = eligible.map((s) => Math.log(s.user_ratings_total || 1));
+  const mean = logs.reduce((a, b) => a + b, 0) / logs.length;
+  const variance = logs.reduce((a, b) => a + (b - mean) ** 2, 0) / logs.length;
+  const stdDev = Math.sqrt(variance);
+  if (stdDev < 0.01) return eligible;
+
+  const cutoff = mean + RFG_SIGMA_ABOVE_MEAN * stdDev;
+  const standout = eligible.filter((s) => Math.log(s.user_ratings_total || 1) >= cutoff);
+  // Don't let the "locally exceptional" layer empty the pool - the flat
+  // floor above is already a real, meaningful bar on its own; local standing
+  // is a bonus tightening, not a hard requirement when too few clear it.
+  return standout.length > 0 ? standout : eligible;
+}
+
 // Google "types" that tell the user nothing about what kind of food it is.
 const JUNK_TYPES = new Set([
   'restaurant', 'food', 'point_of_interest', 'establishment',
@@ -669,10 +793,33 @@ const JUNK_TYPES = new Set([
 // them - Google's `keyword` search is a loose full-text match (name/type/
 // reviews), so a liquor store or gas station can surface and, since
 // `liquor_store` isn't in JUNK_TYPES, get labeled as if it were a restaurant.
+//
+// Ethnicity/cuisine names are exactly the search terms most likely to also
+// match non-food places that share that same word in their own name - a
+// church, cultural center, or law office is very often named after the same
+// nationality as the cuisine (user report: searching "Armenian" surfaced an
+// Armenian church - applyTypeAllowlist's own fallback below, which returns
+// Google's raw keyword results when nothing food-specific matched nearby,
+// had no way to know that result wasn't food at all). This list is checked
+// AFTER that fallback runs (see where NON_FOOD_TYPES is applied, further
+// down this file), so widening it here catches exactly this class of bug
+// regardless of which cuisine or how the pool got built.
 const NON_FOOD_TYPES = new Set([
   'liquor_store', 'convenience_store', 'grocery_or_supermarket', 'supermarket',
   'gas_station', 'lodging', 'night_club', 'casino', 'movie_theater',
   'shopping_mall', 'department_store', 'drugstore', 'pharmacy',
+  // Religious/civic/cultural - very commonly named by nationality or ethnicity.
+  'church', 'place_of_worship', 'hindu_temple', 'mosque', 'synagogue',
+  'local_government_office', 'embassy', 'city_hall', 'courthouse', 'library',
+  'school', 'primary_school', 'secondary_school', 'university',
+  // Professional/personal services - same "branded by community" pattern.
+  'lawyer', 'real_estate_agency', 'insurance_agency', 'travel_agency',
+  'accounting', 'bank', 'atm', 'hair_care', 'beauty_salon', 'spa',
+  'doctor', 'dentist', 'hospital', 'physiotherapist',
+  'funeral_home', 'cemetery',
+  // Retail unrelated to food.
+  'clothing_store', 'jewelry_store', 'furniture_store', 'car_dealer',
+  'car_repair', 'car_wash', 'museum', 'art_gallery', 'tourist_attraction',
 ]);
 
 // Google's full "Food and Drink" place-type taxonomy (Places API Table A),
@@ -917,7 +1064,7 @@ const NEARBY_TIE_THRESHOLD_MILES = 0.1;
 export async function searchNearbyByKeyword(location, travelType, keyword, { radiusMiles = 10, closestOnly = false } = {}) {
   if (!GOOGLE_API_KEY || !location || !keyword.trim()) return [];
 
-  const radiusInMeters = Math.round(radiusMiles * 1609.34);
+  const radiusInMeters = Math.min(MAX_RADIUS_METERS, Math.round(radiusMiles * 1609.34));
   const url =
     `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
     `?location=${location.latitude},${location.longitude}` +

@@ -68,9 +68,13 @@ export default function AddSpotModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      {/* Same fix as DetailModal/ReportBugModal/ScheduleMealModal - `undefined`
+          on Android was a no-op, and this is a <Modal> (its own Android
+          Dialog window, which doesn't inherit the Activity's keyboard-resize
+          behavior the way a normal screen does). */}
       <KeyboardAvoidingView
         style={styles.backdrop}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>

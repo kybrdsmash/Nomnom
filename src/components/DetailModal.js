@@ -10,6 +10,7 @@ import { fetchPlaceDetails } from '../api/details';
 import { isFirebaseConfigured } from '../api/firebase';
 import { fetchFriendJournal } from '../api/journal';
 import { joinParts } from '../utils/format';
+import { loadJournalComposeDraft, saveJournalComposeDraft, clearJournalComposeDraft } from '../storage';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import MomentsEditor, { newMoment } from './MomentsEditor';
 import { getMichelinEntry } from '../michelinList';
@@ -77,11 +78,21 @@ export default function DetailModal({
   const [composing, setComposing] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [draftRating, setDraftRating] = useState(0);
+  // Defaults true (user decision: share by default, opt out while writing
+  // rather than opt in after the fact) - see App.js's addJournalEntry/
+  // editJournalEntry for where this actually drives a photo upload.
+  const [draftShared, setDraftShared] = useState(true);
   // Same moments shape as AtTheTableCompose/MomentsEditor now (user request:
   // "Journal"'s own compose box needs the same multi-photo/multi-text
   // format, not the old single note + single photo) - a leading note plus
   // any number of photo+text blocks after it.
   const [draftMoments, setDraftMoments] = useState([newMoment()]);
+  // Gates the autosave effect below until the draft-restore effect has had
+  // its one chance to run for this spot - without it, the autosave effect's
+  // very first fire (still holding this state's default blank values) would
+  // race the async storage read and overwrite a real saved draft with
+  // nothing before it ever got a chance to display.
+  const [draftRestored, setDraftRestored] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // Both sections start collapsed as slim header rows (user request) - tap
   // the row (or its chevron) to reveal the compose box/entries beneath it.
@@ -108,13 +119,51 @@ export default function DetailModal({
     }
   }, [visible, spot?.id]);
 
+  // Was an unconditional reset (composing/editingEntryId/draftRating/
+  // draftMoments all wiped every time this modal opened at all, even
+  // reopening the SAME spot) - meant closing this modal mid-entry, for any
+  // reason short of hitting Save or Cancel (the Android back gesture,
+  // tapping the backdrop, anything), silently threw the whole draft away
+  // with no way back (user report: "I was in the middle of a journal...
+  // left the page and went back - I lost it"). Now checks storage.js's
+  // single global journalComposeDraft slot (same one-slot convention as
+  // AtTheTableCompose's own atTheTableDraft) for a draft matching THIS
+  // spot before deciding to reset. A draft belonging to some OTHER spot is
+  // deliberately left alone in storage rather than restored or cleared
+  // here - only one entry is ever being composed anywhere in the app at a
+  // time, and it's still there waiting whenever that spot's modal reopens.
   useEffect(() => {
+    setExpanded(false);
+    setFriendsSectionOpen(false);
+    setDraftRestored(false);
     setComposing(false);
     setEditingEntryId(null);
-    setExpanded(false);
     setJournalSectionOpen(false);
-    setFriendsSectionOpen(false);
+    (async () => {
+      const draft = await loadJournalComposeDraft();
+      if (draft && spot && draft.spotId === spot.id) {
+        setEditingEntryId(draft.editingEntryId || null);
+        setDraftRating(draft.rating || 0);
+        setDraftMoments(draft.moments?.length > 0 ? draft.moments : [newMoment()]);
+        setComposing(true);
+        setJournalSectionOpen(true);
+      }
+      setDraftRestored(true);
+    })();
   }, [visible, spot?.id]);
+
+  // Autosaves the in-progress entry on every change, mirroring
+  // AtTheTableCompose's own draft effect - only ever WRITES here, never
+  // clears; clearing only happens on the explicit exits (Save, Cancel,
+  // delete below), so a draft for a spot the user simply navigated away
+  // from without cancelling is never silently wiped by this effect firing
+  // for whatever OTHER spot they opened next.
+  useEffect(() => {
+    if (!draftRestored || !composing || !spot) return;
+    saveJournalComposeDraft({
+      spotId: spot.id, editingEntryId, rating: draftRating, moments: draftMoments, updatedAt: Date.now(),
+    });
+  }, [draftRestored, composing, editingEntryId, draftRating, draftMoments, spot?.id]);
 
   useEffect(() => {
     if (!visible || !spot || !isFirebaseConfigured || !friends || friends.length === 0) {
@@ -145,6 +194,7 @@ export default function DetailModal({
     setEditingEntryId(null);
     setDraftRating(0);
     setDraftMoments([newMoment()]);
+    setDraftShared(true);
     setComposing(true);
     setJournalSectionOpen(true);
   };
@@ -160,6 +210,9 @@ export default function DetailModal({
         ? entry.moments
         : [{ id: entry.id, text: entry.note || '', photoUri: entry.photoUri || null }]
     );
+    // undefined (an entry saved before `shared` existed) treated as true,
+    // matching the current default - only an explicit false stays private.
+    setDraftShared(entry.shared !== false);
     setComposing(true);
     setJournalSectionOpen(true);
   };
@@ -167,15 +220,16 @@ export default function DetailModal({
     if (draftRating === 0) return;
     const moments = draftMoments.filter((m) => m.text.trim() || m.photoUri);
     if (editingEntryId) {
-      // Note: if this entry's photo is already shared and a photo changes
-      // here, the shared copy isn't auto-refreshed - toggling share off/on
-      // again re-uploads the new one. Deliberate: re-sharing needs an
-      // explicit tap rather than silently swapping what a friend sees.
-      onEditJournalEntry(spot.id, editingEntryId, { rating: draftRating, moments });
+      // App.js's editJournalEntry uploads any moment that doesn't already
+      // have a sharedUri (a freshly added/changed photo) whenever `shared`
+      // is true, and deletes every shared photo if `shared` is false - see
+      // its own comment for why re-uploading unchanged photos is skipped.
+      onEditJournalEntry(spot.id, editingEntryId, { rating: draftRating, moments, shared: draftShared });
     } else {
       onAddJournalEntry(spot.id, {
         rating: draftRating,
         moments,
+        shared: draftShared,
         spot: {
           id: spot.id, name: spot.name, lat: spot.lat, lng: spot.lng,
           rating: spot.rating, type: spot.type, blurb: spot.blurb, photoUrl: spot.photoUrl,
@@ -187,6 +241,12 @@ export default function DetailModal({
       });
     }
     setComposing(false);
+    clearJournalComposeDraft();
+  };
+
+  const cancelCompose = () => {
+    setComposing(false);
+    clearJournalComposeDraft();
   };
 
   // Only reachable while editing an existing entry (the X only renders
@@ -196,6 +256,7 @@ export default function DetailModal({
     onDeleteJournalEntry(spot.id, editingEntryId);
     setComposing(false);
     setEditingEntryId(null);
+    clearJournalComposeDraft();
   };
 
   const shareThisPhoto = async (entry) => {
@@ -242,6 +303,15 @@ export default function DetailModal({
           )}
           {!!entry.occasion && <Text style={styles.entryOccasion}>{entry.occasion}</Text>}
         </View>
+        {/* Read-only here (tap the pencil to actually change it via
+            startEdit, which restores draftShared) - just a status glance,
+            same undefined-treated-as-true rule as startEdit. */}
+        <Ionicons
+          name={entry.shared !== false ? 'people' : 'people-outline'}
+          size={13}
+          color={entry.shared !== false ? colors.accent : colors.textMuted}
+          style={{ marginRight: 10 }}
+        />
         <Pressable onPress={() => startEdit(entry)} hitSlop={8}>
           <Ionicons name="pencil" size={16} color={colors.textMuted} />
         </Pressable>
@@ -348,8 +418,20 @@ export default function DetailModal({
           immediate parent, which breaks when nested deep inside an offset
           container - see ReportBugModal's own docstring). Without this, the
           compose box scrolled low enough in "Journal" got covered by the
-          keyboard with no way to see what was being typed (user report). */}
-      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          keyboard with no way to see what was being typed (user report).
+          behavior was `undefined` on Android - a no-op, since "padding" was
+          only ever given to iOS - which does nothing to make room for the
+          keyboard at all: RN's <Modal> renders as its own separate Android
+          Dialog window, which does NOT inherit the Activity's own
+          windowSoftInputMode resize behavior the way normal (non-Modal)
+          screens in this app do, a well-known RN/Android gap. "height"
+          shrinks this KeyboardAvoidingView itself when the keyboard opens,
+          which - combined with backdrop's flex-end anchoring and the
+          ScrollView below - actually reveals whatever's being typed instead
+          of just letting the keyboard cover it (user report, a fresh one on
+          top of the original: a long journal entry got lost behind the
+          keyboard while typing). */}
+      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.sheet}>
           <View style={styles.headerRow}>
             <Text style={styles.title} numberOfLines={1}>{spot.name}</Text>
@@ -526,6 +608,20 @@ export default function DetailModal({
                       onChangeMoments={setDraftMoments}
                       firstPlaceholder="Notable details about the food..."
                     />
+                    {/* Default ON (user decision: share by default, opt out
+                        right here while writing rather than opting in
+                        afterward from a separate screen) - a photo only
+                        ever uploads if this is on when Save is tapped. */}
+                    <Pressable style={styles.shareRow} onPress={() => setDraftShared((v) => !v)}>
+                      <Ionicons
+                        name={draftShared ? 'people' : 'people-outline'}
+                        size={18}
+                        color={draftShared ? colors.accent : colors.textMuted}
+                      />
+                      <Text style={[styles.shareRowText, draftShared && { color: colors.accent }]}>
+                        {draftShared ? 'Sharing with friends' : 'Only visible to you'}
+                      </Text>
+                    </Pressable>
                     <View style={styles.composeButtonRow}>
                       <View style={{ flexDirection: 'row' }}>
                         <Pressable
@@ -537,7 +633,7 @@ export default function DetailModal({
                         </Pressable>
                         <Pressable
                           style={[styles.linkBtn, { backgroundColor: colors.cardAlt, marginLeft: 8 }]}
-                          onPress={() => setComposing(false)}
+                          onPress={cancelCompose}
                         >
                           <Text style={[styles.linkText, { color: colors.textLight }]}>Cancel</Text>
                         </Pressable>
@@ -702,6 +798,8 @@ const makeStyles = (colors) => StyleSheet.create({
   momentCardText: { color: '#DDD', fontSize: 12, lineHeight: 17, marginTop: 6 },
   shareToggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   shareToggleText: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginLeft: 5 },
+  shareRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 4 },
+  shareRowText: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginLeft: 6 },
   expandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   expandText: { color: colors.accent, fontSize: 12, fontWeight: '600', marginRight: 4 },
   friendFeedbackRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },

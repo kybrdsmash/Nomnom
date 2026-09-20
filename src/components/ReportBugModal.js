@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Modal, View, Text, Pressable, TextInput, Image, ActivityIndicator,
-  KeyboardAvoidingView, Platform, StyleSheet,
+  KeyboardAvoidingView, Platform, ScrollView, StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -80,9 +80,20 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      {/* behavior was `undefined` on Android (a no-op - "padding" was iOS
+          only), and `sheet` below had no maxHeight/ScrollView at all - a
+          long bug description just grew the sheet without bound, capable of
+          pushing Send off-screen with nothing to scroll it back into view
+          (same class of bug fixed on DetailModal's Journal compose, and the
+          exact BuddyPicker bug from earlier this session: a mandatory
+          action pushed off-screen by growing content with no way back).
+          "height" + a real maxHeight + a ScrollView around just the
+          growing middle (header and the Send row stay fixed, matching
+          BuddyPicker's own fixed-header/fixed-footer/scrollable-middle
+          convention) fixes both at once. */}
       <KeyboardAvoidingView
         style={styles.backdrop}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
@@ -93,30 +104,32 @@ export default function ReportBugModal({ visible, onClose, myUid, displayName })
             </Pressable>
           </View>
 
-          <TextInput
-            style={styles.input}
-            value={bugText}
-            onChangeText={(t) => { setBugText(t); setBugStatus('idle'); }}
-            placeholder="What went wrong? Be as specific as you can - what you tapped, what you expected..."
-            placeholderTextColor="#777"
-            multiline
-            autoFocus
-            maxLength={500}
-          />
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <TextInput
+              style={styles.input}
+              value={bugText}
+              onChangeText={(t) => { setBugText(t); setBugStatus('idle'); }}
+              placeholder="What went wrong? Be as specific as you can - what you tapped, what you expected..."
+              placeholderTextColor="#777"
+              multiline
+              autoFocus
+              maxLength={500}
+            />
 
-          {screenshotUri ? (
-            <View style={styles.screenshotRow}>
-              <Image source={{ uri: screenshotUri }} style={styles.screenshotThumb} />
-              <Pressable onPress={() => setScreenshotUri(null)} style={styles.screenshotRemoveBtn} hitSlop={8}>
-                <Ionicons name="close-circle" size={20} color={colors.danger} />
+            {screenshotUri ? (
+              <View style={styles.screenshotRow}>
+                <Image source={{ uri: screenshotUri }} style={styles.screenshotThumb} />
+                <Pressable onPress={() => setScreenshotUri(null)} style={styles.screenshotRemoveBtn} hitSlop={8}>
+                  <Ionicons name="close-circle" size={20} color={colors.danger} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable style={styles.addScreenshotBtn} onPress={pickScreenshot}>
+                <Ionicons name="image-outline" size={16} color={colors.accent} />
+                <Text style={styles.addScreenshotText}>Add a screenshot</Text>
               </Pressable>
-            </View>
-          ) : (
-            <Pressable style={styles.addScreenshotBtn} onPress={pickScreenshot}>
-              <Ionicons name="image-outline" size={16} color={colors.accent} />
-              <Text style={styles.addScreenshotText}>Add a screenshot</Text>
-            </Pressable>
-          )}
+            )}
+          </ScrollView>
 
           <View style={styles.submitRow}>
             <Pressable
@@ -144,7 +157,7 @@ const makeStyles = (colors) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   sheet: {
     backgroundColor: colors.background, borderRadius: 24, padding: 20,
-    width: '88%', ...buttonDepth, elevation: 20,
+    width: '88%', maxHeight: '80%', ...buttonDepth, elevation: 20,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   title: { color: colors.textLight, fontSize: 19, fontWeight: 'bold' },

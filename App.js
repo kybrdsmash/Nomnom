@@ -189,6 +189,11 @@ function AppInner() {
   // places.js), no Google API call - user request. Same slot in the ☰ menu
   // as the other quick filters.
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  // "Really Freaking Good" (user request) - a much stricter quality bar than
+  // the normal minRating slider (see places.js's filterReallyGood), and
+  // auto-broadens the search radius since the whole premise is being willing
+  // to go further for something exceptional.
+  const [reallyGoodOnly, setReallyGoodOnly] = useState(false);
 
   const [profile, setProfile] = useState({ displayName: '' });
   const [preferences, setPreferences] = useState({ haptics: true, units: 'mi' });
@@ -420,7 +425,7 @@ function AppInner() {
     if (!location) return;
     fetchLocalFood({
       location, distance, minRating, selectedCuisines, travelType,
-      count: 1, openNowOnly, maxPrice, allowRepeats: true, silent: true,
+      count: 1, openNowOnly, maxPrice, reallyGoodOnly, allowRepeats: true, silent: true,
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
@@ -606,7 +611,7 @@ function AppInner() {
     try {
       [selectedFoods] = await Promise.all([
         favoritesOnly
-          ? Promise.resolve(pickFromFavorites({ favorites, location, distance, travelType, count: targetCount }))
+          ? pickFromFavorites({ favorites, location, distance, travelType, count: targetCount, openNowOnly })
           : fetchLocalFood({
               location,
               distance,
@@ -616,6 +621,7 @@ function AppInner() {
               count: targetCount,
               openNowOnly,
               maxPrice,
+              reallyGoodOnly,
               // List mode's "Refresh" should show whatever's left in the pool, not
               // pad out to 12 with repeats the way a flip/bracket pads to its count.
               allowRepeats: gameMode !== 'list',
@@ -782,6 +788,40 @@ function AppInner() {
     });
   };
 
+  // Uploads every moment's photo (skipping text-only moments and any moment
+  // that already has a sharedUri from a prior save) and returns a new
+  // moments array with `sharedUri` attached - used by both addJournalEntry
+  // and addAtTheTableEntry, and by editJournalEntry when shared gets turned
+  // on later. One Storage object per MOMENT (not per entry), keyed by the
+  // moment's own id (journalPhotos.js's photoPath) since a single entry can
+  // carry several photos now.
+  const uploadSharedMomentPhotos = async (entryId, moments) => {
+    if (!myUid || !moments?.length) return moments;
+    return Promise.all(
+      moments.map(async (m) => {
+        if (!m.photoUri || m.sharedUri) return m;
+        try {
+          const sharedUri = await uploadJournalPhoto(myUid, entryId, m.photoUri, m.id);
+          return { ...m, sharedUri };
+        } catch (e) {
+          console.warn('moment photo upload failed - saving without sharing this one', e);
+          return m;
+        }
+      })
+    );
+  };
+
+  // Reverses uploadSharedMomentPhotos - deletes every moment's shared photo
+  // (best-effort) and strips sharedUri, used when an entry's `shared` flag
+  // gets turned off after having been on.
+  const deleteSharedMomentPhotos = async (entryId, moments) => {
+    if (!myUid || !moments?.length) return moments;
+    await Promise.all(
+      moments.filter((m) => m.sharedUri).map((m) => deleteJournalPhoto(myUid, entryId, m.id))
+    );
+    return moments.map((m) => (m.sharedUri ? { ...m, sharedUri: null } : m));
+  };
+
   // Each visit is its own entry (a spot can be rated more than once over
   // time) - this always prepends a new one, never overwrites. `spot` is a
   // trimmed snapshot (id/name/lat/lng/rating/type/blurb/photoUrl) stored
@@ -792,11 +832,17 @@ function AppInner() {
   // multi-photo/multi-text format as "At the Table") - `note`/`photoUri`
   // stick around only so an entry saved before this change still round-trips
   // through startEdit/renderEntryRow unmodified.
-  const addJournalEntry = (placeId, { rating, note, spot, photoUri, moments }) => {
+  const addJournalEntry = async (placeId, { rating, note, spot, photoUri, moments, shared = true }) => {
     const now = Date.now();
+    const id = Math.random().toString(36).slice(2);
+    // Shared defaults true now (user decision: "the whole point is
+    // connecting with your close friends... if people want to opt out, they
+    // should have the option as they're writing") - uploads happen right at
+    // compose time instead of the old model where a photo stayed private
+    // until a separate later tap. See journalPhotos.js's own updated docs.
+    const sharedMoments = shared ? await uploadSharedMomentPhotos(id, moments) : moments;
     const entry = {
-      id: Math.random().toString(36).slice(2),
-      rating, note, spot, photoUri, moments,
+      id, rating, note, spot, photoUri, moments: sharedMoments, shared,
       createdAt: now,
       updatedAt: now,
     };
@@ -812,11 +858,12 @@ function AppInner() {
   // `moments`, so the two shapes coexist without conflict. No `rating` here
   // (deliberately optional/absent) - the point of this flow is a fast note
   // in the moment, not a formal review.
-  const addAtTheTableEntry = ({ spot, occasion, moments }) => {
+  const addAtTheTableEntry = async ({ spot, occasion, moments, shared = true }) => {
     const now = Date.now();
+    const id = Math.random().toString(36).slice(2);
+    const sharedMoments = shared ? await uploadSharedMomentPhotos(id, moments) : moments;
     const entry = {
-      id: Math.random().toString(36).slice(2),
-      spot, occasion, moments,
+      id, spot, occasion, moments: sharedMoments, shared,
       createdAt: now,
       updatedAt: now,
     };
@@ -832,12 +879,19 @@ function AppInner() {
   // `...e` first would otherwise leave a stale flat note/photo sitting
   // alongside the new moments on an entry that started out in the old shape,
   // see startEdit's own note/photoUri->moments conversion).
-  const editJournalEntry = (placeId, entryId, { rating, note, photoUri, moments }) => {
+  const editJournalEntry = async (placeId, entryId, { rating, note, photoUri, moments, shared = true }) => {
+    // Uploads/deletes only run on an actual shared-flag CHANGE (or a fresh
+    // upload for a moment that didn't have a shared photo yet, e.g. a photo
+    // added during this edit) - re-uploading everything on every edit
+    // regardless of change would work but wastes bandwidth for no reason.
+    const finalMoments = shared
+      ? await uploadSharedMomentPhotos(entryId, moments)
+      : await deleteSharedMomentPhotos(entryId, moments);
     setJournal((prev) => ({
       ...prev,
       [placeId]: (prev[placeId] || []).map((e) =>
         e.id === entryId
-          ? { ...e, rating, note: moments ? undefined : note, photoUri: moments ? undefined : photoUri, moments, updatedAt: Date.now() }
+          ? { ...e, rating, note: moments ? undefined : note, photoUri: moments ? undefined : photoUri, moments: finalMoments, shared, updatedAt: Date.now() }
           : e
       ),
     }));
@@ -918,10 +972,10 @@ function AppInner() {
     if (favoritesOnly && favorites.length === 0) return;
     try {
       const selectedFoods = favoritesOnly
-        ? pickFromFavorites({ favorites, location, distance, travelType, count: 1 })
+        ? await pickFromFavorites({ favorites, location, distance, travelType, count: 1, openNowOnly })
         : await fetchLocalFood({
             location, distance, minRating, selectedCuisines, travelType,
-            count: 1, openNowOnly, maxPrice, allowRepeats: true,
+            count: 1, openNowOnly, maxPrice, reallyGoodOnly, allowRepeats: true,
           });
       if (selectedFoods.length > 0) {
         const marked = [...selectedFoods];
@@ -1331,6 +1385,14 @@ function AppInner() {
           setFavoritesOnly((prev) => {
             const next = !prev;
             showToast(next ? 'Favorites Only' : 'Favorites Only Off');
+            return next;
+          });
+        }}
+        reallyGoodOnly={reallyGoodOnly}
+        onToggleReallyGood={() => {
+          setReallyGoodOnly((prev) => {
+            const next = !prev;
+            showToast(next ? '🔥 Really Freaking Good Only' : 'Really Freaking Good Off');
             return next;
           });
         }}

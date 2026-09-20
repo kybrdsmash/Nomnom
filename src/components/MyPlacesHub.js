@@ -122,7 +122,13 @@ export default function MyPlacesHub({
     setLoadingFriends(true);
     Promise.all(friends.map(async (f) => {
       const entries = await fetchFriendJournal(f.uid);
-      return Object.values(entries).flat().map((e) => ({ ...e, friendName: f.name }));
+      return Object.values(entries).flat()
+        // Was showing every entry regardless of the writer's own sharing
+        // choice - shared !== false so entries saved before this flag
+        // existed still show (matches the current default-shared
+        // treatment everywhere else), but an explicit opt-out is honored.
+        .filter((e) => e.shared !== false)
+        .map((e) => ({ ...e, friendName: f.name }));
     })).then((results) => {
       if (cancelled) return;
       const flat = results.flat().sort((a, b) => b.updatedAt - a.updatedAt);
@@ -307,23 +313,39 @@ export default function MyPlacesHub({
     </Pressable>
   );
 
-  const renderFriendRow = (entry, i) => (
-    <Pressable key={`${entry.id}-${i}`} style={styles.card} onPress={() => onShowDetails(entry.spot)}>
-      {entry.spot.photoUrl ? (
-        <Image source={{ uri: entry.spot.photoUrl }} style={styles.rowImage} />
-      ) : (
-        <View style={styles.rowImagePlaceholder}>
-          <Ionicons name="restaurant" size={20} color={colors.textMuted} />
+  // Was always showing the RESTAURANT's own Google photo, never the
+  // friend's actual shared picture (which never even rendered anywhere,
+  // despite the whole point of sharing being "see what my friend's food
+  // looked like") - now prefers the first moment with a sharedUri, falling
+  // back to the spot's Google photo only when the friend didn't share one.
+  const renderFriendRow = (entry, i) => {
+    const sharedPhoto = entry.moments?.find((m) => m.sharedUri)?.sharedUri;
+    // entry.rating is only ever set on a full Journal review - At-the-Table
+    // entries deliberately have none (see AtTheTableCompose's own docs), so
+    // '★'.repeat(undefined) would throw. entry.note is the old flat shape;
+    // moments[0].text is what every current entry actually carries.
+    const noteText = entry.note || entry.moments?.find((m) => m.text)?.text;
+    return (
+      <Pressable key={`${entry.id}-${i}`} style={styles.card} onPress={() => onShowDetails(entry.spot)}>
+        {sharedPhoto || entry.spot.photoUrl ? (
+          <Image source={{ uri: sharedPhoto || entry.spot.photoUrl }} style={styles.rowImage} />
+        ) : (
+          <View style={styles.rowImagePlaceholder}>
+            <Ionicons name="restaurant" size={20} color={colors.textMuted} />
+          </View>
+        )}
+        <View style={styles.rowTextCol}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{entry.spot.name}</Text>
+          {typeof entry.rating === 'number' && (
+            <Text style={styles.rowRating}>{'★'.repeat(entry.rating)}{'☆'.repeat(5 - entry.rating)}</Text>
+          )}
+          {!!entry.occasion && <Text style={styles.rowOccasion}>{entry.occasion}</Text>}
+          {!!noteText && <Text style={styles.rowNote} numberOfLines={2}>{noteText}</Text>}
+          <Text style={styles.rowDate}>{entry.friendName} · {relativeTime(entry.updatedAt)}</Text>
         </View>
-      )}
-      <View style={styles.rowTextCol}>
-        <Text style={styles.rowTitle} numberOfLines={1}>{entry.spot.name}</Text>
-        <Text style={styles.rowRating}>{'★'.repeat(entry.rating)}{'☆'.repeat(5 - entry.rating)}</Text>
-        {!!entry.note && <Text style={styles.rowNote} numberOfLines={2}>{entry.note}</Text>}
-        <Text style={styles.rowDate}>{entry.friendName} · {relativeTime(entry.updatedAt)}</Text>
-      </View>
-    </Pressable>
-  );
+      </Pressable>
+    );
+  };
 
   // History can contain the same spot more than once (seen again on a
   // different day) - deduped here (keep the first/most-recent occurrence,

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal, View, Text, Pressable, TextInput, ScrollView,
-  StyleSheet, Platform, Linking, Alert,
+  StyleSheet, Platform, Linking, Alert, KeyboardAvoidingView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,7 +92,14 @@ export default function ScheduleMealModal({ visible, onClose, session, code, myU
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      {/* Had no keyboard handling at all - this sheet is bottom-anchored at
+          a fixed 75% height with the chat's message input right at its very
+          bottom edge, so opening the keyboard just covered the input
+          outright with nothing to reveal it (same sweep/fix as
+          DetailModal's Journal compose and ReportBugModal - see their
+          KeyboardAvoidingView comments for why "height" is what actually
+          works on Android inside a <Modal>, not "padding" alone). */}
+      <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.sheet}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Schedule the meal</Text>
@@ -206,7 +213,7 @@ export default function ScheduleMealModal({ visible, onClose, session, code, myU
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

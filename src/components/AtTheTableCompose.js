@@ -10,6 +10,7 @@ import { searchNearbyByKeyword } from '../api/places';
 import { loadAtTheTableDraft, saveAtTheTableDraft, clearAtTheTableDraft } from '../storage';
 import PlaceSearchBar from './PlaceSearchBar';
 import MomentsEditor, { newMoment } from './MomentsEditor';
+import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
 
 // Kept short and low-key on purpose (user request) - occasion is a small
 // side dropdown, not a labeled field everyone has to look at and decide to
@@ -47,6 +48,9 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
   const [saving, setSaving] = useState(false);
   const [showOccasionMenu, setShowOccasionMenu] = useState(false);
   const [typingOccasion, setTypingOccasion] = useState(false);
+  // Defaults true (user decision: share by default, opt out while writing) -
+  // see App.js's addAtTheTableEntry for where this drives a photo upload.
+  const [shared, setShared] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -55,6 +59,7 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
         setSpot(draft.spot || null);
         setOccasion(draft.occasion || '');
         setMoments(draft.moments?.length > 0 ? draft.moments : [newMoment()]);
+        setShared(draft.shared !== false);
       }
       setLoaded(true);
     })();
@@ -62,8 +67,8 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
 
   useEffect(() => {
     if (!loaded) return;
-    saveAtTheTableDraft({ spot, occasion, moments, updatedAt: Date.now() });
-  }, [loaded, spot, occasion, moments]);
+    saveAtTheTableDraft({ spot, occasion, moments, shared, updatedAt: Date.now() });
+  }, [loaded, spot, occasion, moments, shared]);
 
   const findNearestSpot = async () => {
     if (!location) {
@@ -91,6 +96,7 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
     setMoments([newMoment()]);
     setShowOccasionMenu(false);
     setTypingOccasion(false);
+    setShared(true);
   };
 
   const canSave = !!spot && moments.some((m) => m.text.trim() || m.photoUri);
@@ -102,6 +108,7 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
       spot,
       occasion: occasion.trim(),
       moments: moments.filter((m) => m.text.trim() || m.photoUri),
+      shared,
     });
     await clearAtTheTableDraft();
     resetForm();
@@ -206,6 +213,19 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
       <Text style={styles.label}>Your note</Text>
       <MomentsEditor moments={moments} onChangeMoments={setMoments} />
 
+      {/* Default ON (user decision: share by default, opt out right here
+          while writing) - same convention as DetailModal's Journal compose. */}
+      <Pressable style={styles.shareRow} onPress={() => setShared((v) => !v)}>
+        <Ionicons
+          name={shared ? 'people' : 'people-outline'}
+          size={18}
+          color={shared ? colors.accent : colors.textMuted}
+        />
+        <Text style={[styles.shareRowText, shared && { color: colors.accent }]}>
+          {shared ? 'Sharing with friends' : 'Only visible to you'}
+        </Text>
+      </Pressable>
+
       <View style={styles.footerRow}>
         <Pressable onPress={handleDiscard} style={styles.discardBtn}>
           <Text style={styles.discardText}>Discard</Text>
@@ -222,6 +242,13 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
           )}
         </Pressable>
       </View>
+      {/* Every other scrollable screen (MyPlacesHub, HistoryFavoritesOverlay,
+          FriendSpin) reserves BOTTOM_NAV_CLEARANCE at its bottom so its last
+          content clears BottomNav's own fixed-position bar - this screen was
+          the one missed, using a flat 30px instead, which left Save to
+          Journal genuinely sitting behind the bar (user report: "the save
+          button... is behind the current bottom bar"). */}
+      <View style={{ height: BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -248,6 +275,8 @@ const makeStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.card, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
     color: colors.textLight, fontSize: 14,
   },
+  shareRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
+  shareRowText: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginLeft: 6 },
   footerRow: { flexDirection: 'row', marginTop: 24 },
   discardBtn: { paddingVertical: 12, paddingHorizontal: 18 },
   discardText: { color: colors.danger, fontWeight: 'bold', fontSize: 14 },

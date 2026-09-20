@@ -297,8 +297,13 @@ const makeStyles = (colors) => StyleSheet.create({
   // distinct group, set apart from the cuisine bubbles below it.
   // marginLeft spaces this from the Cuisines label to its left (this button
   // now trails after it in the row - see FilterPanel.js's cuisineHeader).
+  // Was 92 - fine for "Besties" but clipped "My Faves" and "The Cosmos"
+  // (DEFAULT_FAVE_NAMES) against numberOfLines={1} (user report). 132 fits
+  // every default name plus a full 14-char custom rename (this button's own
+  // maxLength) comfortably. Not touching SLOT_COUNT/adding pagination here -
+  // planning for more than 3 slots is explicitly a later, separate task.
   button: {
-    width: 92, marginLeft: 12, paddingVertical: 10, paddingRight: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    width: 132, marginLeft: 12, paddingVertical: 10, paddingRight: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.card, overflow: 'hidden', ...buttonDepth, elevation: 0,
     borderWidth: 2, borderColor: 'transparent',
   },
@@ -337,7 +342,7 @@ const makeStyles = (colors) => StyleSheet.create({
   // Same footprint as `button` so swapping into rename mode doesn't shift
   // any layout around it.
   renameBox: {
-    width: 92, marginLeft: 12, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, justifyContent: 'center',
+    width: 132, marginLeft: 12, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, justifyContent: 'center',
     backgroundColor: colors.card, borderWidth: 2, borderColor: colors.neon, ...buttonDepth,
     elevation: 0,
   },

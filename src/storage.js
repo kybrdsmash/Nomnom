@@ -21,6 +21,7 @@ const KEYS = {
   faveCuisines: '@nomnom/faveCuisines',
   journal: '@nomnom/journal',
   atTheTableDraft: '@nomnom/atTheTableDraft',
+  journalComposeDraft: '@nomnom/journalComposeDraft',
   travelType: '@nomnom/travelType',
   onboardingSeen: '@nomnom/onboardingSeen',
   installReferrerChecked: '@nomnom/installReferrerChecked',
@@ -150,6 +151,17 @@ export const saveJournal = (journal) => save(KEYS.journal, journal);
 export const loadAtTheTableDraft = () => load(KEYS.atTheTableDraft, null);
 export const saveAtTheTableDraft = (draft) => save(KEYS.atTheTableDraft, draft);
 export const clearAtTheTableDraft = () => save(KEYS.atTheTableDraft, null);
+
+// Same reasoning as atTheTableDraft, for DetailModal's own "My Journal"
+// compose box - that one had no persistence at all (plain useState), so
+// closing the modal (or getting bumped out of it any other way) mid-entry
+// silently threw the whole thing away (user report: "I was in the middle
+// of a journal... left the page and went back - I lost it"). One global
+// slot (not per-spot) matches atTheTableDraft's own convention - you can
+// only realistically be composing one entry at a time anywhere in the app.
+export const loadJournalComposeDraft = () => load(KEYS.journalComposeDraft, null);
+export const saveJournalComposeDraft = (draft) => save(KEYS.journalComposeDraft, draft);
+export const clearJournalComposeDraft = () => save(KEYS.journalComposeDraft, null);
 
 // Anonymous, local-only tap counts per BottomNav destination (home/places/
 // feast/favorites/settings) - no analytics SDK, no user id, never leaves the

@@ -97,13 +97,15 @@ export default function EliminationList({ eliminationList, fullBracket, eliminat
                     selected cuisine (see places.js's unconfirmedCuisine) -
                     a bracket gives the least context of any result screen
                     for why an odd spot showed up, so it needs this flagged
-                    even more than a single-pick reveal does. Wording fixed
-                    to say "No ... Match Nearby" (was "... Spots Nearby",
-                    which read as the opposite of what it means - see
-                    ResultCard.js's identical fix for the full reasoning). */}
+                    even more than a single-pick reveal does. Was "No ...
+                    Match Nearby" - read as "there's nothing here" while
+                    looking right at a real result (user feedback). This
+                    dense single-line row has no room for the full yes/no
+                    prompt ResultCard.js's winner reveal gets (see
+                    CuisineMatchBadge) - just the softer wording here. */}
                 {spot.unconfirmedCuisine && (
                   <Text style={styles.elimUnconfirmed} numberOfLines={1}>
-                    No {spot.unconfirmedCuisine} Match Nearby
+                    Not confirmed as {spot.unconfirmedCuisine}
                   </Text>
                 )}
                 {/* Favorites-only mode reaching past the distance setting

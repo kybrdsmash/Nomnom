@@ -802,11 +802,13 @@ export default function FriendSpin({
                     {/* Only set when this slot wasn't a genuine match for the
                         selected cuisine (see places.js's unconfirmedCuisine) -
                         same treatment as solo Elimination mode's bracket,
-                        including the "No ... Match Nearby" wording fix (see
-                        ResultCard.js's identical fix for the full reasoning). */}
+                        including the softer wording fix (see
+                        EliminationList.js's identical fix for the full
+                        reasoning - this dense row has no room for the full
+                        yes/no prompt ResultCard.js's winner reveal gets). */}
                     {spot.unconfirmedCuisine && (
                       <Text style={styles.cardUnconfirmed} numberOfLines={1}>
-                        No {spot.unconfirmedCuisine} Match Nearby
+                        Not confirmed as {spot.unconfirmedCuisine}
                       </Text>
                     )}
                     {isProposed && <Text style={styles.proposedTag}>👉 Proposed</Text>}
