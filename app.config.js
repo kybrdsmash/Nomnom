@@ -91,6 +91,15 @@ module.exports = {
       'expo-router',
       'expo-asset',
       'expo-web-browser',
+      // Real native Google Sign-In (Android Credential Manager under the
+      // hood) - replaces expo-auth-session's browser-based OAuth flow for
+      // Google specifically, which Google now rejects on real native
+      // Android builds ("Access blocked: this app's request is invalid").
+      // Expo's own current docs no longer recommend expo-auth-session's
+      // Google provider for native Android at all. Needs no config here -
+      // it reads the SHA-1/package match from google-services.json, already
+      // wired in above.
+      '@react-native-google-signin/google-signin',
       '@react-native-community/datetimepicker',
       [
         'expo-location',

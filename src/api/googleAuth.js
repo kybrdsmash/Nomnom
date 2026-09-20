@@ -1,29 +1,40 @@
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
+import {
+  GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes,
+} from '@react-native-google-signin/google-signin';
 import {
   GoogleAuthProvider, linkWithCredential, signInWithCredential, signOut,
 } from 'firebase/auth';
 import { auth } from './firebase';
 
-// Required boilerplate so the browser-based OAuth flow correctly resolves
-// back into the app when it redirects - without this the app can hang on
-// "waiting" after the user finishes signing in in the browser.
-WebBrowser.maybeCompleteAuthSession();
+// Configure once at module load - GoogleSignin.configure() is synchronous
+// and just stores config for later calls, safe before any UI mounts.
+// webClientId (not an Android client ID) is what Firebase's
+// GoogleAuthProvider needs - it's the token audience Firebase verifies
+// against, same as before. The Android OAuth client (package + SHA-1) is
+// still registered in Google Cloud Console, but this library verifies
+// against it natively via Google Play Services instead of a client ID
+// passed in code.
+GoogleSignin.configure({
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+});
 
 /**
- * Wraps expo-auth-session's Google provider with this project's two OAuth
- * client IDs - a Web client (Firebase's own, works for the browser-side
- * auth request) and an Android client (package + release SHA-1, required
- * because the Web client only supports https redirect URIs, not a native
- * app's custom-scheme redirect). Returns [request, response, promptAsync] -
- * call promptAsync() from a button's onPress; once response.type ===
- * 'success', response.params.id_token is what signInWithGoogleIdToken needs.
+ * Runs the native Google Sign-In flow (Android Credential Manager under the
+ * hood) and returns the ID token, or null if the user cancelled.
+ *
+ * Replaces expo-auth-session's browser-based OAuth flow - Google now
+ * rejects that flow on real native Android builds ("Access blocked: this
+ * app's request is invalid"), a known, Expo-acknowledged issue (their
+ * current docs no longer recommend expo-auth-session's Google provider for
+ * native Android at all). This native module talks to Google Play Services
+ * directly instead of round-tripping through a browser + custom-scheme
+ * redirect, which is exactly the part Google now blocks.
  */
-export function useGoogleAuthRequest() {
-  return Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-  });
+export async function promptGoogleSignIn() {
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+  const response = await GoogleSignin.signIn();
+  if (!isSuccessResponse(response)) return null;
+  return response.data.idToken;
 }
 
 /**
@@ -64,6 +75,14 @@ export async function signInWithGoogleIdToken(idToken) {
 }
 
 /** Signs out of the current (Google-linked) account entirely. */
-export function signOutGoogle() {
+export async function signOutGoogle() {
+  try {
+    await GoogleSignin.signOut();
+  } catch {
+    // Best-effort - clearing the native session isn't critical if it fails,
+    // the Firebase signOut below is what actually matters to the app.
+  }
   return signOut(auth);
 }
+
+export { isErrorWithCode, statusCodes };

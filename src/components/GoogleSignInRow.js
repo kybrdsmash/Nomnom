@@ -5,7 +5,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { auth } from '../api/firebase';
-import { useGoogleAuthRequest, signInWithGoogleIdToken, signOutGoogle } from '../api/googleAuth';
+import {
+  promptGoogleSignIn, signInWithGoogleIdToken, signOutGoogle, isErrorWithCode, statusCodes,
+} from '../api/googleAuth';
 
 /**
  * Settings' account row - "Sign in with Google" for an account that keeps
@@ -24,23 +26,27 @@ export default function GoogleSignInRow() {
   const [user, setUser] = useState(auth.currentUser);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [request, response, promptAsync] = useGoogleAuthRequest();
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
 
-  useEffect(() => {
-    if (response?.type !== 'success') return;
-    const idToken = response.params?.id_token;
-    if (!idToken) {
-      setError("Didn't get a valid response from Google - try again.");
-      return;
-    }
+  const handleSignIn = async () => {
     setBusy(true);
     setError('');
-    signInWithGoogleIdToken(idToken)
-      .catch(() => setError('Could not sign in - try again.'))
-      .finally(() => setBusy(false));
-  }, [response]);
+    try {
+      const idToken = await promptGoogleSignIn();
+      if (!idToken) return; // user cancelled the native picker - not an error
+      await signInWithGoogleIdToken(idToken);
+    } catch (e) {
+      // SIGN_IN_CANCELLED can also surface here (e.g. backing out of the
+      // account picker) rather than as a null idToken, depending on the
+      // exact native path taken - either way it's not a real failure.
+      if (!(isErrorWithCode(e) && e.code === statusCodes.SIGN_IN_CANCELLED)) {
+        setError('Could not sign in - try again.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const googleInfo = user?.providerData?.find((p) => p.providerId === 'google.com');
 
@@ -68,9 +74,9 @@ export default function GoogleSignInRow() {
   return (
     <View>
       <Pressable
-        style={[styles.googleBtn, (!request || busy) && { opacity: 0.5 }]}
-        disabled={!request || busy}
-        onPress={() => promptAsync()}
+        style={[styles.googleBtn, busy && { opacity: 0.5 }]}
+        disabled={busy}
+        onPress={handleSignIn}
       >
         {busy ? (
           <ActivityIndicator color={colors.textDark} size="small" />
