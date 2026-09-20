@@ -42,13 +42,22 @@ const DRAWER_WIDTH = 300;
  * Was a small bottom-left popup sized to its own content - moved to a full-
  * height right-side drawer (user request: "makes more sense... so we can
  * add more content as needed" - the popup was already getting cramped once
- * Minimum Rating moved in here). The drawer itself stays mounted whenever
- * `visible` is true and is animated off-screen via translateX rather than
- * conditionally unmounted, so closing it can actually slide back out instead
- * of just vanishing.
+ * Minimum Rating moved in here). The drawer is ALWAYS mounted (no
+ * `visible`-gated early return) and only ever moves via drawerX's
+ * translateX - a previous version returned null whenever a `visible` prop
+ * (showFab || showSettingsMenu) went false, which happens on every screen
+ * except an idle Home even with Settings fully closed. That unmounted the
+ * real native view mid-animation (or left drawerX's native-driven value
+ * stale) any time you navigated to Places/Favorites/Feast, so the NEXT time
+ * it remounted - e.g. tapping Home afterward - it could reappear already
+ * open, with showSettingsMenu correctly false and BottomNav's highlight
+ * correctly on Home the whole time (confirmed via a screen recording: the
+ * nav state was never wrong, only the drawer's own animated position was
+ * stale). Always rendering it means drawerX's animation always runs to
+ * completion and its resting value is always trustworthy.
  */
 export default function SettingsPanel({
-  visible, hideTrigger, showSettingsMenu, setShowSettingsMenu,
+  hideTrigger, showSettingsMenu, setShowSettingsMenu,
   profile, setProfile, preferences, setPreferences, minRating, setMinRating,
   onOpenBugReport, onOpenHelp,
 }) {
@@ -209,8 +218,6 @@ export default function SettingsPanel({
     })
   ).current;
 
-  if (!visible) return null;
-
   const previewColor = hslToHex(hue, PICKER_SAT, lightness);
   const progress = mode === 'hue' ? hue / 360 : (lightness - LIGHT_MIN) / (LIGHT_MAX - LIGHT_MIN);
 
@@ -219,8 +226,8 @@ export default function SettingsPanel({
       {showSettingsMenu && (
         <Pressable style={styles.backdrop} onPress={() => setShowSettingsMenu(false)} />
       )}
-      {/* Stays mounted whenever `visible` is true (not gated by
-          showSettingsMenu) and slides via translateX instead of being
+      {/* Always mounted now (see the component docstring) - not gated by
+          showSettingsMenu - and slides via translateX instead of being
           conditionally rendered - so closing it actually animates back
           off-screen instead of just vanishing. pointerEvents off while
           closed so the off-screen drawer can't eat touches meant for
@@ -448,14 +455,18 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // more cramped). shadowOffset points left (negative width) since the
   // shadow should fall toward the screen's content, not off the right edge
   // where nothing would ever see it.
-  // A small tab straddling the drawer's own left edge (negative left offset
-  // pulls half its width outside the drawer, onto the content behind it) -
-  // vertically centered so it's visible regardless of scroll position.
+  // Recessed just inside the drawer's own left edge (was a negative left
+  // offset straddling the edge, poking half of it out over the content
+  // behind - user feedback: should sit inside the drawer, not stick out) -
+  // low, near the drawer's own bottom-left corner (earlier user request:
+  // was vertically centered, wanted it "down low, close to the bottom left
+  // inside corner" instead) - insets.bottom keeps it clear of any gesture
+  // bar, same convention as drawerContent's own bottom padding just below.
   // backgroundColor+color both use colors.accent/textDark (same pairing as
   // gearBtn) so it reads as "part of the settings affordance," not a random
   // stray button.
   closeTab: {
-    position: 'absolute', left: -18, top: '50%', marginTop: -18, zIndex: 256,
+    position: 'absolute', left: 14, bottom: insets.bottom + 40, zIndex: 256,
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
     ...buttonDepth,

@@ -1133,13 +1133,15 @@ function AppInner() {
       />
 
       <SettingsPanel
-        // showSettingsMenu included on top of showFab - Settings can now be
-        // opened from Places/Favorites/Feast too (BottomNav's settings icon
-        // is reachable there), and those screens leave `activeView` !==
-        // 'main' the whole time, so showFab alone would make this component
-        // return null (see its own `if (!visible) return null`) and the
-        // drawer could never actually open from those screens.
-        visible={showFab || showSettingsMenu}
+        // No `visible` prop anymore - SettingsPanel now always renders its
+        // drawer (see its own docstring). It used to return null whenever
+        // showFab||showSettingsMenu was false, which unmounted the drawer's
+        // real native view on every screen except an idle Home even with
+        // Settings fully closed, leaving its close animation's resting
+        // value stale for the next time it remounted (root cause of "tap
+        // Home and the drawer reopens by itself" - confirmed via a screen
+        // recording showing BottomNav's own highlight tracking correctly
+        // the whole time, so this was never a nav-state bug).
         hideTrigger={showBottomNav}
         showSettingsMenu={showSettingsMenu}
         setShowSettingsMenu={setShowSettingsMenu}
