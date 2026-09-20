@@ -217,6 +217,15 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
   ).current;
 
   const activeSlot = slots[activeIndex] || { name: DEFAULT_FAVE_NAMES[activeIndex] || `Fave ${activeIndex + 1}`, cuisines: [] };
+  // Bright only when this SHOWN slot's saved cuisines are actually the
+  // live filter selection right now - grey otherwise, so the label itself
+  // tells you whether you're looking at no filter (or some other custom
+  // cuisine pick) versus this exact fave being what's currently applied
+  // (user request). Reuses the same sameCuisines check triggerLongPress
+  // already uses to decide save-vs-rename, and only counts as active when
+  // there's real content to match - an empty slot next to an empty
+  // selection isn't "this fave is on," it's just nothing picked yet.
+  const isActive = (activeSlot.cuisines || []).length > 0 && sameCuisines(selectedCuisines || [], activeSlot.cuisines || []);
 
   if (renaming) {
     return (
@@ -253,7 +262,12 @@ export default function FaveCuisineButton({ slots, onLoad, onSave, onRename, sel
         style={[styles.pulseRing, { opacity: pulseGlow }]}
       />
       <Animated.Text
-        style={[styles.text, flash && styles.textFlash, { transform: [{ translateY: slideY }] }]}
+        style={[
+          styles.text,
+          { color: isActive ? colors.textLight : colors.textMuted },
+          flash && styles.textFlash,
+          { transform: [{ translateY: slideY }] },
+        ]}
         numberOfLines={1}
       >
         {activeSlot.name}

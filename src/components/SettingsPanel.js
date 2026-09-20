@@ -212,7 +212,26 @@ export default function SettingsPanel({
       // up the color I already picked"). Mode switching now lives entirely
       // on its own dedicated element (the Color/Brightness chip above the
       // slider) instead, so every touch here is unambiguously just a drag.
-      onPanResponderGrant: (evt) => handleMove(evt.nativeEvent.pageX),
+      // Re-measures fresh on every gesture start instead of trusting
+      // pickerBoundsRef's onLayout-time snapshot (below) - this drawer is
+      // always mounted and slides in via a `transform`, which never
+      // re-triggers onLayout, so that snapshot was taken wherever the
+      // drawer happened to be laid out FIRST (often still off-screen,
+      // before its very first slide-in animation ever ran) and then never
+      // updated again for the component's whole lifetime. Every drag after
+      // that used a stale, shifted-by-the-drawer's-own-width originX,
+      // which could map the entire real on-screen track to ratio 0 or 1
+      // depending on the shift's direction - looked exactly like "drag to
+      // one end and it's stuck there" (user report) since no amount of
+      // dragging within the real visible track could ever produce a
+      // pageX on the other side of that wrong reference point.
+      onPanResponderGrant: (evt) => {
+        const { pageX } = evt.nativeEvent;
+        pickerRowRef.current?.measureInWindow((originX, _y, width) => {
+          pickerBoundsRef.current = { pageX: originX, width };
+          handleMove(pageX);
+        });
+      },
       onPanResponderMove: (evt) => handleMove(evt.nativeEvent.pageX),
       onPanResponderRelease: commitColor,
     })
@@ -235,7 +254,17 @@ export default function SettingsPanel({
   const starPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => setMinRating(ratingFromPageX(evt.nativeEvent.pageX)),
+      // Same fresh-remeasure-on-grant fix as the color picker above, same
+      // reason - this drawer is always mounted and slides via `transform`,
+      // so starBoundsRef's onLayout-time snapshot (below) never updates
+      // again after being captured, possibly while still off-screen.
+      onPanResponderGrant: (evt) => {
+        const { pageX } = evt.nativeEvent;
+        starRowRef.current?.measureInWindow((originX, _y, width) => {
+          starBoundsRef.current = { pageX: originX, width };
+          setMinRating(ratingFromPageX(pageX));
+        });
+      },
       onPanResponderMove: (evt) => setMinRating(ratingFromPageX(evt.nativeEvent.pageX)),
     })
   ).current;
