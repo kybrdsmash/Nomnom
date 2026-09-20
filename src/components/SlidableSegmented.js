@@ -25,25 +25,31 @@ import { LinearGradient } from 'expo-linear-gradient';
  * renders that gradient behind the active segment's content instead of
  * relying on segmentActive's flat backgroundColor alone - opt-in per caller,
  * same "caller owns the visual treatment" contract as everything else here.
+ * `vertical`, if true, tracks drag/tap position along Y instead of X - for
+ * a column layout (GameModeIcons' connected icon track) rather than the
+ * usual row. Purely a measurement-axis switch; the actual row-vs-column
+ * flex direction still comes from the caller's own `segmented` style,
+ * same as every other visual choice here.
  */
-export default function SlidableSegmented({ options, value, onChange, styles, renderOption, gradientColors }) {
+export default function SlidableSegmented({ options, value, onChange, styles, renderOption, gradientColors, vertical = false }) {
   const containerRef = useRef(null);
-  // Absolute (page) x + width - measured once via measureInWindow rather
-  // than relying on touch-event locationX, which is reported relative to
-  // whichever view is the current responder rather than a stable anchor.
-  const boundsRef = useRef({ pageX: 0, width: 0 });
+  // Absolute (page) origin + extent along the relevant axis - measured once
+  // via measureInWindow rather than relying on touch-event locationX/Y,
+  // which is reported relative to whichever view is the current responder
+  // rather than a stable anchor.
+  const boundsRef = useRef({ origin: 0, extent: 0 });
 
-  const pickFromPageX = (pageX) => {
-    const { pageX: originX, width } = boundsRef.current;
-    if (!width) return;
-    const x = pageX - originX;
-    const idx = Math.min(options.length - 1, Math.max(0, Math.floor((x / width) * options.length)));
+  const pickFromPoint = (pageX, pageY) => {
+    const { origin, extent } = boundsRef.current;
+    if (!extent) return;
+    const pos = (vertical ? pageY : pageX) - origin;
+    const idx = Math.min(options.length - 1, Math.max(0, Math.floor((pos / extent) * options.length)));
     const picked = options[idx].value;
     if (picked !== value) onChange(picked);
   };
 
   // PanResponder.create() only ever runs once - useRef freezes it after the
-  // first render - so its callbacks can't just call pickFromPageX directly:
+  // first render - so its callbacks can't just call pickFromPoint directly:
   // that would permanently close over THIS render's `value`/`onChange`,
   // frozen at whatever the control's value was on mount. Every drag to some
   // OTHER value would still fire onChange correctly, but dragging back to
@@ -51,17 +57,17 @@ export default function SlidableSegmented({ options, value, onChange, styles, re
   // `picked !== value` check thinks it's already there) - stuck unable to
   // return to the default. Same stale-closure bug as CoinSpinner's flick
   // handler; same fix - route through a ref reassigned every render so the
-  // frozen callback always reaches the CURRENT pickFromPageX.
-  const pickFromPageXRef = useRef(pickFromPageX);
-  pickFromPageXRef.current = pickFromPageX;
+  // frozen callback always reaches the CURRENT pickFromPoint.
+  const pickFromPointRef = useRef(pickFromPoint);
+  pickFromPointRef.current = pickFromPoint;
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       // Fires immediately on touch-down (before any movement), so a plain
       // tap - no drag at all - still selects whichever segment was touched.
-      onPanResponderGrant: (evt) => pickFromPageXRef.current(evt.nativeEvent.pageX),
-      onPanResponderMove: (evt) => pickFromPageXRef.current(evt.nativeEvent.pageX),
+      onPanResponderGrant: (evt) => pickFromPointRef.current(evt.nativeEvent.pageX, evt.nativeEvent.pageY),
+      onPanResponderMove: (evt) => pickFromPointRef.current(evt.nativeEvent.pageX, evt.nativeEvent.pageY),
     })
   ).current;
 
@@ -70,8 +76,8 @@ export default function SlidableSegmented({ options, value, onChange, styles, re
       ref={containerRef}
       style={styles.segmented}
       onLayout={() => {
-        containerRef.current?.measureInWindow((pageX, _pageY, width) => {
-          boundsRef.current = { pageX, width };
+        containerRef.current?.measureInWindow((pageX, pageY, width, height) => {
+          boundsRef.current = vertical ? { origin: pageY, extent: height } : { origin: pageX, extent: width };
         });
       }}
       {...pan.panHandlers}

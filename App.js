@@ -26,14 +26,13 @@ import * as Application from 'expo-application';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { COIN_ANIMATION_MS, CUISINES, DEFAULT_FAVE_NAMES, neonSelected, accentGradient, useVerticalScale, buttonDepth } from './src/constants';
+import { COIN_ANIMATION_MS, CUISINES, DEFAULT_FAVE_NAMES, useVerticalScale, buttonDepth } from './src/constants';
 import { ThemeProvider, useTheme } from './src/ThemeContext';
 import { estimateMaxTimeMinutes } from './src/utils/geo';
 import { fetchLocalFood, pickFromFavorites } from './src/api/places';
 
 import CoinSpinner from './src/components/CoinSpinner';
 import DaydreamRaccoon from './src/components/DaydreamRaccoon';
-import SlidableSegmented from './src/components/SlidableSegmented';
 import FilterPanel from './src/components/FilterPanel';
 import EliminationList from './src/components/EliminationList';
 import BrowseList from './src/components/BrowseList';
@@ -41,6 +40,7 @@ import ResultCard from './src/components/ResultCard';
 import InviteFriendModal from './src/components/InviteFriendModal';
 import HistoryFavoritesOverlay from './src/components/HistoryFavoritesOverlay';
 import QuickFilters from './src/components/QuickFilters';
+import GameModeIcons from './src/components/GameModeIcons';
 import BottomNav, { BOTTOM_NAV_CLEARANCE } from './src/components/BottomNav';
 import MyPlacesHub from './src/components/MyPlacesHub';
 import SettingsPanel from './src/components/SettingsPanel';
@@ -1315,24 +1315,6 @@ function AppInner() {
         )}
 
         <View style={styles.bottomControls}>
-          <SlidableSegmented
-            options={[
-              { value: 'dontcare', label: 'Surprise Me' },
-              { value: 'elimination', label: 'Eliminate' },
-              { value: 'list', label: 'Curated' },
-            ]}
-            value={gameMode}
-            onChange={setGameMode}
-            styles={{
-              segmented: styles.modeToggleContainer,
-              segment: styles.modeBtn,
-              segmentActive: styles.modeBtnActive,
-              segmentText: styles.modeBtnText,
-              segmentTextActive: styles.modeBtnTextActive,
-            }}
-            gradientColors={accentGradient(colors).colors}
-          />
-
           <View ref={coinWrapperRef} collapsable={false} onLayout={measureCoin}>
             <CoinSpinner
               ref={coinRef}
@@ -1482,6 +1464,14 @@ function AppInner() {
       />
 
       {showBottomNav && <BottomNav activeTab={activeNavTab} onSelect={handleNavSelect} buddyAvatar={buddyAvatar} />}
+
+      <GameModeIcons
+        visible={showFab}
+        hapticsEnabled={preferences.haptics}
+        centerY={coinCenterY}
+        gameMode={gameMode}
+        onChangeGameMode={setGameMode}
+      />
 
       <QuickFilters
         visible={showFab}
@@ -1738,35 +1728,6 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   // fixed-height flex layout where any growth here shrinks the (non-
   // scrolling) filter panel's allotted space above.
   absoluteCenter: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
-  // marginBottom widened (16->24) to nudge the coin (and everything below
-  // it) down a bit.
-  modeToggleContainer: { flexDirection: 'row', backgroundColor: '#333', borderRadius: 30, padding: 4, marginBottom: 24, width: '85%', overflow: 'hidden' },
-  // marginHorizontal gives the active segment's neon glow room to breathe -
-  // Android's `elevation` shadow can bleed sideways onto a flush-adjacent
-  // sibling, visually painting over the inactive segment's text (looked
-  // like it "disappeared" - user feedback).
-  // Explicit backgroundColor (not transparent) - Android's `elevation` (from
-  // the active segment's neon glow) needs an opaque surface on ITS sibling
-  // too, or the inactive segments can render wrong/invisible next to a
-  // promoted elevated layer (same root cause as the travel toggle's square-
-  // corner bug - user feedback on both).
-  // elevation is constant (10, matching neonSelected's) whether active or
-  // not - Android silently makes a view vanish after its `elevation` value
-  // changes between renders (a real bug, not the shadow-bleed one described
-  // above): this segment used to have NO elevation at all until it became
-  // active, jumping 0 -> 10, which is exactly the pattern that triggers it.
-  // Only backgroundColor/border/shadowColor now differ between states.
-  // borderWidth is pinned at 2 here (transparent at rest) rather than only
-  // appearing on the active state - these are flex:1 siblings in a row, and
-  // a 0->2px border jump on select was enough to nudge the whole row's
-  // layout, visibly shifting the neighboring bubble (user feedback). Same
-  // "pin the property that changes, vary only color" fix as the elevation
-  // lesson elsewhere in this file - only borderColor changes now, so
-  // nothing ever resizes.
-  modeBtn: { flex: 1, marginHorizontal: 2, paddingVertical: 12, alignItems: 'center', borderRadius: 26, backgroundColor: '#333', overflow: 'hidden', elevation: 10, borderWidth: 2, borderColor: 'transparent' },
-  modeBtnActive: { backgroundColor: colors.accent, ...neonSelected(colors) },
-  modeBtnText: { color: colors.textLight, fontWeight: 'bold', fontSize: 16 },
-  modeBtnTextActive: { color: colors.textDark },
   locatingText: { color: colors.textMuted, marginTop: 10, fontSize: 13, fontStyle: 'italic' },
   toast: {
     position: 'absolute', bottom: 110, alignSelf: 'center', zIndex: 200,
