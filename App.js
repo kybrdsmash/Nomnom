@@ -1697,7 +1697,9 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   },
   // REVERTED to the original tuned negative margin (see homeScreen's comment
   // above for why the 'flex-end' experiment this was paired with got undone).
-  rollingFoodWrap: { marginTop: -38 * vscale },
+  // -38 still read as sitting too low in the Cuisines-trigger/mode-toggle
+  // gap (user report, live) - nudged further to -50.
+  rollingFoodWrap: { marginTop: -50 * vscale },
   // elevation here (not just document order) is what makes this reliably
   // paint above RollingFoodStrip on Android - same reasoning as
   // CuisineDropdown's wrapper: RollingFoodStrip's native-driven icon
