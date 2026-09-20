@@ -85,6 +85,7 @@ export default function SettingsPanel({
   const { colors, accentColor, setAccentColor } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors, insets);
+  const [navUsageOpen, setNavUsageOpen] = useState(false);
   const drawerX = useRef(new Animated.Value(DRAWER_WIDTH)).current;
   // Tracks whichever animation (open OR close) is currently running on
   // drawerX, so a new one can explicitly .stop() it first - see below.
@@ -424,19 +425,27 @@ export default function SettingsPanel({
                 most-tapped first) to inform whether the bottom nav's
                 current 5-slot layout actually matches how it gets used,
                 rather than going purely on general UX convention. Never
-                leaves the device - no analytics SDK, no user id. */}
-            <Text style={styles.sectionTitle}>Nav Usage (this device)</Text>
-            <View style={styles.navUsageBox}>
-              {NAV_USAGE_ITEMS
-                .map((item) => ({ ...item, count: navTapCounts[item.key] || 0 }))
-                .sort((a, b) => b.count - a.count)
-                .map((item) => (
-                  <View key={item.key} style={styles.navUsageRow}>
-                    <Text style={styles.navUsageLabel}>{item.label}</Text>
-                    <Text style={styles.navUsageCount}>{item.count}</Text>
-                  </View>
-                ))}
-            </View>
+                leaves the device - no analytics SDK, no user id. Collapsed
+                by default (user feedback: "I actually think it's
+                unnecessary" once it existed - useful data, but not worth
+                permanently taking up space in a drawer people open often). */}
+            <Pressable style={styles.sectionTitleRow} onPress={() => setNavUsageOpen((v) => !v)}>
+              <Text style={styles.sectionTitleInline}>Nav Usage (this device)</Text>
+              <Ionicons name={navUsageOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+            </Pressable>
+            {navUsageOpen && (
+              <View style={styles.navUsageBox}>
+                {NAV_USAGE_ITEMS
+                  .map((item) => ({ ...item, count: navTapCounts[item.key] || 0 }))
+                  .sort((a, b) => b.count - a.count)
+                  .map((item) => (
+                    <View key={item.key} style={styles.navUsageRow}>
+                      <Text style={styles.navUsageLabel}>{item.label}</Text>
+                      <Text style={styles.navUsageCount}>{item.count}</Text>
+                    </View>
+                  ))}
+              </View>
+            )}
 
             {/* The help icon doesn't depend on Firebase (it's static
                 in-app content) so it's not gated behind isFirebaseConfigured
@@ -488,11 +497,16 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // was vertically centered, wanted it "down low, close to the bottom left
   // inside corner" instead) - insets.bottom keeps it clear of any gesture
   // bar, same convention as drawerContent's own bottom padding just below.
+  // `left` centers this under helpBtn (the "(i)" button lower in the
+  // drawer) rather than an arbitrary 14 - helpBtn sits at drawerContent's
+  // own 20px padding + half its own 40px width = 40px from the drawer's
+  // left edge; this button is 36 wide, so left = 40 - 18 = 22 lines their
+  // centers up exactly (user feedback: "it looks weird being slightly off").
   // backgroundColor+color both use colors.accent/textDark (App.js's own
   // accent-pill convention, e.g. its backFromResultsBtn) so it reads as
   // "part of the settings affordance," not a random stray button.
   closeTab: {
-    position: 'absolute', left: 14, bottom: insets.bottom + 40, zIndex: 256,
+    position: 'absolute', left: 22, bottom: insets.bottom + 40, zIndex: 256,
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
     ...buttonDepth,
