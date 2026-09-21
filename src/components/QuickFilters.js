@@ -94,16 +94,21 @@ export default function QuickFilters({
       style={[styles.stack, verticalStyle]}
       pointerEvents="box-none"
       onLayout={(e) => {
-        setStackHalfHeight(e.nativeEvent.layout.height / 2);
-        // TEMP DEBUG - remove alongside App.js's matching log once the
-        // device-dependent discrepancy is root-caused. This stack's own
-        // true window-absolute center, measured completely independently
-        // of centerY/containerY - a direct, assumption-free ground truth
-        // to compare against the coin's own trueCenterY (App.js's log) on
-        // BOTH devices from the same build.
-        stackRef.current?.measureInWindow((x, y, w, h) => {
-          console.log('[QuickFilters]', { centerY, halfHeight, stackY: y, stackHeight: h, trueCenterY: y + h / 2 });
-        });
+        // Only ever set this ONCE (guarded on still being null) - the
+        // content here is a fixed set of toggles at a fixed size, so its
+        // real height never actually changes after the first measurement.
+        // Setting it unconditionally on every onLayout created a real
+        // feedback loop: this state feeds verticalStyle's `top`, changing
+        // `top` moves the view, and a moved absolutely-positioned view
+        // fires onLayout AGAIN (position changes count as a layout change,
+        // not just size) - with sub-pixel rounding differing just enough
+        // each time to never converge, this ping-ponged forever (confirmed
+        // live: rapid-fire logs alternating between two near-identical
+        // heights). That constant re-render/re-measure churn was very
+        // likely also behind unrelated reports of the whole app feeling
+        // sluggish (e.g. slow nav-tab switches) - this was a real
+        // performance bug, not just a cosmetic one.
+        if (stackHalfHeight == null) setStackHalfHeight(e.nativeEvent.layout.height / 2);
       }}
     >
       <Toggle active={maxPrice != null} onPress={cyclePrice} colors={colors} styles={styles} hapticsEnabled={hapticsEnabled} order={0}>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../ThemeContext';
@@ -26,10 +26,19 @@ const MODES = [
  * research on segmented controls is explicit that the connected track +
  * single active fill is what visually communicates "these are alternatives,
  * not independent switches" - standalone circles here would misleadingly
- * suggest multi-select. The small active-mode label below the pill exists
- * for the same reason icon-only controls generally test worse than icon+
- * label ones (icons alone are frequently ambiguous) - it's the "notification
- * of what's selected" this was designed around.
+ * suggest multi-select. Same 38px width as QuickFilters' own toggle circles
+ * (user request - "same width... one long thin pill") rather than the
+ * originally-mocked wider version, so the two stacks read as one consistent
+ * width flanking the coin.
+ *
+ * The "notification of what's selected" a user request asked for is the
+ * same bottom-center toast QuickFilters' own toggles already use (App.js's
+ * showToast, wired in via onChangeGameMode) rather than a persistent label
+ * living inside this component - simpler, consistent with the rest of the
+ * app, and avoids a real bug the first version had: a label whose own width
+ * changed with the text ("SURPRISE ME" vs "CURATED") made this component's
+ * OWN footprint change size depending on which mode was active, visibly
+ * shifting the whole track sideways (live user report).
  */
 export default function GameModeIcons({ visible, hapticsEnabled = true, centerY, gameMode, onChangeGameMode }) {
   const { colors } = useTheme();
@@ -48,15 +57,22 @@ export default function GameModeIcons({ visible, hapticsEnabled = true, centerY,
     ? { top: centerY - half + COIN_SHADOW_VISUAL_OFFSET }
     : { bottom: 170 };
 
-  const activeLabel = MODES.find((m) => m.value === gameMode)?.label || '';
-
   return (
     <View
       style={[styles.wrap, verticalStyle]}
       pointerEvents="box-none"
-      onLayout={(e) => setHalfHeight(e.nativeEvent.layout.height / 2)}
+      onLayout={(e) => {
+        // Only ever set this ONCE (guarded on still being null) - see
+        // QuickFilters.js's identical guard for why: setting it on every
+        // onLayout created a real feedback loop (this state feeds
+        // verticalStyle's `top`, moving the view fires onLayout again,
+        // forever - confirmed live via rapid-fire logs) that was very
+        // likely also behind unrelated reports of the whole app feeling
+        // sluggish (e.g. slow nav-tab switches).
+        if (halfHeight == null) setHalfHeight(e.nativeEvent.layout.height / 2);
+      }}
     >
-      <FrostedGlass style={styles.track} contentStyle={styles.trackInner} radius={26} tintOpacity={0.16}>
+      <FrostedGlass style={styles.track} contentStyle={styles.trackInner} radius={19} tintOpacity={0.16}>
         <SlidableSegmented
           vertical
           options={MODES}
@@ -70,9 +86,6 @@ export default function GameModeIcons({ visible, hapticsEnabled = true, centerY,
           renderOption={(opt, active) => <ModeIcon mode={opt.value} active={active} colors={colors} />}
         />
       </FrostedGlass>
-      <View style={styles.labelPill}>
-        <Text style={styles.labelText} numberOfLines={1}>{activeLabel}</Text>
-      </View>
     </View>
   );
 }
@@ -81,7 +94,7 @@ function ModeIcon({ mode, active, colors }) {
   const color = active ? colors.textDark : colors.textMuted;
   if (mode === 'dontcare') {
     return (
-      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Rect x={4} y={4} width={16} height={16} rx={4} />
         <Circle cx={8.5} cy={8.5} r={1.15} fill={color} stroke="none" />
         <Circle cx={12} cy={12} r={1.15} fill={color} stroke="none" />
@@ -91,7 +104,7 @@ function ModeIcon({ mode, active, colors }) {
   }
   if (mode === 'elimination') {
     return (
-      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
         <Path d="M2 6h3.5v4" />
         <Path d="M2 18h3.5v-4" />
         <Path d="M5.5 10l3 2" />
@@ -103,7 +116,7 @@ function ModeIcon({ mode, active, colors }) {
     );
   }
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M9 13.2l-2.3 7.6 3.8-1.6.9 1.9" />
       <Path d="M15 13.2l2.3 7.6-3.8-1.6-.9 1.9" />
       <Circle cx={12} cy={9} r={6} />
@@ -114,16 +127,12 @@ function ModeIcon({ mode, active, colors }) {
 }
 
 const makeStyles = (colors) => StyleSheet.create({
-  // right:30 on QuickFilters -> left:30 here, its mirror image.
+  // right:30 on QuickFilters -> left:30 here, its mirror image. 38px width
+  // matches QuickFilters' own toggleRing exactly (user request).
   wrap: { position: 'absolute', left: 30, alignItems: 'center', zIndex: 45 },
-  track: { width: 52 },
+  track: { width: 38 },
   trackInner: { flexDirection: 'column' },
   segmented: { flexDirection: 'column' },
-  segment: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
+  segment: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   segmentActive: {},
-  labelPill: {
-    marginTop: 10, backgroundColor: 'rgba(94,235,255,0.12)', borderWidth: 1, borderColor: 'rgba(94,235,255,0.35)',
-    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, maxWidth: 90,
-  },
-  labelText: { color: colors.neon, fontSize: 9.5, fontWeight: '800', letterSpacing: 0.3, textAlign: 'center' },
 });

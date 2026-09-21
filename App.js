@@ -12,7 +12,6 @@ import {
   ScrollView,
   Linking,
   useWindowDimensions,
-  Dimensions,
 } from 'react-native';
 // Core RN's SafeAreaView is a documented iOS-only no-op - it silently does
 // nothing on Android, which is why every "clear the status bar/nav bar"
@@ -331,29 +330,7 @@ function AppInner() {
   const measureCoin = () => {
     containerRef.current?.measureInWindow((_containerX, containerY) => {
       coinWrapperRef.current?.measureInWindow((_coinX, coinY, _coinW, coinHeight) => {
-        const computed = coinY - containerY + coinHeight / 2;
-        // TEMP DEBUG - remove once the device-dependent centering
-        // discrepancy is root-caused. The Pixel needed a +25dp correction
-        // that made the SAME code overshoot the other way on a tablet -
-        // that rules out a fixed-size cause (a shadow's dp offset would be
-        // ~constant across devices) and points at something that scales
-        // with the device itself. window vs. screen dimensions are the
-        // leading suspect: if RN's "window" (what measureInWindow uses)
-        // doesn't match the physical "screen" by a DIFFERENT amount on
-        // each device (status bar/cutout/edge-to-edge handling varies by
-        // OEM), that would explain both the negative containerY seen on
-        // the Pixel AND why the correction needed isn't portable.
-        const screen = Dimensions.get('screen');
-        const windowDim = Dimensions.get('window');
-        console.log('[measureCoin]', {
-          containerY, coinY, coinHeight, computed,
-          trueCenterY: coinY + coinHeight / 2,
-          insetsTop: insets.top, insetsBottom: insets.bottom,
-          windowW: windowDim.width, windowH: windowDim.height,
-          screenW: screen.width, screenH: screen.height,
-          windowScreenGapH: screen.height - windowDim.height,
-        });
-        setCoinCenterY(computed);
+        setCoinCenterY(coinY - containerY + coinHeight / 2);
       });
     });
   };
@@ -1470,7 +1447,11 @@ function AppInner() {
         hapticsEnabled={preferences.haptics}
         centerY={coinCenterY}
         gameMode={gameMode}
-        onChangeGameMode={setGameMode}
+        onChangeGameMode={(mode) => {
+          setGameMode(mode);
+          const label = { dontcare: 'Surprise Me', elimination: 'Eliminate', list: 'Curated' }[mode];
+          if (label) showToast(label);
+        }}
       />
 
       <QuickFilters
