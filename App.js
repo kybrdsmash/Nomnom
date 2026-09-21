@@ -1292,6 +1292,21 @@ function AppInner() {
         )}
 
         <View style={styles.bottomControls}>
+          {/* Replaces the vertical space the old horizontal mode toggle
+              (SlidableSegmented, removed when it moved to GameModeIcons on
+              the coin's left) used to occupy here - ~52px of button content
+              (padding:4 + paddingVertical:12*2 + text) plus its own
+              marginBottom:24. Without this, bottomControls' own intrinsic
+              height shrank, which let homeScreen's space-between distribute
+              that freed space into the gaps ABOVE it instead - pushing
+              RollingFoodStrip down into where the coin's flanking icon
+              stacks (GameModeIcons/QuickFilters, both zIndex 45) paint,
+              well above topControlsScroll's own zIndex 15 (live user
+              report: "the food keeps falling behind the game selector and
+              the quick filters"). A plain spacer restores the original
+              flex proportions directly instead of re-guessing
+              rollingFoodWrap's own margin a third time. */}
+          <View style={{ height: 76 * vscale }} />
           <View ref={coinWrapperRef} collapsable={false} onLayout={measureCoin}>
             <CoinSpinner
               ref={coinRef}
@@ -1668,9 +1683,14 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   },
   // REVERTED to the original tuned negative margin (see homeScreen's comment
   // above for why the 'flex-end' experiment this was paired with got undone).
-  // -38 still read as sitting too low in the Cuisines-trigger/mode-toggle
-  // gap (user report, live) - nudged further to -50.
-  rollingFoodWrap: { marginTop: -50 * vscale },
+  // Was bumped to -50 when this read as too close to the horizontal mode
+  // toggle that used to sit directly below it in bottomControls - that
+  // toggle has since moved out entirely (GameModeIcons, coin's left side),
+  // so the premise for that bump no longer applies. Back to -38, combined
+  // with bottomControls' new compensating spacer (see its comment) which
+  // addresses the actual mechanical cause (freed flex space from removing
+  // the toggle) rather than re-tuning this number a third time.
+  rollingFoodWrap: { marginTop: -38 * vscale },
   // elevation here (not just document order) is what makes this reliably
   // paint above RollingFoodStrip on Android - same reasoning as
   // CuisineDropdown's wrapper: RollingFoodStrip's native-driven icon
@@ -1703,11 +1723,6 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
   // elevated deep inside bottomControls (user report: coin still flipping
   // behind Cuisines/ratings). Comfortably above topControlsScroll's 5.
   bottomControls: { alignItems: 'center', zIndex: 25, elevation: 25 },
-  // marginTop widened (10->20) for more breathing room from the coin above
-  // it (user request) - offset by trimming FilterPanel's own section
-  // margins by the same rough amount, since bottomControls sits in a
-  // fixed-height flex layout where any growth here shrinks the (non-
-  // scrolling) filter panel's allotted space above.
   absoluteCenter: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
   locatingText: { color: colors.textMuted, marginTop: 10, fontSize: 13, fontStyle: 'italic' },
   toast: {
