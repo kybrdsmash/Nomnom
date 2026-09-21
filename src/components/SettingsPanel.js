@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, Animated, Easing, ScrollView, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Application from 'expo-application';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
@@ -506,6 +507,18 @@ export default function SettingsPanel({
                 </Pressable>
               )}
             </View>
+
+            {/* User request: a real way to tell which build is actually
+                installed, visible without needing adb/dumpsys - this exact
+                gap (Play Store's own rollout lag showing a version several
+                behind what's on record) cost real debugging time tonight
+                more than once. nativeApplicationVersion mirrors
+                app.config.js's `version` (1.1.0); nativeBuildVersion is
+                Android's versionCode, the number that actually changes on
+                every build/submit. */}
+            <Text style={styles.versionText}>
+              Nomnom v{Application.nativeApplicationVersion} ({Application.nativeBuildVersion})
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
@@ -611,6 +624,7 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
     backgroundColor: colors.accent, borderRadius: 16, paddingVertical: 10, ...buttonDepth,
   },
   bugReportBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 13, marginLeft: 6 },
+  versionText: { color: colors.textMuted, fontSize: 10.5, textAlign: 'center', marginTop: 18, opacity: 0.6 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   rowLabel: { color: colors.textLight, fontSize: 14, fontWeight: '600' },
   // Fixed width + flex:1 segments - NOT content-driven sizing. The active
