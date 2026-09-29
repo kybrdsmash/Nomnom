@@ -59,6 +59,12 @@ export default function AccountSection() {
       // account picker) rather than as a null idToken, depending on the
       // exact native path taken - either way it's not a real failure.
       if (!(isErrorWithCode(e) && e.code === statusCodes.SIGN_IN_CANCELLED)) {
+        // Was silent otherwise - the UI only ever showed the same generic
+        // "Could not sign in" text no matter which of promptGoogleSignIn
+        // (native) or signInWithGoogleIdToken (Firebase) actually threw, or
+        // why. Logging the real code/message here is what next actually
+        // reveals it via logcat instead of guessing blind again.
+        console.warn('Google sign-in failed:', e?.code, e?.message);
         setError('Could not sign in - try again.');
       }
     } finally {
