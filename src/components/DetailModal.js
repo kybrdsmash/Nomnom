@@ -13,6 +13,11 @@ import { joinParts } from '../utils/format';
 import { loadJournalComposeDraft, saveJournalComposeDraft, clearJournalComposeDraft } from '../storage';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import MomentsEditor, { newMoment } from './MomentsEditor';
+
+// Google's Places `weekday_text` is Monday-first (index 0); JS's own
+// Date.getDay() is Sunday-first (0 = Sunday) - this converts the latter
+// into the former so "today" highlighting lines up with the right row.
+const todayWeekdayIndex = () => (new Date().getDay() + 6) % 7;
 import { getMichelinEntry } from '../michelinList';
 
 // "3m ago" / "5h ago" / "2d ago" / a full date past a month - used for both
@@ -511,7 +516,12 @@ export default function DetailModal({
                     Hours {details.openNow != null && (details.openNow ? '· Open now' : '· Closed now')}
                   </Text>
                   {details.hours.map((line, i) => (
-                    <Text key={i} style={styles.hoursLine}>{line}</Text>
+                    <Text
+                      key={i}
+                      style={[styles.hoursLine, i === todayWeekdayIndex() && styles.hoursLineToday]}
+                    >
+                      {line}
+                    </Text>
                   ))}
                 </View>
               )}
@@ -766,6 +776,22 @@ const makeStyles = (colors) => StyleSheet.create({
   section: { marginBottom: 16 },
   sectionTitle: { color: colors.accent, fontWeight: 'bold', fontSize: 15, marginBottom: 6 },
   hoursLine: { color: '#CCC', fontSize: 13, lineHeight: 20 },
+  // Translucent neon tint (not a solid fill) rather than just bold/colored
+  // text - user-approved direction, matching the app's existing frosted-
+  // glass language (FrostedGlass.js's own tint layer is the same idea: a
+  // low-opacity accent color over dark, not an opaque block) rather than
+  // introducing a one-off treatment just for this row. Negative horizontal
+  // margin compensates the added padding so the highlighted row's text
+  // still lines up with the others above/below it instead of nudging right.
+  hoursLineToday: {
+    // colors.neon + alpha hex suffix (RN supports 8-digit #RRGGBBAA), not a
+    // hardcoded rgba() - neon isn't a fixed brand color, it's derived from
+    // whatever accent the user picked in Settings (see deriveAccentShades),
+    // so a literal rgba(94,235,255,...) would silently stop matching for
+    // anyone using a custom accent.
+    color: colors.textLight, fontWeight: '700', backgroundColor: `${colors.neon}24`,
+    borderRadius: 8, paddingHorizontal: 8, marginHorizontal: -8,
+  },
   linkBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, marginRight: 10, ...buttonDepth },
   linkText: { color: colors.textDark, marginLeft: 6, fontWeight: 'bold', fontSize: 13 },
   reviewCard: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 10 },
