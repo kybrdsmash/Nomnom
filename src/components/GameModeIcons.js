@@ -3,8 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../ThemeContext';
-import { accentGradient } from '../constants';
-import FrostedGlass from './FrostedGlass';
+import { accentGradient, neonSelected, buttonDepth } from '../constants';
 import SlidableSegmented from './SlidableSegmented';
 
 const MODES = [
@@ -19,26 +18,32 @@ const MODES = [
  * QuickFilters once that shipped). Replaces the old horizontal, text-labeled
  * SlidableSegmented mode toggle that sat directly above the coin.
  *
- * A single connected pill (not 3 standalone circles matching QuickFilters'
- * own look) is a deliberate choice, not an oversight - QuickFilters' circles
- * are genuinely independent on/off toggles (any combination), but game mode
- * is mutually exclusive (exactly one of the three, always). Public UX
- * research on segmented controls is explicit that the connected track +
- * single active fill is what visually communicates "these are alternatives,
- * not independent switches" - standalone circles here would misleadingly
- * suggest multi-select. Same 38px width as QuickFilters' own toggle circles
- * (user request - "same width... one long thin pill") rather than the
- * originally-mocked wider version, so the two stacks read as one consistent
- * width flanking the coin.
+ * Styling now mirrors FilterPanel's travel-type toggle (same SlidableSegmented
+ * underneath already, just horizontal there) rather than QuickFilters'
+ * FrostedGlass/BlurView look - a live user report that dragging across this
+ * felt un-smooth pointed at BlurView sitting directly under a continuously-
+ * dragged PanResponder as the likely cause (blur re-rendering mid-gesture),
+ * and the travel toggle (plain opaque per-segment backgrounds, no blur at
+ * all) has never had that complaint despite sharing the identical gesture
+ * code. Each segment now gets its own opaque background + buttonDepth
+ * shadow + a pinned (always-present, only recoloring) border, and the
+ * active one gets neonSelected's glow - the exact same recipe
+ * FilterPanel.js's toggleBtnSmall/activeToggle already use.
+ *
+ * Icons sized to match QuickFilters' own toggles (20-24px range) rather
+ * than the originally-shipped 18px, per user request ("as large as the
+ * icons for the quick filters").
+ *
+ * Still one CONNECTED track (individual segments share one rounded outer
+ * container), not 3 standalone circles matching QuickFilters' own look -
+ * that's still deliberate, not undone by dropping the blur: game mode is
+ * mutually exclusive (exactly one of three, always), and UX research on
+ * segmented controls is explicit that a connected track + single active
+ * fill is what visually signals "alternatives," not "any combination."
  *
  * The "notification of what's selected" a user request asked for is the
  * same bottom-center toast QuickFilters' own toggles already use (App.js's
- * showToast, wired in via onChangeGameMode) rather than a persistent label
- * living inside this component - simpler, consistent with the rest of the
- * app, and avoids a real bug the first version had: a label whose own width
- * changed with the text ("SURPRISE ME" vs "CURATED") made this component's
- * OWN footprint change size depending on which mode was active, visibly
- * shifting the whole track sideways (live user report).
+ * showToast, wired in via onChangeGameMode).
  */
 export default function GameModeIcons({ visible, hapticsEnabled = true, centerY, gameMode, onChangeGameMode }) {
   const { colors } = useTheme();
@@ -72,20 +77,18 @@ export default function GameModeIcons({ visible, hapticsEnabled = true, centerY,
         if (halfHeight == null) setHalfHeight(e.nativeEvent.layout.height / 2);
       }}
     >
-      <FrostedGlass style={styles.track} contentStyle={styles.trackInner} radius={19} tintOpacity={0.16}>
-        <SlidableSegmented
-          vertical
-          options={MODES}
-          value={gameMode}
-          onChange={(v) => {
-            if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onChangeGameMode(v);
-          }}
-          styles={{ segmented: styles.segmented, segment: styles.segment, segmentActive: styles.segmentActive }}
-          gradientColors={accentGradient(colors).colors}
-          renderOption={(opt, active) => <ModeIcon mode={opt.value} active={active} colors={colors} />}
-        />
-      </FrostedGlass>
+      <SlidableSegmented
+        vertical
+        options={MODES}
+        value={gameMode}
+        onChange={(v) => {
+          if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onChangeGameMode(v);
+        }}
+        styles={{ segmented: styles.track, segment: styles.segment, segmentActive: styles.segmentActive }}
+        gradientColors={accentGradient(colors).colors}
+        renderOption={(opt, active) => <ModeIcon mode={opt.value} active={active} colors={colors} />}
+      />
     </View>
   );
 }
@@ -94,7 +97,7 @@ function ModeIcon({ mode, active, colors }) {
   const color = active ? colors.textDark : colors.textMuted;
   if (mode === 'dontcare') {
     return (
-      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         <Rect x={4} y={4} width={16} height={16} rx={4} />
         <Circle cx={8.5} cy={8.5} r={1.15} fill={color} stroke="none" />
         <Circle cx={12} cy={12} r={1.15} fill={color} stroke="none" />
@@ -104,7 +107,7 @@ function ModeIcon({ mode, active, colors }) {
   }
   if (mode === 'elimination') {
     return (
-      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
         <Path d="M2 6h3.5v4" />
         <Path d="M2 18h3.5v-4" />
         <Path d="M5.5 10l3 2" />
@@ -116,7 +119,7 @@ function ModeIcon({ mode, active, colors }) {
     );
   }
   return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M9 13.2l-2.3 7.6 3.8-1.6.9 1.9" />
       <Path d="M15 13.2l2.3 7.6-3.8-1.6-.9 1.9" />
       <Circle cx={12} cy={9} r={6} />
@@ -127,12 +130,21 @@ function ModeIcon({ mode, active, colors }) {
 }
 
 const makeStyles = (colors) => StyleSheet.create({
-  // right:30 on QuickFilters -> left:30 here, its mirror image. 38px width
-  // matches QuickFilters' own toggleRing exactly (user request).
+  // right:30 on QuickFilters -> left:30 here, its mirror image.
   wrap: { position: 'absolute', left: 30, alignItems: 'center', zIndex: 45 },
-  track: { width: 38 },
-  trackInner: { flexDirection: 'column' },
-  segmented: { flexDirection: 'column' },
-  segment: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  segmentActive: {},
+  // Matches FilterPanel's toggleRowSmall pattern (plain opaque background,
+  // no blur) - width fixed (not content-sized), same reasoning as there:
+  // content-driven sizing risks the drag math's cached width going stale.
+  track: {
+    flexDirection: 'column', backgroundColor: colors.cardAlt, borderRadius: 20,
+    padding: 3, width: 44,
+  },
+  // Matches toggleBtnSmall: own opaque background + real depth + a pinned
+  // (always 2px, only recoloring) border so selecting never nudges layout.
+  segment: {
+    marginVertical: 3, paddingVertical: 6, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 17, backgroundColor: colors.cardAlt, overflow: 'hidden',
+    ...buttonDepth, elevation: 10, borderWidth: 2, borderColor: 'transparent',
+  },
+  segmentActive: { backgroundColor: colors.accent, ...neonSelected(colors) },
 });
