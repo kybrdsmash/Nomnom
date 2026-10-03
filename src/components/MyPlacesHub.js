@@ -57,33 +57,37 @@ function formatDateLabel(timestamp) {
  * "My Places" - the design canvas's consolidation of what used to be three
  * separate destinations (Favorites, Try Later, Journal off the hamburger)
  * into one screen with a tab selector, opened from BottomNav's "Places"
- * icon. "Friends" (mutual friends' journal entries) folds in as a fourth
+ * icon. "Friends" (mutual friends' journal entries) folds in as a fifth
  * tab, matching JournalOverlay's existing Friends tab - not a new concept,
  * just relocated here.
  *
- * Favorites itself moved OUT to become its own direct BottomNav icon (user
- * request: "Favorites SHOULD be a bottom icon... it should replace
- * history" - it's the single most-used saved list, worth a dedicated 1-tap
- * shortcut rather than living behind this hub's tab selector). History took
- * its old spot here instead ("History can replace favorites in my places") -
- * day-grouped, same rendering approach as HistoryFavoritesOverlay's own
- * History tab (that screen still owns the standalone Favorites-only view
- * BottomNav's new icon opens directly).
+ * Journal and Favorites have each taken turns being "the one that lives on
+ * its own BottomNav icon instead of a tab here" - currently Journal (user
+ * request: journaling after a meal should be "one click away," which wasn't
+ * happening buried a tab deep). Favorites moved back in to take its place,
+ * city-grouped same as Try Later, no toggle on its own rows (being in the
+ * list already implies "favorited") - same rendering HistoryFavoritesOverlay
+ * originally used for it. `tab` is a controlled prop (not local state) for
+ * exactly this reason - BottomNav's Journal icon needs to force it from
+ * outside, and App.js needs to read it back to highlight the right icon.
  *
- * "At the Table" (starting a brand-new review) isn't a fifth visible tab -
- * same as it wasn't a separately-branded destination before - it's reached
- * via the + button while on the Journal tab, exactly like JournalOverlay
- * did, just via a plain boolean here instead of a third segmented value.
+ * "At the Table" (starting a brand-new review) isn't its own visible tab -
+ * it's reached via the + button while on the Journal tab, exactly like
+ * JournalOverlay did, just via a plain boolean here instead of a separate
+ * segmented value.
  */
 export default function MyPlacesHub({
-  onBack, favorites, tryLater, history, journal, friends, location, travelType,
+  tab, onChangeTab, onBack, favorites, tryLater, history, journal, friends, location, travelType,
   onOpenMaps, onShowDetails, onRemoveTryLater, onAddFavorite, onSaveAtTheTable,
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors, insets);
 
-  const [tab, setTab] = useState('history'); // 'history' | 'tryLater' | 'journal' | 'friends'
+  // tab itself ('history' | 'tryLater' | 'favorites' | 'journal' | 'friends')
+  // is now a controlled prop, not local state - lifted to App.js so
+  // BottomNav's Journal icon can force it to 'journal' on every tap, and so
+  // App.js's own activeNavTab can read it back to highlight the right icon.
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState(null);
   const [cityFilter, setCityFilter] = useState(null);
@@ -109,7 +113,7 @@ export default function MyPlacesHub({
   // "Ramen" typed while on Favorites shouldn't silently carry into Try
   // Later's search box.
   const switchTab = (next) => {
-    setTab(next);
+    onChangeTab(next);
     setSearchQuery('');
     setTypeFilter(null);
     setCityFilter(null);
@@ -138,29 +142,36 @@ export default function MyPlacesHub({
     return () => { cancelled = true; };
   }, [tab, friends]);
 
-  const titles = { history: 'History', tryLater: 'Try Later', journal: 'Journal', friends: 'Friends' };
+  const titles = { history: 'History', tryLater: 'Try Later', favorites: 'Favorites', journal: 'Journal', friends: 'Friends' };
   const emptyMessages = {
     history: 'Nothing seen yet - flip or run a bracket to populate this.',
     tryLater: 'Nothing on your try list yet - tap + to search for a place, or add one from its detail view.',
+    favorites: 'No favorites saved yet.',
     journal: 'No reviews yet - tap + to add one, or open any spot\'s details and tap the pencil.',
     friends: 'No friends yet - complete a session from Feast with Friends to connect with someone.',
   };
   const searchPlaceholders = {
     history: 'Search history…',
     tryLater: 'Search try later…',
+    favorites: 'Search favorites…',
     journal: 'Filter your reviews…',
   };
 
-  // Both get a search box; only Try Later gets city grouping/chips - History
-  // is grouped by day instead (see the history branch of listContent below),
-  // which is the more useful axis there, same reasoning
-  // HistoryFavoritesOverlay's own History tab already established.
-  const isSearchableTab = tab === 'history' || tab === 'tryLater';
-  const showCityFilter = tab === 'tryLater';
+  // Favorites moved in here (trading places with Journal, which got its own
+  // direct BottomNav icon instead - see BottomNav.js/App.js). All three get
+  // a search box; Try Later and Favorites also get city grouping/chips -
+  // both are "saved spots that can span multiple trips/cities" lists -
+  // History is grouped by day instead (see the history branch of
+  // listContent below), which is the more useful axis there. Same
+  // reasoning HistoryFavoritesOverlay.js originally established for all of
+  // this before Favorites relocated here.
+  const isSearchableTab = tab === 'history' || tab === 'tryLater' || tab === 'favorites';
+  const showCityFilter = tab === 'tryLater' || tab === 'favorites';
 
   const sourceList =
     tab === 'history' ? history
     : tab === 'tryLater' ? tryLater
+    : tab === 'favorites' ? favorites
     : [];
   const availableTypes = isSearchableTab
     ? [...new Set(sourceList.map((s) => s.type).filter(Boolean))].sort()
@@ -177,8 +188,9 @@ export default function MyPlacesHub({
       })
     : [];
 
-  // renderRow - Try Later only now (Favorites moved out to its own BottomNav
-  // icon/HistoryFavoritesOverlay screen), adapted from that same file.
+  // Shared by Try Later (showTryLaterToggle: true) and Favorites (no
+  // options - being in that list already implies "favorited," so no
+  // toggle shown on its own rows), adapted from HistoryFavoritesOverlay.js.
   const renderRow = (spot, i, { showTryLaterToggle, rowRef } = {}) => {
     const isTry = tryLater.some((t) => t.id === spot.id);
     return (
@@ -369,11 +381,19 @@ export default function MyPlacesHub({
     .map((entry) => entry.spot);
 
   let listContent;
-  if (tab === 'history' || tab === 'tryLater') {
+  if (tab === 'history' || tab === 'tryLater' || tab === 'favorites') {
     if (sourceList.length === 0) {
       listContent = <Text style={styles.emptyText}>{emptyMessages[tab]}</Text>;
     } else if (filtered.length === 0) {
       listContent = <Text style={styles.emptyText}>No matches - try a different search or filter.</Text>;
+    } else if (tab === 'favorites') {
+      // No toggle on these rows (unlike Try Later's bookmark one below) -
+      // being in this list already implies "favorited," same reasoning
+      // HistoryFavoritesOverlay's own Favorites tab used before this moved
+      // here. City-grouped (nearest-first from wherever the user currently
+      // is) for the same reason Try Later is - a favorites list saved
+      // across many trips gets cluttered without it.
+      listContent = groupByCity(filtered, location).map(({ city, spots }) => renderCitySection(city, spots));
     } else if (tab === 'tryLater') {
       listContent = groupByCity(filtered, location).map(({ city, spots }) =>
         renderCitySection(city, spots, { showTryLaterToggle: true })
@@ -474,6 +494,7 @@ export default function MyPlacesHub({
         <SlidableSegmented
           options={[
             { value: 'history', label: 'History' },
+            { value: 'favorites', label: 'Favorites' },
             { value: 'tryLater', label: 'Try Later' },
             { value: 'journal', label: 'Journal' },
             { value: 'friends', label: 'Friends' },
@@ -565,8 +586,10 @@ export default function MyPlacesHub({
       )}
 
       {/* mode/onToggle are unconditionally 'tryLater' now - the FAB that
-          opens this (showFab above) only ever renders for the Try Later tab,
-          Favorites having moved out to its own BottomNav destination. */}
+          opens this (showFab above) only ever renders for the Try Later tab;
+          Favorites (now living here too) never gets an add-FAB of its own -
+          same as before, a spot becomes a favorite via the heart toggle on
+          its detail view/other list rows, not a dedicated add flow here. */}
       <AddSpotModal
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}

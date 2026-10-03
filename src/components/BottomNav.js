@@ -84,16 +84,17 @@ export default function BottomNav({ activeTab, onSelect, buddyAvatar }) {
   const insets = useSafeAreaInsets();
   const styles = makeStyles(colors, insets);
 
-  // 'favorites' replaces 'history' here (user request: "Favorites SHOULD be
-  // a bottom icon... it should replace history" - it's the single most-used
-  // saved list, worth its own 1-tap shortcut). History moved the other
-  // direction, into MyPlacesHub's tab set, replacing Favorites there
-  // ("History can replace favorites in my places").
+  // 'journal' replaces 'favorites' here (user request: journaling after a
+  // meal should be "one click away" - it wasn't getting used otherwise).
+  // Favorites moved the other direction, into MyPlacesHub's tab set,
+  // trading places with Journal there - same screen/component either way,
+  // App.js just lands it on a different starting tab depending on which
+  // icon was tapped.
   const items = [
     { key: 'home', label: 'Home' },
     { key: 'places', label: 'Places' },
     { key: 'feast', label: 'Feast' },
-    { key: 'favorites', label: 'Favorites' },
+    { key: 'journal', label: 'Journal' },
     { key: 'settings', label: 'Settings' },
   ];
   const activeIndex = Math.max(0, items.findIndex((item) => item.key === activeTab));
@@ -208,8 +209,8 @@ function NavIcon({ iconKey, active, colors, buddyAvatar, styles }) {
       return <Ionicons name={active ? 'home' : 'home-outline'} size={size} color={color} />;
     case 'feast':
       return <Ionicons name={active ? 'people' : 'people-outline'} size={size} color={color} />;
-    case 'favorites':
-      return <Ionicons name={active ? 'heart' : 'heart-outline'} size={size} color={color} />;
+    case 'journal':
+      return <Ionicons name={active ? 'book' : 'book-outline'} size={size} color={color} />;
     case 'settings':
       // A picked buddy replaces the plain gear (see BuddyPicker.js) - a
       // small round avatar reads as "this is your corner of the app"
