@@ -66,7 +66,25 @@ export default function SlidableSegmented({ options, value, onChange, styles, re
       onStartShouldSetPanResponder: () => true,
       // Fires immediately on touch-down (before any movement), so a plain
       // tap - no drag at all - still selects whichever segment was touched.
-      onPanResponderGrant: (evt) => pickFromPointRef.current(evt.nativeEvent.pageX, evt.nativeEvent.pageY),
+      //
+      // Re-measures FRESH here instead of trusting the onLayout-cached
+      // boundsRef - a caller whose wrapper repositions itself slightly
+      // AFTER this view's first layout pass (GameModeIcons: its wrap
+      // shifts once the coin's real center resolves, after this control's
+      // own onLayout already fired and cached the OLD position) left
+      // boundsRef silently stale, picking against where the pill USED to
+      // be rather than where it visually ended up (live user report:
+      // "off by one icon height - tapping the top selects the middle").
+      // Same stale-measureInWindow-snapshot bug class already fixed twice
+      // before in this app (SettingsPanel's color/rating sliders) - same
+      // fix: re-measure at the moment of use, not once at mount.
+      onPanResponderGrant: (evt) => {
+        const { pageX, pageY } = evt.nativeEvent;
+        containerRef.current?.measureInWindow((mx, my, width, height) => {
+          boundsRef.current = vertical ? { origin: my, extent: height } : { origin: mx, extent: width };
+          pickFromPointRef.current(pageX, pageY);
+        });
+      },
       onPanResponderMove: (evt) => pickFromPointRef.current(evt.nativeEvent.pageX, evt.nativeEvent.pageY),
     })
   ).current;
