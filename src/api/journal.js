@@ -38,3 +38,26 @@ export async function fetchFriendJournal(friendUid) {
     return {};
   }
 }
+
+/**
+ * Union by entry id, local-first - same reasoning as savedLists.js's
+ * mergeById, just per-placeId instead of one flat array (journal is keyed
+ * by placeId -> that spot's own entries). Fixes a real gap: pushJournal
+ * mirrors entries UP to Firestore on every change, but until this existed
+ * nothing ever pulled them back DOWN on a fresh sign-in/reinstall - unlike
+ * favorites/history/tryLater (see savedLists.js), a journal written on one
+ * device never actually came back on another (user report: "i have a few
+ * reviews written as well - journal entries - are those there?" - they
+ * were pushed, but there was no restore path to prove it).
+ */
+export function mergeJournal(local, remote) {
+  if (!remote) return local || {};
+  const merged = { ...(local || {}) };
+  for (const placeId of Object.keys(remote)) {
+    const localEntries = merged[placeId] || [];
+    const remoteEntries = remote[placeId] || [];
+    const seen = new Set(localEntries.map((e) => e.id));
+    merged[placeId] = [...localEntries, ...remoteEntries.filter((e) => e && !seen.has(e.id))];
+  }
+  return merged;
+}

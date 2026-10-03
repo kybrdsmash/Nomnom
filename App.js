@@ -75,7 +75,7 @@ import {
   loadInstallReferrerChecked, saveInstallReferrerChecked,
   loadNavTapCounts, saveNavTapCounts,
 } from './src/storage';
-import { pushJournal } from './src/api/journal';
+import { pushJournal, fetchFriendJournal, mergeJournal } from './src/api/journal';
 import { uploadJournalPhoto, deleteJournalPhoto } from './src/api/journalPhotos';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -180,11 +180,17 @@ function AppInner() {
 
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [activeView, setActiveView] = useState('main');
-  // 'main' | 'friend' | 'history' | 'places' | 'journal' are all reachable
-  // today (via BottomNav). 'favorites' | 'tryLater' are dead values -
-  // nothing sets them anymore since MyPlacesHub ('places') consolidated
-  // those, but HistoryFavoritesOverlay.js still handles them correctly if
-  // something ever does again.
+  // 'main' | 'friend' | 'places' are the only reachable values today (via
+  // BottomNav). 'favorites' | 'tryLater' | 'journal' are dead - nothing
+  // sets them anymore since MyPlacesHub ('places') consolidated all of it,
+  // but HistoryFavoritesOverlay.js/JournalOverlay.js still handle them
+  // correctly if something ever does again.
+  //
+  // Which of MyPlacesHub's own internal tabs to land on - lifted up here
+  // (not local state inside MyPlacesHub) so BottomNav's Journal icon can
+  // force it to 'journal' every time, and so activeNavTab (above) can read
+  // it back to highlight the right icon.
+  const [placesTab, setPlacesTab] = useState('history');
   const [openNowOnly, setOpenNowOnly] = useState(false);
   // null = any price; otherwise 1-4 matching Google's price_level scale ($-$$$$)
   const [maxPrice, setMaxPrice] = useState(null);
@@ -583,6 +589,17 @@ function AppInner() {
       setHistory((prev) => mergeById(prev, remote.history, MAX_HISTORY));
       setTryLater((prev) => mergeById(prev, remote.tryLater));
       setFaveCuisines((prev) => mergeFaveCuisines(prev, remote.faveCuisines));
+    });
+    // Same restore, for Journal - pushJournal (below) mirrors entries UP to
+    // journals/{uid} on every change, but until this existed nothing ever
+    // pulled them back DOWN (user report: "i have a few reviews written as
+    // well - are those there?" - they were safely in Firestore, there just
+    // wasn't a restore path to prove it, unlike favorites/history/tryLater
+    // above). fetchFriendJournal works unchanged for your OWN uid too - it's
+    // just a getDoc on journals/{uid}, nothing friend-specific about it.
+    fetchFriendJournal(myUid).then((remoteEntries) => {
+      if (!remoteEntries || Object.keys(remoteEntries).length === 0) return;
+      setJournal((prev) => mergeJournal(prev, remoteEntries));
     });
   }, [storageLoaded, myUid]);
   useEffect(() => { if (storageLoaded) saveTravelType(travelType); }, [travelType, storageLoaded]);
@@ -1104,16 +1121,14 @@ function AppInner() {
   // Home, since the bar has never been designed to coexist with the
   // coin/elimination/browse flow.
   const showBottomNav =
-    showFab || activeView === 'places' || activeView === 'favorites' || activeView === 'friend';
-  // 'tryLater'/'journal' as raw activeView values are dead (nothing sets
-  // them anymore - FabMenu's shortcuts to them were removed once
-  // MyPlacesHub existed, and FabMenu itself has since been fully retired in
-  // favor of QuickFilters) but HistoryFavoritesOverlay.js/JournalOverlay.js
-  // are left otherwise untouched rather than deleted. 'favorites' is very
-  // much alive again though - BottomNav's own icon revived this path (user
-  // request: "Favorites SHOULD be a bottom icon... replace history" -
-  // History moved the other direction, into MyPlacesHub's tab set, so it's
-  // no longer a BottomNav destination itself).
+    showFab || activeView === 'places' || activeView === 'friend';
+  // 'tryLater'/'journal'/'favorites' as raw activeView values are now all
+  // dead (nothing sets them anymore) - 'places' is the only destination
+  // BottomNav's Places AND Journal icons both land on now, just starting on
+  // a different tab (placesTab, lifted here so this computation and
+  // BottomNav's own tap handler can both drive/read it) depending on which
+  // icon was tapped. HistoryFavoritesOverlay.js/JournalOverlay.js are left
+  // otherwise untouched rather than deleted, same as before.
   //
   // showSettingsMenu checked FIRST, ahead of activeView - Settings opens as
   // an overlay ON TOP of Home (activeView stays 'main' the whole time), so
@@ -1125,8 +1140,7 @@ function AppInner() {
     showSettingsMenu ? 'settings'
     : activeView === 'main' ? 'home'
     : activeView === 'friend' ? 'feast'
-    : activeView === 'favorites' ? 'favorites'
-    : activeView === 'places' ? 'places'
+    : activeView === 'places' ? (placesTab === 'journal' ? 'journal' : 'places')
     : null;
   const handleNavSelect = (key) => {
     // Anonymous, local-only usage tracking (see src/storage.js's
@@ -1148,9 +1162,13 @@ function AppInner() {
     // settings drawer" - it was already open, this just failed to close it).
     setShowSettingsMenu(false);
     if (key === 'home') setActiveView('main');
-    else if (key === 'places') setActiveView('places');
+    else if (key === 'places') { setActiveView('places'); setPlacesTab('history'); }
     else if (key === 'feast') setActiveView('friend');
-    else if (key === 'favorites') setActiveView('favorites');
+    // Journal is the SAME screen as Places (MyPlacesHub), just forced onto
+    // its Journal tab every time this icon is tapped (user request:
+    // journaling after a meal should be "one click away" - it wasn't
+    // getting used otherwise since it was buried a tab deep behind Places).
+    else if (key === 'journal') { setActiveView('places'); setPlacesTab('journal'); }
   };
 
   return (
@@ -1187,6 +1205,10 @@ function AppInner() {
         />
       )}
 
+      {/* Now fully unreachable - 'favorites' (its last live value) moved
+          into MyPlacesHub's own tab set, trading places with Journal.
+          Left in place rather than deleted, same as JournalOverlay.js's
+          own dead render block just below. */}
       {activeView !== 'main' && activeView !== 'friend' && activeView !== 'journal' && activeView !== 'places' && (
         <HistoryFavoritesOverlay
           activeView={activeView}
@@ -1217,6 +1239,8 @@ function AppInner() {
 
       {activeView === 'places' && (
         <MyPlacesHub
+          tab={placesTab}
+          onChangeTab={setPlacesTab}
           onBack={() => setActiveView('main')}
           favorites={favorites}
           tryLater={tryLater}
