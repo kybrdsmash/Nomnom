@@ -47,10 +47,16 @@ export async function promptGoogleSignIn() {
  * account so content stays saved," not a fresh empty one).
  *
  * Falls back to signInWithCredential when linking fails with
- * auth/credential-already-in-use - that specific error means this Google
- * account was already linked to a DIFFERENT Firebase account in the past
- * (e.g. they signed in with it on another device first), so the right
- * move is to switch TO that existing account rather than error out.
+ * auth/credential-already-in-use OR auth/email-already-in-use - Firebase
+ * returns either code for the same underlying situation (this Google
+ * account was already linked to a DIFFERENT Firebase account in the past,
+ * e.g. they signed in with it on another device first), depending on
+ * whether the existing account was matched by provider-credential or just
+ * by email - confirmed live via real device logs (actual code seen:
+ * auth/email-already-in-use), which the original credential-only check
+ * didn't catch and re-threw instead of falling back ("Could not sign in -
+ * try again" with no indication why). Either way the right move is to
+ * switch TO that existing account rather than error out.
  *
  * Known limitation, accepted rather than solved here: signing out returns
  * to a fresh anonymous session (see signOutGoogle below) - anything added
@@ -65,7 +71,9 @@ export async function signInWithGoogleIdToken(idToken) {
       const result = await linkWithCredential(current, credential);
       return result.user;
     } catch (error) {
-      if (error?.code !== 'auth/credential-already-in-use') throw error;
+      const alreadyLinkedElsewhere = error?.code === 'auth/credential-already-in-use'
+        || error?.code === 'auth/email-already-in-use';
+      if (!alreadyLinkedElsewhere) throw error;
       const result = await signInWithCredential(auth, credential);
       return result.user;
     }
