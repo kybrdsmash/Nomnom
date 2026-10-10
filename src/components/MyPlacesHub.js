@@ -493,10 +493,9 @@ export default function MyPlacesHub({
       <View style={{ paddingHorizontal: 20 }}>
         <SlidableSegmented
           options={[
-            { value: 'history', label: 'History' },
             { value: 'favorites', label: 'Favorites' },
+            { value: 'history', label: 'History' },
             { value: 'tryLater', label: 'Try Later' },
-            { value: 'journal', label: 'Journal' },
             { value: 'friends', label: 'Friends' },
           ]}
           value={tab}

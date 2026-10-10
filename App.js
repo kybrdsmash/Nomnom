@@ -190,7 +190,7 @@ function AppInner() {
   // (not local state inside MyPlacesHub) so BottomNav's Journal icon can
   // force it to 'journal' every time, and so activeNavTab (above) can read
   // it back to highlight the right icon.
-  const [placesTab, setPlacesTab] = useState('history');
+  const [placesTab, setPlacesTab] = useState('favorites');
   const [openNowOnly, setOpenNowOnly] = useState(false);
   // null = any price; otherwise 1-4 matching Google's price_level scale ($-$$$$)
   const [maxPrice, setMaxPrice] = useState(null);
@@ -1162,7 +1162,7 @@ function AppInner() {
     // settings drawer" - it was already open, this just failed to close it).
     setShowSettingsMenu(false);
     if (key === 'home') setActiveView('main');
-    else if (key === 'places') { setActiveView('places'); setPlacesTab('history'); }
+    else if (key === 'places') { setActiveView('places'); setPlacesTab('favorites'); }
     else if (key === 'feast') setActiveView('friend');
     // Journal is the SAME screen as Places (MyPlacesHub), just forced onto
     // its Journal tab every time this icon is tapped (user request:
