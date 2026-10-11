@@ -33,6 +33,17 @@ module.exports = {
       // change this if you register a different bundle ID in App Store
       // Connect.
       bundleIdentifier: 'com.peach.nomnomapp',
+      // Registers this app with Firebase natively on iOS - same reasoning as
+      // android.googleServicesFile below (Google Sign-In's config plugin
+      // needs this to exist; without it, @react-native-google-signin's
+      // default withGoogleSignIn plugin path fails since it reads the iOS
+      // OAuth client/URL scheme from this file, the same way it reads the
+      // Android client from google-services.json). Downloaded via `firebase
+      // apps:sdkconfig IOS <iOS app id>` after registering the iOS app in
+      // the Firebase console (`firebase apps:create IOS ... --bundle-id
+      // com.peach.nomnomapp`) - the iOS app didn't exist in this Firebase
+      // project before 2026-10-11, only Android + Web.
+      googleServicesFile: './GoogleService-Info.plist',
     },
     android: {
       package: 'com.peach.nomnomapp',
