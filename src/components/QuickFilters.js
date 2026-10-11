@@ -83,7 +83,23 @@ export default function QuickFilters({
   // number comes from a fixed, unscaled asset dimension in CoinSpinner.js
   // (never run through vscale), not a screenshot guess, so it should hold
   // up across devices the same +25dp never did.
-  const COIN_SHADOW_VISUAL_OFFSET = 7;
+  //
+  // Revisited 2026-10-10 after a live report the stack was STILL sitting too
+  // high: direct on-device pixel measurement (Pixel 9 Pro XL screenshot,
+  // coin's true teal-circle bbox vs. this stack's measured bbox) found the
+  // real gap is ~23dp, not ~7dp - GameModeIcons' identical stack on the
+  // coin's other side measured to the exact same (wrong) center, which rules
+  // out a per-component math bug; the error is upstream, in measureCoin's
+  // shared coinCenterY. Bumped to match what's actually on screen now rather
+  // than re-deriving another theory - but this value is, once again, tuned
+  // from ONE device's screenshot, the same situation that burned the old
+  // +25dp hack on a tablet. If a future device report says this overshoots
+  // the other way, don't just retune the number again - that's the third
+  // time; instead log coinWrapperRef's measureInWindow output (coinY,
+  // coinHeight) against a direct screenshot measurement on THAT device to
+  // see whether the gap scales with something measurable (shadow height,
+  // insets, vscale) instead of being a flat dp constant.
+  const COIN_SHADOW_VISUAL_OFFSET = 30;
   const verticalStyle = centerY != null
     ? { top: centerY - halfHeight + COIN_SHADOW_VISUAL_OFFSET }
     : { bottom: 170 };

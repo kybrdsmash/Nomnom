@@ -55,8 +55,13 @@ export default function GameModeIcons({ visible, hapticsEnabled = true, centerY,
   // Same reasoning as QuickFilters' own COIN_SHADOW_VISUAL_OFFSET - this
   // stack sits on the coin's other side but the coin's ground shadow (see
   // CoinSpinner.js's groundShadow) pulls its PERCEIVED center down the same
-  // way regardless of which side is looking at it.
-  const COIN_SHADOW_VISUAL_OFFSET = 7;
+  // way regardless of which side is looking at it. Value confirmed by direct
+  // on-device pixel measurement (Pixel 9 Pro XL screenshot, 2026-10-10): the
+  // previous value of 7 left this stack's measured center ~23dp above the
+  // coin's actual rendered circle center - this and QuickFilters' identical
+  // stack both measured to the exact same (wrong) center, confirming the
+  // gap comes from measureCoin's shared coinCenterY, not per-component math.
+  const COIN_SHADOW_VISUAL_OFFSET = 30;
   const half = halfHeight != null ? halfHeight : 100;
   const verticalStyle = centerY != null
     ? { top: centerY - half + COIN_SHADOW_VISUAL_OFFSET }
