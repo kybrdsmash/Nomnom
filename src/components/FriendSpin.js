@@ -511,7 +511,17 @@ export default function FriendSpin({
       <Header onClose={onClose} title="Feast with Friends" />
 
       {step === 'menu' && (
-        <ScrollView contentContainerStyle={styles.centerCol}>
+        // style (not just contentContainerStyle) is what actually bounds
+        // this ScrollView to the remaining space below Header - without it,
+        // the ScrollView just grows to hug its own content instead of
+        // capping itself and scrolling the overflow, which is exactly why
+        // this never scrolled at all (confirmed on-device: a swipe up did
+        // nothing, not even partially) and "What Friends Are Eating"'s feed
+        // row sat permanently clipped behind BottomNav (user report). The
+        // 'archive'/'friends' steps below already wrap their own ScrollView
+        // in a flex:1 container for the same reason - this just applies it
+        // directly via `style` instead of a separate wrapper View.
+        <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={styles.centerCol}>
           {/* Zone label covers everything down through the friends strip
               below (start/join + who to ping) - "What Friends Are Eating"
               is the other zone, around the feed strip further down. Two
