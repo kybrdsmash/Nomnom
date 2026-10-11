@@ -29,7 +29,14 @@ const TAP_PAUSE_RESUME_MS = 1000;
 const BUBBLE_FILL = '#FFFFFF';
 
 const RACCOON_ASPECT = 661 / 324;
-const RACCOON_HEIGHT = 70; // half the original size (user feedback: was too big)
+// Was 70 (itself already half the original size per earlier feedback) -
+// bumped 1.5x per later request. The thought bubble/trail dots below are
+// positioned with fixed pixel offsets relative to this box, not derived
+// from it, so RACCOON_SCALE also scales THEIR geometry to match - changing
+// just this height alone would leave the bubble anchored where the OLD,
+// smaller head used to be.
+const RACCOON_SCALE = 1.5;
+const RACCOON_HEIGHT = 70 * RACCOON_SCALE;
 
 /**
  * The home screen's "saucy raccoon daydreaming about food" header. The
@@ -239,49 +246,59 @@ export default function DaydreamRaccoon({ onLongPressFood, foodDetailOpen = fals
 
 const makeStyles = (colors, vscale = 1) => StyleSheet.create({
   // marginTop deliberately NOT scaled by vscale - the thought bubble sits
-  // absolutely positioned at top:-26 relative to this box (see `bubble`
-  // below), so shrinking this margin much below that risks the bubble
-  // clipping against the scroll container's top edge. marginBottom is pure
-  // spacing below the raccoon with nothing relying on it, so that one scales
-  // freely (see useVerticalScale in constants.js).
-  wrap: { height: RACCOON_HEIGHT, width: RACCOON_HEIGHT * RACCOON_ASPECT, alignSelf: 'center', marginTop: 30, marginBottom: 6 * vscale },
+  // absolutely positioned at top:-26*RACCOON_SCALE relative to this box (see
+  // `bubble` below), so shrinking this margin much below that risks the
+  // bubble clipping against the scroll container's top edge. IS scaled by
+  // RACCOON_SCALE though (30 -> 45) for exactly that reason - the bubble's
+  // own negative top offset grew right along with the raccoon, so this has
+  // to grow with it too or the bigger bubble clips at the top the same way
+  // the comment above already warns about. marginBottom is pure spacing
+  // below the raccoon with nothing relying on it, so that one scales freely
+  // by vscale instead (see useVerticalScale in constants.js).
+  wrap: { height: RACCOON_HEIGHT, width: RACCOON_HEIGHT * RACCOON_ASPECT, alignSelf: 'center', marginTop: 30 * RACCOON_SCALE, marginBottom: 6 * vscale },
   raccoon: { width: '100%', height: '100%' },
   // Furthest from the head, up in the top-left corner - the "source" of the
   // daydream visually terminates here.
   bubble: {
     position: 'absolute',
-    top: -26,
-    left: -4,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    top: -26 * RACCOON_SCALE,
+    left: -4 * RACCOON_SCALE,
+    width: 34 * RACCOON_SCALE,
+    height: 34 * RACCOON_SCALE,
+    borderRadius: 17 * RACCOON_SCALE,
     backgroundColor: BUBBLE_FILL,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     ...neonSelected(colors),
   },
-  foodIcon: { width: 22, height: 24 },
+  foodIcon: { width: 22 * RACCOON_SCALE, height: 24 * RACCOON_SCALE },
   // Same top/left as `bubble` above, expanded 40px on every side - centers
-  // a much bigger touch region over the visible 34x34 bubble. A smaller
+  // a much bigger touch region over the visible bubble. A smaller
   // expansion (14px) still wasn't reliably catching a long-press (user
   // report: "such a small image") - a finger fully occludes a target this
   // size, so the touchable area needs to be generous, not just "a bit
-  // bigger than the art".
+  // bigger than the art". The 40px finger-generosity pad itself stays
+  // fixed (that's about real-world finger size, not the bubble's own
+  // scale) - only the bubble's own base position/size is scaled.
   bubbleTouchArea: {
-    position: 'absolute', top: -26 - 40, left: -4 - 40, width: 34 + 80, height: 34 + 80,
+    position: 'absolute',
+    top: -26 * RACCOON_SCALE - 40,
+    left: -4 * RACCOON_SCALE - 40,
+    width: 34 * RACCOON_SCALE + 80,
+    height: 34 * RACCOON_SCALE + 80,
   },
   // Mid-sized dot, between the bubble and the head. Thin neon-colored
   // border only, no full glow/shadow - at this size that'd read as a blob.
   trailDotBig: {
-    position: 'absolute', top: -10, left: 10,
-    width: 8, height: 8, borderRadius: 4,
+    position: 'absolute', top: -10 * RACCOON_SCALE, left: 10 * RACCOON_SCALE,
+    width: 8 * RACCOON_SCALE, height: 8 * RACCOON_SCALE, borderRadius: 4 * RACCOON_SCALE,
     backgroundColor: BUBBLE_FILL, borderWidth: 1.2, borderColor: colors.neon,
   },
   // Smallest dot, right above the head where the daydream "starts".
   trailDotSmall: {
-    position: 'absolute', top: -2, left: 22,
-    width: 5, height: 5, borderRadius: 2.5,
+    position: 'absolute', top: -2 * RACCOON_SCALE, left: 22 * RACCOON_SCALE,
+    width: 5 * RACCOON_SCALE, height: 5 * RACCOON_SCALE, borderRadius: 2.5 * RACCOON_SCALE,
     backgroundColor: BUBBLE_FILL, borderWidth: 1, borderColor: colors.neon,
   },
 });
