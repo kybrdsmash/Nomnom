@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal, View, Animated, Pressable, Text, StyleSheet, FlatList, PanResponder,
-  ScrollView, useWindowDimensions,
+  ScrollView, useWindowDimensions, Alert, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as MediaLibrary from 'expo-media-library';
+import { File, Directory, Paths } from 'expo-file-system';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -90,12 +92,52 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
  * photo starts fresh when you swipe to it), at the cost of not remembering
  * a zoom level if you swipe away and back to the same photo.
  */
-export default function FullscreenImageViewer({ visible, photos, initialIndex = 0, onClose, caption, noteTexts }) {
+export default function FullscreenImageViewer({ visible, photos, initialIndex = 0, onClose, caption, noteTexts, downloadable = false }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(initialIndex);
   const [zoomed, setZoomed] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const flatListRef = useRef(null);
+
+  // `downloadable` is only ever passed true for photos the viewer, or a
+  // friend, actually added themselves (a journal entry's own moments, or a
+  // friend's shared journal photo) - never for a restaurant's own Google
+  // Places photos, which aren't this app's content to redistribute (user
+  // request: "add a download function for all photos that the user/owner
+  // has added and if friends are sharing photos - they should be able to
+  // download from there as well"). Saves whichever photo is currently
+  // on-screen, not the whole set at once - swipe + tap again for more than
+  // one, same as any standard photo viewer's single-photo save button.
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      // writeOnly: true - this only ever ADDS a photo to the library, never
+      // reads the user's existing one, so it only asks for the narrower
+      // "add photos" permission (iOS) rather than full library access.
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Nomnom needs permission to save photos to your library.');
+        return;
+      }
+      const uri = photos[index];
+      // A friend's shared photo is a Firebase Storage https URL, not a
+      // local file - saveToLibraryAsync needs an on-device file, so a
+      // remote one is downloaded to cache first. Your OWN moment photos are
+      // already a local file:// URI (see MomentsEditor.js's pickPhoto) and
+      // skip straight to saving.
+      const localUri = /^https?:\/\//.test(uri)
+        ? (await File.downloadFileAsync(uri, new Directory(Paths.cache))).uri
+        : uri;
+      await MediaLibrary.saveToLibraryAsync(localUri);
+      Alert.alert('Saved', 'Photo saved to your library.');
+    } catch (e) {
+      Alert.alert('Could not save photo', 'Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   // Reassigned every render so the frozen PanResponder callbacks (see
   // useRef below) always read the CURRENT index/dimensions, not whichever
@@ -352,6 +394,18 @@ export default function FullscreenImageViewer({ visible, photos, initialIndex = 
         <Pressable style={[styles.closeBtn, { top: insets.top + 10 }]} onPress={onClose} hitSlop={16}>
           <Ionicons name="close" size={30} color="#FFF" />
         </Pressable>
+        {downloadable && (
+          <Pressable
+            style={[styles.downloadBtn, { top: insets.top + 10 }]}
+            onPress={handleDownload}
+            disabled={downloading}
+            hitSlop={16}
+          >
+            {downloading
+              ? <ActivityIndicator color="#FFF" />
+              : <Ionicons name="download-outline" size={26} color="#FFF" />}
+          </Pressable>
+        )}
         {photos.length > 1 ? (
           // Moved up to top-center instead of its usual bottom-center spot
           // whenever a noteTexts panel is also showing (the journal-moments
@@ -405,6 +459,7 @@ const styles = StyleSheet.create({
   // inline where these are used, since a bare StyleSheet has no access to
   // useSafeAreaInsets().
   closeBtn: { position: 'absolute', top: 50, right: 20, padding: 8 },
+  downloadBtn: { position: 'absolute', top: 50, left: 20, padding: 8 },
   counter: {
     position: 'absolute', bottom: 40, alignSelf: 'center',
     backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16,

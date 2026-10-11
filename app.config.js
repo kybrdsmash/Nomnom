@@ -141,6 +141,22 @@ module.exports = {
         },
       ],
       [
+        'expo-media-library',
+        {
+          // Lets a journal photo (yours, or one a friend shared) be saved
+          // back out to the device's own photo library (user request: "add
+          // a download function for all photos"). `photosPermission` here
+          // sets the SAME iOS key (NSPhotoLibraryUsageDescription) as
+          // expo-image-picker's own entry above - repeated verbatim rather
+          // than left to this plugin's generic default text, since whichever
+          // plugin resolves last would otherwise silently win that shared
+          // key and could clobber the specific, store-review-safe wording
+          // already established above with a vague fallback.
+          photosPermission: 'Nomnom uses your photos to let you attach a picture to a food journal entry.',
+          savePhotosPermission: 'Nomnom saves a photo to your library when you tap download on a journal photo.',
+        },
+      ],
+      [
         'expo-audio',
         {
           // Same store-review reasoning as expo-location/expo-image-picker

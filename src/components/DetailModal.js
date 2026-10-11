@@ -746,20 +746,25 @@ export default function DetailModal({
         initialIndex={fullscreenIndex || 0}
         onClose={() => setFullscreenIndex(null)}
       />
+      {/* downloadable - a friend's own shared journal photo, not a Google
+          Places photo (see FullscreenImageViewer's own doc comment). */}
       <FullscreenImageViewer
         visible={fullscreenEntryPhoto !== null}
         photos={fullscreenEntryPhoto ? [fullscreenEntryPhoto] : []}
         caption={fullscreenEntryPhotoCaption}
         onClose={() => setFullscreenEntryPhoto(null)}
+        downloadable
       />
       {/* A journal entry's own moments, swipeable together - see
-          openMomentPhotos above for how photos/noteTexts get built. */}
+          openMomentPhotos above for how photos/noteTexts get built.
+          downloadable - these are photos the viewer added themselves. */}
       <FullscreenImageViewer
         visible={fullscreenMomentsView !== null}
         photos={fullscreenMomentsView?.photos || []}
         initialIndex={fullscreenMomentsView?.initialIndex || 0}
         noteTexts={fullscreenMomentsView?.noteTexts}
         onClose={() => setFullscreenMomentsView(null)}
+        downloadable
       />
     </Modal>
   );
