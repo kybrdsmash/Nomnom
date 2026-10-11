@@ -27,6 +27,16 @@ import ResultCard from './ResultCard';
 import ScheduleMealModal from './ScheduleMealModal';
 import FriendMap from './FriendMap';
 import FullscreenImageViewer from './FullscreenImageViewer';
+import AlphabetIndexBar from './AlphabetIndexBar';
+
+// Same helper/threshold convention as MyPlacesHub.js's own copy (kept
+// separate per that file's established precedent - each list's row shape
+// differs enough that sharing more than this tiny helper isn't worth it).
+const ALPHABET_INDEX_THRESHOLD = 12;
+function firstLetterOf(name) {
+  const c = (name || '').trim().charAt(0).toUpperCase();
+  return c >= 'A' && c <= 'Z' ? c : '#';
+}
 
 /**
  * "Feast with Friends": a food photo feed (currently seeded from everyone's
@@ -83,6 +93,26 @@ export default function FriendSpin({
   // status==='done' effect below) - this is what makes "reschedule" and an
   // "archive" of what's been scheduled possible at all.
   const [archive, setArchive] = useState([]);
+
+  // "All Friends" full list (step === 'friends', opened from the menu step's
+  // "See all friends" link) - the menu step itself only ever shows a
+  // constant-height horizontal avatar strip now (user feedback: inline rows
+  // per friend made the screen taller with every friend added, eventually
+  // pushing the feed below it off-screen entirely). Search + an A-Z jump
+  // index are only useful once this list is actually long, same reasoning
+  // MyPlacesHub.js's ALPHABET_INDEX_THRESHOLD already uses.
+  const [friendSearchQuery, setFriendSearchQuery] = useState('');
+  const friendsScrollRef = useRef(null);
+  const friendLetterRefs = useRef({});
+  const jumpToFriendLetter = (letter) => {
+    const rowRef = friendLetterRefs.current[letter];
+    if (!rowRef?.current || !friendsScrollRef.current) return;
+    rowRef.current.measureLayout(
+      friendsScrollRef.current,
+      (_x, y) => friendsScrollRef.current.scrollTo({ y: y - 8, animated: true }),
+      () => {}
+    );
+  };
 
   // "Quick Invite" row (menu step, between Friends and Scheduled meals) -
   // search for a specific place/food type + pick a date/time, then tap a
@@ -471,8 +501,8 @@ export default function FriendSpin({
   }
 
   return (
-    // Same pattern as AtTheTableCompose - the join-code entry (menu step)
-    // and Quick Invite search (friends step) both had nothing shifting them
+    // Same pattern as AtTheTableCompose - the join-code entry and Quick
+    // Invite search (both inside step==='menu') had nothing shifting them
     // out from under the keyboard (user report: "multiple times... the
     // dialogue box stays hidden by the keyboard"). behavior=undefined on
     // Android matches every other KeyboardAvoidingView in this codebase -
@@ -482,6 +512,12 @@ export default function FriendSpin({
 
       {step === 'menu' && (
         <ScrollView contentContainerStyle={styles.centerCol}>
+          {/* Zone label covers everything down through the friends strip
+              below (start/join + who to ping) - "What Friends Are Eating"
+              is the other zone, around the feed strip further down. Two
+              zones instead of one long undifferentiated list (design
+              review). */}
+          <Text style={[styles.friendsHeader, { width: '100%' }]}>Pick Together</Text>
           <Pressable style={styles.bigBtn} onPress={() => host()}>
             <Ionicons name="add-circle" size={22} color={colors.textDark} />
             <Text style={styles.bigBtnText}>Start a session</Text>
@@ -507,40 +543,32 @@ export default function FriendSpin({
 
           {friends.length > 0 && (
             <View style={styles.friendsSection}>
-              <Text style={styles.friendsHeader}>Friends</Text>
-              {friends.map((f) => {
-                // Quick Invite's "send" icon only lights up once a spot AND
-                // a date/time are both assembled below (user request) -
-                // otherwise this row behaves exactly as it always has.
-                const quickReady = !!quickSpot && !!quickDate;
-                const quickBusy = quickSendingUid === f.uid;
-                const quickJustSent = quickSentUid === f.uid;
-                return (
-                  <View key={f.uid} style={styles.friendRow}>
+              {/* No "Friends" sub-header here - "Pick Together" above
+                  already labels this whole zone, and avatars in a strip
+                  read as people on their own. */}
+              {/* Constant-height horizontal strip, however many friends
+                  exist - tap an avatar to ping them to spin together, same
+                  action the old per-row "Ping" button did. Was a full
+                  friendRow per friend (avatar + name + Ping button, and a
+                  Quick Invite send icon when one was ready) - with more than
+                  a handful of friends that list alone filled the screen and
+                  pushed the feed below it fully off-screen (user report).
+                  Quick Invite's send action now only lives in the full "See
+                  all friends" list below, where there's room for it. */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendStripRow}>
+                {friends.map((f) => (
+                  <Pressable key={f.uid} style={styles.friendStripItem} onPress={() => host(f)}>
                     <View style={styles.friendAvatar}>
                       <Text style={styles.friendAvatarText}>{(f.name || '?')[0].toUpperCase()}</Text>
                     </View>
-                    <Text style={styles.friendName} numberOfLines={1}>{f.name || 'Friend'}</Text>
-                    {quickReady && (
-                      <Pressable
-                        style={[styles.quickSendBtn, quickJustSent && styles.quickSendBtnSent]}
-                        disabled={quickBusy || quickJustSent}
-                        onPress={() => sendQuickInvite(f)}
-                      >
-                        <Ionicons
-                          name={quickJustSent ? 'checkmark' : 'send'}
-                          size={14}
-                          color={colors.textDark}
-                        />
-                      </Pressable>
-                    )}
-                    <Pressable style={styles.pingBtn} onPress={() => host(f)}>
-                      <Ionicons name="paper-plane-outline" size={14} color={colors.textDark} />
-                      <Text style={styles.pingBtnText}>Ping</Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
+                    <Text style={styles.friendStripName} numberOfLines={1}>{f.name || 'Friend'}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Pressable style={styles.seeAllRow} onPress={() => setStep('friends')}>
+                <Text style={styles.seeAllText}>See all friends</Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+              </Pressable>
             </View>
           )}
 
@@ -634,7 +662,7 @@ export default function FriendSpin({
               "popular dishes" discussion). */}
           {feedPhotos.length > 0 && (
             <View style={styles.feedStripSection}>
-              <Text style={styles.friendsHeader}>Feed</Text>
+              <Text style={styles.friendsHeader}>What Friends Are Eating</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feedStripRow}>
                 {feedPhotos.map((p) => (
                   <View key={p.placeId} style={styles.feedStripCard}>
@@ -671,6 +699,103 @@ export default function FriendSpin({
             </View>
           )}
         </ScrollView>
+      )}
+
+      {step === 'friends' && (
+        <View style={{ flex: 1, width: '100%' }}>
+          <Pressable onPress={() => { setStep('menu'); setFriendSearchQuery(''); }} style={styles.archiveBack}>
+            <Ionicons name="arrow-back" size={20} color={colors.accent} />
+            <Text style={styles.archiveBackText}>Back</Text>
+          </Pressable>
+
+          <View style={styles.friendSearchRow}>
+            <Ionicons name="search" size={16} color={colors.textMuted} />
+            <TextInput
+              style={styles.friendSearchInput}
+              value={friendSearchQuery}
+              onChangeText={setFriendSearchQuery}
+              placeholder="Search friends…"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+
+          {(() => {
+            const filtered = friends.filter((f) =>
+              (f.name || 'Friend').toLowerCase().includes(friendSearchQuery.trim().toLowerCase())
+            );
+            // Alphabetize so the A-Z index's "jump to letter" is meaningful -
+            // `friends` itself has no guaranteed order (built up over time as
+            // sessions complete, see App.js).
+            const sorted = [...filtered].sort((a, b) =>
+              (a.name || 'Friend').localeCompare(b.name || 'Friend')
+            );
+            const showIndex = sorted.length > ALPHABET_INDEX_THRESHOLD;
+            const availableLetters = new Set(sorted.map((f) => firstLetterOf(f.name)));
+            const seenLetters = new Set();
+
+            return (
+              <ScrollView ref={friendsScrollRef} style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingRight: showIndex ? 22 : 0 }}>
+                {sorted.length === 0 && (
+                  <Text style={styles.bodyText}>
+                    {friends.length === 0
+                      ? 'No friends yet - finish a spin with someone once to add them here.'
+                      : 'No friends match that search.'}
+                  </Text>
+                )}
+                {sorted.map((f) => {
+                  const letter = firstLetterOf(f.name);
+                  const isFirstOfLetter = showIndex && !seenLetters.has(letter);
+                  seenLetters.add(letter);
+                  if (isFirstOfLetter) {
+                    friendLetterRefs.current[letter] = friendLetterRefs.current[letter] || React.createRef();
+                  }
+                  const quickReady = !!quickSpot && !!quickDate;
+                  const quickBusy = quickSendingUid === f.uid;
+                  const quickJustSent = quickSentUid === f.uid;
+                  return (
+                    <View
+                      key={f.uid}
+                      ref={isFirstOfLetter ? friendLetterRefs.current[letter] : undefined}
+                      style={styles.friendRow}
+                    >
+                      <View style={styles.friendAvatar}>
+                        <Text style={styles.friendAvatarText}>{(f.name || '?')[0].toUpperCase()}</Text>
+                      </View>
+                      <Text style={styles.friendName} numberOfLines={1}>{f.name || 'Friend'}</Text>
+                      {quickReady && (
+                        <Pressable
+                          style={[styles.quickSendBtn, quickJustSent && styles.quickSendBtnSent]}
+                          disabled={quickBusy || quickJustSent}
+                          onPress={() => sendQuickInvite(f)}
+                        >
+                          <Ionicons
+                            name={quickJustSent ? 'checkmark' : 'send'}
+                            size={14}
+                            color={colors.textDark}
+                          />
+                        </Pressable>
+                      )}
+                      <Pressable style={styles.pingBtn} onPress={() => host(f)}>
+                        <Ionicons name="paper-plane-outline" size={14} color={colors.textDark} />
+                        <Text style={styles.pingBtnText}>Ping</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+                {showIndex && (
+                  <AlphabetIndexBar
+                    availableLetters={availableLetters}
+                    onSelectLetter={jumpToFriendLetter}
+                  />
+                )}
+                {/* Matches archive step's own identical spacer - BottomNav
+                    stays visible over this screen too, so this needs the
+                    same insets.bottom + BOTTOM_NAV_CLEARANCE reservation. */}
+                <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
+              </ScrollView>
+            );
+          })()}
+        </View>
       )}
 
       {step === 'archive' && (
@@ -1003,6 +1128,16 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   friendName: { flex: 1, color: colors.textLight, fontSize: 14, fontWeight: '600' },
   pingBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 6, paddingHorizontal: 10 },
   pingBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 12, marginLeft: 4 },
+  // Menu step's constant-height friend strip - see the doc comment where
+  // it's used for why this replaced a full friendRow per friend.
+  friendStripRow: { gap: 14, paddingVertical: 2, paddingHorizontal: 2 },
+  friendStripItem: { alignItems: 'center', width: 52 },
+  friendStripName: { color: colors.textMuted, fontSize: 11, marginTop: 4, maxWidth: 52 },
+  seeAllRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10 },
+  seeAllText: { color: colors.accent, fontWeight: '700', fontSize: 12.5 },
+  // step === 'friends' (the full "See all friends" list)
+  friendSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.card, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, marginHorizontal: 20, marginBottom: 14 },
+  friendSearchInput: { flex: 1, color: colors.textLight, fontSize: 14 },
   // Only rendered once a Quick Invite spot+time are both assembled - sits
   // just left of the existing Ping button, a separate action entirely.
   quickSendBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginRight: 8, ...neonSelected(colors) },
