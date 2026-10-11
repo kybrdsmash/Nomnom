@@ -19,6 +19,17 @@ export const JOIN_LINK_BASE_URL = 'https://nom-nom-83f11.web.app/join';
 // two-step caveat this implies.
 export const ANDROID_PACKAGE_ID = 'com.peach.nomnomapp';
 
+// The developer's own account (isaacrvgfinger@gmail.com) - every new app
+// user gets this added as a default friend on first launch (App.js's
+// startup effect), so their Feast tab/journal feed has something to show
+// from day one (user request: "so they can start seeing my stuff"). Mirror
+// of functions/index.js's own DEFAULT_FRIEND_UID constant - that function
+// grants the read access this depends on (see journal.js's doc comment),
+// a Cloud Function can't share a JS import with the app bundle, so this one
+// has to be kept in sync by hand if it's ever rotated.
+export const DEFAULT_FRIEND_UID = '3se0miVjWnhoNEzpDJMmHWu3xnI2';
+export const DEFAULT_FRIEND_NAME = 'Isaac';
+
 // The main filter screen's vertical spacing (padding/margins on App.js's
 // homeScreen and FilterPanel's cards) was tuned against a "comfortable"
 // screen height, then just left as fixed pixel constants - which looked

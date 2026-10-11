@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase';
 
 /**
@@ -23,7 +23,19 @@ import { db } from './firebase';
 export async function pushJournal(uid, entries, friendUids) {
   if (!uid) return;
   try {
-    await setDoc(doc(db, 'journals', uid), { entries, friendUids });
+    // friendUids merges in (arrayUnion), never overwrites - functions/
+    // index.js's onNewUserCreated also appends to this SAME array
+    // server-side (every new app user gets auto-added as a friend of the
+    // developer's own account, so they see its journal by default). A
+    // plain overwrite here would silently wipe every uid that function
+    // added back out the next time this device's own journal changes,
+    // since this always runs with only this device's OWN local `friends`
+    // list - there's still no "unfriend" anywhere in this app, so an
+    // ever-growing set is consistent with the rest of this feature, not a
+    // new asymmetry. arrayUnion() with zero arguments throws, so a
+    // friendless device just writes `entries` and leaves friendUids as-is.
+    const update = friendUids?.length > 0 ? { entries, friendUids: arrayUnion(...friendUids) } : { entries };
+    await setDoc(doc(db, 'journals', uid), update, { merge: true });
   } catch (e) {
     console.warn('journal push failed', e);
   }

@@ -25,7 +25,7 @@ import * as Application from 'expo-application';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { COIN_ANIMATION_MS, CUISINES, DEFAULT_FAVE_NAMES, useVerticalScale, buttonDepth } from './src/constants';
+import { COIN_ANIMATION_MS, CUISINES, DEFAULT_FAVE_NAMES, DEFAULT_FRIEND_UID, DEFAULT_FRIEND_NAME, useVerticalScale, buttonDepth } from './src/constants';
 import { ThemeProvider, useTheme } from './src/ThemeContext';
 import { estimateMaxTimeMinutes } from './src/utils/geo';
 import { fetchLocalFood, pickFromFavorites } from './src/api/places';
@@ -71,6 +71,7 @@ import {
   loadJournal, saveJournal,
   loadTravelType, saveTravelType,
   loadOnboardingSeen, saveOnboardingSeen,
+  loadDefaultFriendSeeded, saveDefaultFriendSeeded,
   loadBuddyAvatar, saveBuddyAvatar,
   loadInstallReferrerChecked, saveInstallReferrerChecked,
   loadNavTapCounts, saveNavTapCounts,
@@ -507,11 +508,11 @@ function AppInner() {
   // Load persisted lists once on startup.
   useEffect(() => {
     (async () => {
-      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel, onboarded, navCounts, buddy] = await Promise.all([
+      const [h, f, t, seen, p, prefs, faves, frnds, jrnl, travel, onboarded, navCounts, buddy, defaultFriendSeeded] = await Promise.all([
         loadHistory(), loadFavorites(), loadTryLater(), loadSeenIds(),
         loadProfile(), loadPreferences(), loadFaveCuisines(),
         loadFriends(), loadJournal(), loadTravelType(), loadOnboardingSeen(),
-        loadNavTapCounts(), loadBuddyAvatar(),
+        loadNavTapCounts(), loadBuddyAvatar(), loadDefaultFriendSeeded(),
       ]);
       setHistory(h);
       setFavorites(f);
@@ -540,7 +541,25 @@ function AppInner() {
         if (slot?.name === `Fave ${i + 1}` && DEFAULT_FAVE_NAMES[i]) return { ...slot, name: DEFAULT_FAVE_NAMES[i] };
         return slot;
       }));
-      setFriends(frnds);
+      // One-time: every new install gets the developer's own account as a
+      // default friend, so Feast/journal has something to show from day one
+      // (user request). Guarded on the persisted flag, not "friends is
+      // empty," so this never reappears after a future "remove friend"
+      // feature (doesn't exist yet) lets someone deliberately remove it -
+      // and skipped if it's somehow already there (e.g. a real completed
+      // session with this exact account) to avoid a duplicate row.
+      if (!defaultFriendSeeded) {
+        if (!frnds.some((fr) => fr.uid === DEFAULT_FRIEND_UID)) {
+          const withDefault = [...frnds, { uid: DEFAULT_FRIEND_UID, name: DEFAULT_FRIEND_NAME }];
+          setFriends(withDefault);
+          saveFriends(withDefault);
+        } else {
+          setFriends(frnds);
+        }
+        saveDefaultFriendSeeded(true);
+      } else {
+        setFriends(frnds);
+      }
       setJournal(jrnl);
       setNavTapCounts(navCounts);
       setBuddyAvatar(buddy || null);

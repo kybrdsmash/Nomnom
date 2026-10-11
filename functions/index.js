@@ -1,10 +1,16 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const functions = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const logger = require('firebase-functions/logger');
 
 initializeApp();
 const db = getFirestore();
+
+// The developer's own account (isaacrvgfinger@gmail.com) - every new app
+// user gets this added as a default friend (see onNewUserCreated below), so
+// don't re-trigger if this account itself ever creates a new auth identity.
+const DEFAULT_FRIEND_UID = '3se0miVjWnhoNEzpDJMmHWu3xnI2';
 
 /**
  * Fires whenever sendPing() (src/api/friendSession.js, client-side) writes
@@ -71,4 +77,37 @@ exports.onPingCreated = onDocumentCreated('users/{uid}/pings/{pingId}', async (e
     return;
   }
   logger.info('onPingCreated: push sent', { uid, result });
+});
+
+/**
+ * Fires once for every new Firebase Auth identity - including the plain
+ * anonymous one every fresh install creates on first launch (ensureSignedIn,
+ * src/api/firebase.js), which IS the uid everything (friends, journal,
+ * history...) stays keyed to even if that device later links a real Google
+ * account on top of it. So "signs up" here really means "opens the app for
+ * the first time ever," not specifically "linked a Google account" - matches
+ * what the client side seeds too (App.js's own default-friend effect).
+ *
+ * Auto-adds the new user to the developer's own friendUids (see journal.js's
+ * doc comment for the security rule this feeds) so a brand new user can
+ * actually read DEFAULT_FRIEND_UID's journals/{uid} doc the moment the
+ * client seeds them as a local friend - without this, "add me as everyone's
+ * default friend" would only ever change what the new user's OWN screen
+ * shows, never grant them real read access to the content the whole feature
+ * is about (user request: "so they can start seeing my stuff"). Has to run
+ * here, under the Admin SDK - a brand new user obviously has no write access
+ * to someone ELSE's journals/{uid} doc, nor should they.
+ *
+ * {merge: true} + arrayUnion so this never clobbers `entries` (DEFAULT_FRIEND
+ * only writes `entries` outright from pushJournal/journal.js) and never
+ * races the client's own friendUids writes either, which merge the same way
+ * now for exactly this reason.
+ */
+exports.onNewUserCreated = functions.auth.user().onCreate(async (user) => {
+  if (user.uid === DEFAULT_FRIEND_UID) return;
+  await db.doc(`journals/${DEFAULT_FRIEND_UID}`).set(
+    { friendUids: FieldValue.arrayUnion(user.uid) },
+    { merge: true }
+  );
+  logger.info('onNewUserCreated: added to default friend\'s friendUids', { uid: user.uid });
 });

@@ -24,6 +24,7 @@ const KEYS = {
   journalComposeDraft: '@nomnom/journalComposeDraft',
   travelType: '@nomnom/travelType',
   onboardingSeen: '@nomnom/onboardingSeen',
+  defaultFriendSeeded: '@nomnom/defaultFriendSeeded',
   installReferrerChecked: '@nomnom/installReferrerChecked',
   navTapCounts: '@nomnom/navTapCounts',
   buddyAvatar: '@nomnom/buddyAvatar',
@@ -106,6 +107,14 @@ export const saveTravelType = (travelType) => save(KEYS.travelType, travelType);
 // component's own comment for why.
 export const loadOnboardingSeen = () => load(KEYS.onboardingSeen, false);
 export const saveOnboardingSeen = (seen) => save(KEYS.onboardingSeen, seen);
+
+// Whether the developer's own account has already been auto-added as a
+// default friend (App.js's startup effect) - a one-time seed, not a "friends
+// is empty so add them" check, so a future "remove friend" feature (doesn't
+// exist yet) could let someone remove this default without it silently
+// reappearing next launch just because the list is empty again.
+export const loadDefaultFriendSeeded = () => load(KEYS.defaultFriendSeeded, false);
+export const saveDefaultFriendSeeded = (seeded) => save(KEYS.defaultFriendSeeded, seeded);
 
 // Whether Application.getInstallReferrerAsync() has already been read and
 // acted on once for this install - the referrer string keeps answering the
