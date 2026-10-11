@@ -8,6 +8,13 @@ module.exports = {
   expo: {
     name: 'Nomnom',
     slug: 'Nomnom_App',
+    // Versioning convention: this stays 1.1.x while the auto-incrementing
+    // versionCode (eas.json's autoIncrement - "appBuildVersion" in `eas
+    // build:list`) climbs from 0 toward 100. Once that build counter hits
+    // 100, bump this to 1.2.0 (counter effectively resets its "toward next
+    // bump" countdown from there); the next bump after that is 1.3.0 at
+    // build 200, and so on - one minor version per 100 builds, not per
+    // feature. Update this comment's target each time you bump.
     version: '1.1.0',
     scheme: 'nomnom',
     orientation: 'portrait',
