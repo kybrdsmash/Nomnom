@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Modal, View, Text, Pressable, Image, ScrollView, TextInput,
-  ActivityIndicator, StyleSheet, Linking, Share, KeyboardAvoidingView, Platform,
+  ActivityIndicator, StyleSheet, Linking, Share, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
@@ -222,7 +222,17 @@ export default function DetailModal({
     setJournalSectionOpen(true);
   };
   const submitFeedback = () => {
-    if (draftRating === 0) return;
+    // Was a silent `return` with the Save button itself also `disabled` -
+    // RN swallows a tap on a disabled Pressable entirely, so picking no
+    // rating and tapping Save did absolutely nothing: no error, no entry
+    // added, nothing to explain why (user report: wrote a whole entry,
+    // tapped Save, "not seeing it pop up" - the text was still sitting in
+    // this open compose box the whole time). Button's `disabled` prop
+    // removed below so this actually runs and can say what's wrong.
+    if (draftRating === 0) {
+      Alert.alert('Pick a rating first', 'Tap a star (1-5) to save this journal entry.');
+      return;
+    }
     const moments = draftMoments.filter((m) => m.text.trim() || m.photoUri);
     if (editingEntryId) {
       // App.js's editJournalEntry uploads any moment that doesn't already
@@ -636,7 +646,6 @@ export default function DetailModal({
                       <View style={{ flexDirection: 'row' }}>
                         <Pressable
                           style={[styles.linkBtn, { opacity: draftRating > 0 ? 1 : 0.4 }]}
-                          disabled={draftRating === 0}
                           onPress={submitFeedback}
                         >
                           <Text style={styles.linkText}>{editingEntryId ? 'Save Changes' : 'Save'}</Text>
