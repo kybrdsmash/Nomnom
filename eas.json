@@ -13,6 +13,17 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      // Builds for the iOS Simulator, not a real device - needs no Apple
+      // Developer Program enrollment, no signing, no registered device UDID
+      // at all (unlike a real ad-hoc/device build). Only runs on an actual
+      // Mac (the Simulator itself is macOS-only), but it's the one way to
+      // get real iOS signal on this app before that $99/yr account exists:
+      // `eas build --profile preview --platform ios`, then drag the
+      // resulting .app onto a running Simulator window (or `xcrun simctl
+      // install`).
+      "ios": {
+        "simulator": true
       }
     },
     "production": {
