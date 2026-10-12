@@ -96,6 +96,18 @@ export default function MyPlacesHub({
   const [showAtTable, setShowAtTable] = useState(false);
   const [friendRows, setFriendRows] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  // History pagination (user report: "history still loads too slowly") -
+  // rendering potentially hundreds of accumulated history rows (each with
+  // its own Image) at once on every visit was the actual bottleneck, not
+  // just a display preference. Starts at 10, auto-grows by 10 on scrolling
+  // near the bottom TWICE (10->20->30, see the onScroll handler below) -
+  // past 30 it stops auto-loading no matter how much further you scroll,
+  // and only the explicit "Load 20 more" footer button (user-specified
+  // behavior) grows it further, 20 at a time.
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(10);
+  const AUTO_LOAD_STEP = 10;
+  const AUTO_LOAD_CAP = 30;
+  const MANUAL_LOAD_STEP = 20;
 
   const scrollViewRef = useRef(null);
   const letterRefs = useRef({});
@@ -118,7 +130,15 @@ export default function MyPlacesHub({
     setTypeFilter(null);
     setCityFilter(null);
     setShowAtTable(false);
+    setHistoryVisibleCount(10);
   };
+
+  // A fresh search/type filter while already on History should start back
+  // at 10, not instantly reveal however many matches a stale, already-grown
+  // count happened to allow - same reasoning switchTab resets it above.
+  useEffect(() => {
+    setHistoryVisibleCount(10);
+  }, [searchQuery, typeFilter]);
 
   useEffect(() => {
     if (tab !== 'friends' || !isFirebaseConfigured || !friends || friends.length === 0) return;
@@ -402,9 +422,15 @@ export default function MyPlacesHub({
       // History - day-grouped in array order (App.js unshifts newest-first
       // on every view, same as HistoryFavoritesOverlay's own History tab),
       // not city-grouped - see isSearchableTab/showCityFilter above for why.
+      // Sliced to historyVisibleCount BEFORE grouping - only the visible
+      // window gets built into rows/day-headers at all, which is the actual
+      // fix for "history still loads too slowly" (rendering every
+      // accumulated row, each with its own Image, on every visit was the
+      // real bottleneck, not just a display preference).
+      const historySlice = filtered.slice(0, historyVisibleCount);
       const dateGroups = [];
       const groupByKey = new Map();
-      filtered.forEach((spot) => {
+      historySlice.forEach((spot) => {
         const key = new Date(spot.viewedAt || 0).toDateString();
         let group = groupByKey.get(key);
         if (!group) {
@@ -486,29 +512,50 @@ export default function MyPlacesHub({
         <Pressable onPress={onBack} style={styles.overlayBack}>
           <Ionicons name="arrow-back" size={28} color={colors.accent} />
         </Pressable>
-        <Text style={styles.overlayTitle}>My Places</Text>
+        {/* Was a hardcoded "My Places" regardless of tab - BottomNav's
+            Journal icon forces tab==='journal' directly (it's not one of
+            the switcher's own options below), so landing there from that
+            icon showed a page literally titled "My Places" while looking
+            at your journal (user report: "its currently still called My
+            places. It should be its own page separated from my places"). */}
+        <Text style={styles.overlayTitle}>{tab === 'journal' ? 'My Journal' : 'My Places'}</Text>
         <View style={{ width: 28 }} />
       </View>
 
-      <View style={{ paddingHorizontal: 20 }}>
-        <SlidableSegmented
-          options={[
-            { value: 'favorites', label: 'Favorites' },
-            { value: 'history', label: 'History' },
-            { value: 'tryLater', label: 'Try Later' },
-            { value: 'friends', label: 'Friends' },
-          ]}
-          value={tab}
-          onChange={switchTab}
-          styles={{
-            segmented: styles.tabRow,
-            segment: styles.tabBtn,
-            segmentActive: styles.tabBtnActive,
-            segmentText: styles.tabText,
-            segmentTextActive: styles.tabTextActive,
-          }}
-        />
-      </View>
+      {/* Journal reads as its OWN page now, not a tab buried in My Places -
+          this switcher (Favorites/History/Try Later/Friends) only makes
+          sense once you're actually in My Places, and Journal was never one
+          of its options anyway. A single "My Places" link replaces it while
+          on Journal - "if people want to navigate to my places then they
+          should just toggle over" (user request), one tap to
+          switchTab('favorites') rather than a whole row of unrelated tabs. */}
+      {tab === 'journal' ? (
+        <Pressable style={styles.myPlacesLinkRow} onPress={() => switchTab('favorites')}>
+          <Ionicons name="storefront-outline" size={15} color={colors.accent} />
+          <Text style={styles.myPlacesLinkText}>My Places</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+        </Pressable>
+      ) : (
+        <View style={{ paddingHorizontal: 20 }}>
+          <SlidableSegmented
+            options={[
+              { value: 'favorites', label: 'Favorites' },
+              { value: 'history', label: 'History' },
+              { value: 'tryLater', label: 'Try Later' },
+              { value: 'friends', label: 'Friends' },
+            ]}
+            value={tab}
+            onChange={switchTab}
+            styles={{
+              segmented: styles.tabRow,
+              segment: styles.tabBtn,
+              segmentActive: styles.tabBtnActive,
+              segmentText: styles.tabText,
+              segmentTextActive: styles.tabTextActive,
+            }}
+          />
+        </View>
+      )}
 
       {showAtTable && (
         <AtTheTableCompose location={location} travelType={travelType} onSave={onSaveAtTheTable} />
@@ -517,6 +564,22 @@ export default function MyPlacesHub({
       <ScrollView
         ref={scrollViewRef}
         style={{ width: '100%', paddingHorizontal: 20, display: showAtTable ? 'none' : 'flex' }}
+        // Only matters for History (the onScroll body itself no-ops for
+        // every other tab) - fires near the bottom of the scroll content,
+        // auto-growing historyVisibleCount by AUTO_LOAD_STEP twice
+        // (10->20->30). Past AUTO_LOAD_CAP this condition is always false,
+        // so no amount of further scrolling auto-loads anymore - only the
+        // explicit footer button below does, by design (user-specified
+        // behavior, not an oversight).
+        onScroll={({ nativeEvent }) => {
+          if (tab !== 'history' || historyVisibleCount >= AUTO_LOAD_CAP) return;
+          const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+          const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
+          if (nearBottom) {
+            setHistoryVisibleCount((c) => Math.min(c + AUTO_LOAD_STEP, AUTO_LOAD_CAP));
+          }
+        }}
+        scrollEventThrottle={200}
       >
         {showSearch && (
           <View style={styles.searchRow}>
@@ -563,6 +626,19 @@ export default function MyPlacesHub({
           </ScrollView>
         )}
         {listContent}
+        {/* Past AUTO_LOAD_CAP, scrolling no longer auto-loads (see the
+            ScrollView's onScroll above) - this explicit prompt (user-
+            specified: "a button a text and arrow prompt") is the only way
+            to keep going from here, 20 at a time. */}
+        {tab === 'history' && historyVisibleCount >= AUTO_LOAD_CAP && historyVisibleCount < filtered.length && (
+          <Pressable
+            style={styles.loadMoreRow}
+            onPress={() => setHistoryVisibleCount((c) => c + MANUAL_LOAD_STEP)}
+          >
+            <Text style={styles.loadMoreText}>Load 20 more</Text>
+            <Ionicons name="arrow-down" size={16} color={colors.accent} />
+          </Pressable>
+        )}
         {/* BottomNav now persists over this screen (was Home-only before) -
             a spacer at the end of the scroll content, sized to the bar's
             own real clearance, keeps the last row from ending up hidden
@@ -614,6 +690,12 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   overlayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
   overlayTitle: { color: colors.accent, fontSize: 24, fontWeight: 'bold', letterSpacing: 1 },
   overlayBack: { padding: 5 },
+  // Journal's own one-tap link back to My Places - see where it's used.
+  myPlacesLinkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 20, marginBottom: 14 },
+  myPlacesLinkText: { color: colors.accent, fontWeight: '700', fontSize: 13.5 },
+  // History's manual "load 20 more" prompt, past the auto-load cap.
+  loadMoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },
+  loadMoreText: { color: colors.accent, fontWeight: '700', fontSize: 13.5 },
   emptyText: { color: colors.textMuted, textAlign: 'center', marginTop: 40, fontSize: 16, fontStyle: 'italic', paddingHorizontal: 20 },
   categoryHeader: { color: colors.gold, fontSize: 13, fontWeight: 'bold', letterSpacing: 1, marginBottom: 8, marginTop: 4 },
   cityHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 4 },
