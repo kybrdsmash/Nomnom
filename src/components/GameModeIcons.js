@@ -62,9 +62,14 @@ export default function GameModeIcons({ visible, hapticsEnabled = true, centerY,
   // stack both measured to the exact same (wrong) center, confirming the
   // gap comes from measureCoin's shared coinCenterY, not per-component math.
   const COIN_SHADOW_VISUAL_OFFSET = 30;
+  // Separate from the coin-centering offset above - this is purely "move it
+  // further from BottomNav" (user report: "feels a little too cramped and
+  // tight up against the 5 menu selector"). Negative = up the screen, away
+  // from BottomNav sitting below it.
+  const BOTTOM_NAV_BREATHING_ROOM = -5;
   const half = halfHeight != null ? halfHeight : 100;
   const verticalStyle = centerY != null
-    ? { top: centerY - half + COIN_SHADOW_VISUAL_OFFSET }
+    ? { top: centerY - half + COIN_SHADOW_VISUAL_OFFSET + BOTTOM_NAV_BREATHING_ROOM }
     : { bottom: 170 };
 
   return (
@@ -140,14 +145,21 @@ const makeStyles = (colors) => StyleSheet.create({
   // Matches FilterPanel's toggleRowSmall pattern (plain opaque background,
   // no blur) - width fixed (not content-sized), same reasoning as there:
   // content-driven sizing risks the drag math's cached width going stale.
+  // `gap` (not each segment's own marginVertical, which this used to use)
+  // spreads 3 segments out to match QuickFilters' own 4-toggle stack's total
+  // height exactly: QuickFilters is 4*38 + 3*10 = 182px; this track is
+  // padding(3+3) + 3 segments' own 34px content + 2 gaps, so gap=37 lands on
+  // that same 182px total (user request: more room between these AND the
+  // same overall height as the quick filters stack opposite it).
   track: {
     flexDirection: 'column', backgroundColor: colors.cardAlt, borderRadius: 20,
-    padding: 3, width: 44,
+    padding: 3, width: 44, gap: 37,
   },
   // Matches toggleBtnSmall: own opaque background + real depth + a pinned
   // (always 2px, only recoloring) border so selecting never nudges layout.
+  // No marginVertical anymore - track's own `gap` above handles spacing now.
   segment: {
-    marginVertical: 3, paddingVertical: 6, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 6, alignItems: 'center', justifyContent: 'center',
     borderRadius: 17, backgroundColor: colors.cardAlt, overflow: 'hidden',
     ...buttonDepth, elevation: 10, borderWidth: 2, borderColor: 'transparent',
   },
