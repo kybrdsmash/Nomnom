@@ -44,6 +44,13 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
   const styles = makeStyles(colors);
   const [loaded, setLoaded] = useState(false);
   const [spot, setSpot] = useState(null);
+  // Was deliberately absent ("the point of this flow is a fast note in the
+  // moment, not a formal review") - added back per explicit later request
+  // ("the journal entry doesn't have a way to add a star rating. That needs
+  // to be added"). Optional, not required to save (0 = no rating given) -
+  // keeps this flow's original low-friction intent for anyone who still
+  // just wants to jot a note without rating anything.
+  const [rating, setRating] = useState(0);
   const [occasion, setOccasion] = useState('');
   const [moments, setMoments] = useState([newMoment()]);
   const [locating, setLocating] = useState(false);
@@ -59,6 +66,7 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
       const draft = await loadAtTheTableDraft();
       if (draft) {
         setSpot(draft.spot || null);
+        setRating(draft.rating || 0);
         setOccasion(draft.occasion || '');
         setMoments(draft.moments?.length > 0 ? draft.moments : [newMoment()]);
         setShared(draft.shared !== false);
@@ -69,8 +77,8 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
 
   useEffect(() => {
     if (!loaded) return;
-    saveAtTheTableDraft({ spot, occasion, moments, shared, updatedAt: Date.now() });
-  }, [loaded, spot, occasion, moments, shared]);
+    saveAtTheTableDraft({ spot, rating, occasion, moments, shared, updatedAt: Date.now() });
+  }, [loaded, spot, rating, occasion, moments, shared]);
 
   const findNearestSpot = async () => {
     if (!location) {
@@ -94,6 +102,7 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
 
   const resetForm = () => {
     setSpot(null);
+    setRating(0);
     setOccasion('');
     setMoments([newMoment()]);
     setShowOccasionMenu(false);
@@ -108,6 +117,12 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
     setSaving(true);
     await onSave({
       spot,
+      // undefined (not 0) when nothing was picked - keeps an unrated entry
+      // rendering exactly like before everywhere else (MyPlacesHub/
+      // DetailModal both gate the star display on `typeof rating ===
+      // 'number'`; storing a literal 0 would show as an empty 5-star row
+      // instead of no rating line at all).
+      rating: rating > 0 ? rating : undefined,
       occasion: occasion.trim(),
       moments: moments.filter((m) => m.text.trim() || m.photoUri),
       shared,
@@ -212,6 +227,26 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
         />
       )}
 
+      {/* Optional - same 1-5 scale/wording as DetailModal's Journal compose
+          box, just not required to save here (see canSave above). */}
+      <Text style={styles.label}>Rating (optional)</Text>
+      <Text style={styles.scaleHint}>
+        Food only - not service, decor, or wait · 3 = would eat again if
+        convenient · 4 = good · 5 = excellent · ≤2 = skip it
+      </Text>
+      <View style={styles.starRow}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <Pressable key={n} onPress={() => setRating(n === rating ? 0 : n)} hitSlop={4}>
+            <Ionicons
+              name={n <= rating ? 'star' : 'star-outline'}
+              size={28}
+              color={colors.gold}
+              style={{ marginRight: 4 }}
+            />
+          </Pressable>
+        ))}
+      </View>
+
       <Text style={styles.label}>Your note</Text>
       <MomentsEditor moments={moments} onChangeMoments={setMoments} />
 
@@ -280,6 +315,9 @@ const makeStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.card, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
     color: colors.textLight, fontSize: 14,
   },
+  // Matches DetailModal's Journal compose box exactly - same scale, same wording.
+  scaleHint: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 10 },
+  starRow: { flexDirection: 'row', marginBottom: 10 },
   shareRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   shareRowText: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginLeft: 6 },
   footerRow: { flexDirection: 'row', marginTop: 24 },

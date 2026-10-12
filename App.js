@@ -969,15 +969,18 @@ function AppInner() {
   // "At the Table" (AtTheTableCompose) saves into this SAME journal store,
   // just with `moments` (an ordered [{ text, photoUri }]) instead of a flat
   // note/photoUri - a normal entry made via DetailModal's pencil never has
-  // `moments`, so the two shapes coexist without conflict. No `rating` here
-  // (deliberately optional/absent) - the point of this flow is a fast note
-  // in the moment, not a formal review.
-  const addAtTheTableEntry = async ({ spot, occasion, moments, shared = true }) => {
+  // `moments`, so the two shapes coexist without conflict. `rating` was
+  // deliberately absent originally ("the point of this flow is a fast note
+  // in the moment, not a formal review") - added back per explicit later
+  // request; stays optional (undefined, not 0, when nothing was picked -
+  // see AtTheTableCompose's own handleSave) so this flow's low-friction
+  // intent still holds for anyone who skips it.
+  const addAtTheTableEntry = async ({ spot, rating, occasion, moments, shared = true }) => {
     const now = Date.now();
     const id = Math.random().toString(36).slice(2);
     const sharedMoments = shared ? await uploadSharedMomentPhotos(id, moments) : moments;
     const entry = {
-      id, spot, occasion, moments: sharedMoments, shared,
+      id, spot, rating, occasion, moments: sharedMoments, shared,
       createdAt: now,
       updatedAt: now,
     };
