@@ -230,9 +230,6 @@ function AppInner() {
   // it to ever show up (user feedback: "there was no notification").
   const [myUid, setMyUid] = useState(null);
   const [pings, setPings] = useState([]);
-  useEffect(() => {
-    if (isFirebaseConfigured) ensureSignedIn();
-  }, []);
   // Was a one-shot ensureSignedIn().then(setMyUid) - myUid then never
   // changed again for the rest of the session. That's wrong the moment
   // Google sign-in switches accounts: linking usually upgrades the SAME
@@ -243,9 +240,29 @@ function AppInner() {
   // feature is FOR. Listening to onAuthStateChanged instead means myUid
   // (and everything keyed off it - pings, the sync effects below) always
   // reflects whichever account is actually signed in right now.
+  //
+  // ensureSignedIn() moved IN here (was its own separate effect calling it
+  // unconditionally on mount) - firebase.js's getReactNativePersistence
+  // restores a previously signed-in session from AsyncStorage
+  // ASYNCHRONOUSLY, so auth.currentUser reads null for a brief window on
+  // EVERY cold start even when a real (Google-linked) session WAS
+  // persisted. The old code's ensureSignedIn() call raced that restore:
+  // it ran immediately on mount, saw auth.currentUser as still null, and
+  // minted a brand new anonymous session before the real persisted one
+  // ever got a chance to load - silently discarding it (user report:
+  // "when I close the app, it logs me out"). onAuthStateChanged's first
+  // callback is guaranteed to fire only once persistence has actually
+  // resolved, so checking `user` HERE is the real way to tell "genuinely
+  // signed out" apart from "still loading" - this also doubles as what
+  // actually fulfills signOutGoogle's own documented behavior ("signing
+  // out returns to a fresh anonymous session"), which nothing else was
+  // reliably re-triggering before.
   useEffect(() => {
     if (!isFirebaseConfigured) return;
-    return onAuthStateChanged(auth, (user) => setMyUid(user?.uid || null));
+    return onAuthStateChanged(auth, (user) => {
+      setMyUid(user?.uid || null);
+      if (!user) ensureSignedIn();
+    });
   }, []);
   useEffect(() => {
     if (!myUid) return;
