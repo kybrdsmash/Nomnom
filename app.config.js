@@ -154,6 +154,22 @@ module.exports = {
           // already established above with a vague fallback.
           photosPermission: 'Nomnom uses your photos to let you attach a picture to a food journal entry.',
           savePhotosPermission: 'Nomnom saves a photo to your library when you tap download on a journal photo.',
+          // This feature only ever WRITES a photo to the library
+          // (saveToLibraryAsync) - it never reads/lists the user's existing
+          // photos, so there's no reason to request READ_MEDIA_IMAGES/
+          // READ_MEDIA_VIDEO/READ_MEDIA_AUDIO at all (the plugin's own
+          // default requests all three unconditionally). Those specific
+          // permissions are exactly what trips Google Play's "Photo & Video
+          // Permissions" policy - a mandatory Play Console declaration of
+          // the app's core use case before ANY upload requesting them is
+          // even accepted (real submission failure, 2026-10-11: "All
+          // developers requesting access to the photo and video permissions
+          // are required to tell Google Play about the core functionality of
+          // their app"). Scoping the request down to match what this
+          // feature actually does - write-only - avoids that requirement
+          // entirely rather than just filling out a justification for
+          // access the app doesn't need.
+          granularPermissions: [],
         },
       ],
       [
