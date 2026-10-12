@@ -714,8 +714,13 @@ export default function DetailModal({
                           <Image source={{ uri: e.sharedPhotoUrl }} style={styles.entryPhoto} />
                         </Pressable>
                       )}
+                      {/* Was missing a date entirely, unlike both "mine"
+                          journal rows above (user report: "we need to
+                          include dates on all reviews") - same relativeTime
+                          helper, same updatedAt field every entry already
+                          carries. */}
                       <Text style={styles.friendFeedbackLine}>
-                        {e.name} ⭐{e.rating}{e.note ? ` - "${e.note}"` : ''}
+                        {e.name} ⭐{e.rating}{e.note ? ` - "${e.note}"` : ''} · {relativeTime(e.updatedAt)}
                       </Text>
                     </View>
                   ))}
