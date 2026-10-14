@@ -17,6 +17,7 @@ const KEYS = {
   profile: '@nomnom/profile',
   preferences: '@nomnom/preferences',
   friends: '@nomnom/friends',
+  pinnedFriendUids: '@nomnom/pinnedFriendUids',
   scheduleArchive: '@nomnom/scheduleArchive',
   faveCuisines: '@nomnom/faveCuisines',
   journal: '@nomnom/journal',
@@ -129,6 +130,15 @@ export const saveInstallReferrerChecked = (checked) => save(KEYS.installReferrer
 // again later without re-sharing a code. [{ uid, name, lastPlayedAt }].
 export const loadFriends = () => load(KEYS.friends, []);
 export const saveFriends = (list) => save(KEYS.friends, list);
+
+// The Feast tab's customizable "top 5" friend order (FriendSpin.js) - an
+// ordered array of up to 5 uids. Empty by default (plain alphabetical,
+// no customization yet); populated once the user reorders/promotes via
+// the "Everyone else" section's edit mode. Per-device only, same as
+// travelType/buddyAvatar below - a display preference, not data that
+// needs to follow the account across devices.
+export const loadPinnedFriendUids = () => load(KEYS.pinnedFriendUids, []);
+export const savePinnedFriendUids = (uids) => save(KEYS.pinnedFriendUids, uids);
 
 // Friend-spin sessions that reached a winner, remembered locally so they can
 // be reopened later - once a session's status is 'done' and it's no longer

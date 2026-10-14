@@ -21,22 +21,18 @@ import { isFirebaseConfigured, ensureSignedIn } from '../api/firebase';
 import {
   loadActiveFriendSession, saveActiveFriendSession, clearActiveFriendSession,
   loadScheduleArchive, saveScheduleArchive,
+  loadPinnedFriendUids, savePinnedFriendUids,
 } from '../storage';
 import { fetchFeedPhotos } from '../api/feedPhotos';
 import ResultCard from './ResultCard';
 import ScheduleMealModal from './ScheduleMealModal';
 import FriendMap from './FriendMap';
 import FullscreenImageViewer from './FullscreenImageViewer';
-import AlphabetIndexBar from './AlphabetIndexBar';
 
-// Same helper/threshold convention as MyPlacesHub.js's own copy (kept
-// separate per that file's established precedent - each list's row shape
-// differs enough that sharing more than this tiny helper isn't worth it).
-const ALPHABET_INDEX_THRESHOLD = 12;
-function firstLetterOf(name) {
-  const c = (name || '').trim().charAt(0).toUpperCase();
-  return c >= 'A' && c <= 'Z' ? c : '#';
-}
+// How many of the grid's slots (after the permanent Invite tile) are the
+// customizable "top 5" - everyone else renders plain alphabetical below
+// them, inline (see the menu step's friendsSection for the full scheme).
+const PINNED_FRIEND_SLOTS = 5;
 
 /**
  * "Feast with Friends": a food photo feed (currently seeded from everyone's
@@ -94,24 +90,91 @@ export default function FriendSpin({
   // "archive" of what's been scheduled possible at all.
   const [archive, setArchive] = useState([]);
 
-  // "All Friends" full list (step === 'friends', opened from the menu step's
-  // "See all friends" link) - the menu step itself only ever shows a
-  // constant-height horizontal avatar strip now (user feedback: inline rows
-  // per friend made the screen taller with every friend added, eventually
-  // pushing the feed below it off-screen entirely). Search + an A-Z jump
-  // index are only useful once this list is actually long, same reasoning
-  // MyPlacesHub.js's ALPHABET_INDEX_THRESHOLD already uses.
-  const [friendSearchQuery, setFriendSearchQuery] = useState('');
-  const friendsScrollRef = useRef(null);
-  const friendLetterRefs = useRef({});
-  const jumpToFriendLetter = (letter) => {
-    const rowRef = friendLetterRefs.current[letter];
-    if (!rowRef?.current || !friendsScrollRef.current) return;
-    rowRef.current.measureLayout(
-      friendsScrollRef.current,
-      (_x, y) => friendsScrollRef.current.scrollTo({ y: y - 8, animated: true }),
-      () => {}
-    );
+  // The Feast tab's friend grid (menu step) - a 3-column grid with a
+  // permanent "Invite" tile first, then up to PINNED_FRIEND_SLOTS
+  // customizable friends, then everyone else rendered inline below a "See
+  // all friends" divider (no separate screen/search anymore - design
+  // review: "the friends can be an infinite scroll coming up from behind
+  // see all friends"). Replaces the old constant-height horizontal strip +
+  // dedicated All-Friends screen with search/A-Z index.
+  //
+  // pinnedFriendUids is the explicit, user-chosen order for the top slots -
+  // starts empty (pure alphabetical, no customization) and is only ever
+  // written to once editing actually happens (see enterEditMode below),
+  // never silently inferred from usage.
+  const [pinnedFriendUids, setPinnedFriendUidsState] = useState([]);
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [selectedForSwap, setSelectedForSwap] = useState(null);
+  // Collapsed by default now that joining is a secondary link, not its own
+  // always-visible button+input - see the menu step's joinLinkRow.
+  const [showCodeEntry, setShowCodeEntry] = useState(false);
+  useEffect(() => {
+    loadPinnedFriendUids().then(setPinnedFriendUidsState);
+  }, []);
+  const persistPinnedOrder = (next) => {
+    setPinnedFriendUidsState(next);
+    savePinnedFriendUids(next);
+  };
+
+  const sortedFriends = [...friends].sort((a, b) =>
+    (a.name || 'Friend').localeCompare(b.name || 'Friend')
+  );
+  // Explicit pins first (in the user's own chosen order), auto-filled up to
+  // PINNED_FRIEND_SLOTS with whoever's next alphabetically - so someone who
+  // has never touched ordering still sees a full top-5 grid, just plain A-Z.
+  // Dropped pins (a uid saved before a friend was somehow removed - no
+  // removal UI exists yet, but defensive regardless) are filtered out
+  // rather than left as blank slots.
+  const validPinnedUids = pinnedFriendUids.filter((uid) => friends.some((f) => f.uid === uid));
+  const autoFillUids = sortedFriends
+    .filter((f) => !validPinnedUids.includes(f.uid))
+    .slice(0, Math.max(0, PINNED_FRIEND_SLOTS - validPinnedUids.length))
+    .map((f) => f.uid);
+  const topUids = [...validPinnedUids, ...autoFillUids];
+  const topFriends = topUids.map((uid) => friends.find((f) => f.uid === uid)).filter(Boolean);
+  const restFriends = sortedFriends.filter((f) => !topUids.includes(f.uid));
+
+  // Locks in whatever's currently showing (explicit pins + autofill) as the
+  // real, explicit order the moment editing starts - swapping/promoting
+  // below always operates on pinnedFriendUids directly, which would behave
+  // unpredictably if autofill kept silently reshuffling mid-edit.
+  const enterEditMode = () => {
+    if (validPinnedUids.length < Math.min(PINNED_FRIEND_SLOTS, friends.length)) {
+      persistPinnedOrder(topUids);
+    }
+    setEditingOrder(true);
+  };
+  const exitEditMode = () => {
+    setEditingOrder(false);
+    setSelectedForSwap(null);
+  };
+
+  // Tap one pinned tile to select it (highlighted), tap a second to swap
+  // their positions - no drag gesture needed for a 3-column wrapping grid.
+  const handlePinnedTilePress = (uid) => {
+    if (!selectedForSwap) {
+      setSelectedForSwap(uid);
+      return;
+    }
+    if (selectedForSwap === uid) {
+      setSelectedForSwap(null);
+      return;
+    }
+    const next = [...pinnedFriendUids];
+    const ia = next.indexOf(selectedForSwap);
+    const ib = next.indexOf(uid);
+    [next[ia], next[ib]] = [next[ib], next[ia]];
+    persistPinnedOrder(next);
+    setSelectedForSwap(null);
+  };
+
+  // Promotes someone from "Everyone else" into the top slots, bumping
+  // whoever currently occupies the LAST slot out (design review: "tapping
+  // the pin on anyone below swaps them into the top 5, bumping whoever's
+  // currently last").
+  const promoteFriend = (uid) => {
+    const next = [...pinnedFriendUids.slice(0, PINNED_FRIEND_SLOTS - 1), uid];
+    persistPinnedOrder(next);
   };
 
   // "Quick Invite" row (menu step, between Friends and Scheduled meals) -
@@ -522,62 +585,150 @@ export default function FriendSpin({
         // in a flex:1 container for the same reason - this just applies it
         // directly via `style` instead of a separate wrapper View.
         <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={styles.centerCol}>
-          {/* Zone label covers everything down through the friends strip
-              below (start/join + who to ping) - "What Friends Are Eating"
-              is the other zone, around the feed strip further down. Two
-              zones instead of one long undifferentiated list (design
-              review). */}
+          {/* Zone label covers everything down through the friends grid
+              below - "What Friends Are Eating" is the other zone, around
+              the feed strip further down (design review). */}
           <Text style={[styles.friendsHeader, { width: '100%' }]}>Pick Together</Text>
-          <Pressable style={styles.bigBtn} onPress={() => host()}>
-            <Ionicons name="add-circle" size={22} color={colors.textDark} />
-            <Text style={styles.bigBtnText}>Start a session</Text>
-          </Pressable>
-          <Text style={styles.orText}>— or —</Text>
-          <TextInput
-            style={styles.codeInput}
-            value={codeInput}
-            onChangeText={(t) => setCodeInput(t.toUpperCase())}
-            placeholder="ENTER CODE"
-            placeholderTextColor="#666"
-            maxLength={4}
-            autoCapitalize="characters"
-          />
-          <Pressable
-            style={[styles.bigBtn, codeInput.length !== 4 && { opacity: 0.4 }]}
-            disabled={codeInput.length !== 4}
-            onPress={() => join()}
-          >
-            <Ionicons name="enter" size={22} color={colors.textDark} />
-            <Text style={styles.bigBtnText}>Join a friend</Text>
-          </Pressable>
 
+          {/* "Start a session" (standalone button) + a full code-entry block
+              replaced by a friends grid as the primary action (design
+              review: "start a session should just be a selection of
+              friends") - Invite is a permanent first tile (same host() with
+              no target the old button used, so this still works for anyone
+              not in your friends list yet - it just shares a code same as
+              always), then up to PINNED_FRIEND_SLOTS friends, customizable
+              via the pencil below. Tapping any friend tile pings them
+              directly, same as the old strip's tap action. */}
+          <View style={styles.gridWrap}>
+            <Pressable style={[styles.gridTile, styles.gridTileInvite]} onPress={() => host()}>
+              <View style={[styles.gridAvatar, styles.gridAvatarInvite]}>
+                <Ionicons name="person-add" size={17} color={colors.neon} />
+              </View>
+              <Text style={styles.gridInviteText} numberOfLines={1}>Invite</Text>
+            </Pressable>
+            {topFriends.map((f) => {
+              const selected = selectedForSwap === f.uid;
+              // Quick Invite's send action (a pre-picked spot+time, see the
+              // section below) used to live on a dedicated friend row - with
+              // that row gone, it's a small corner badge instead: tap it
+              // specifically to send, tap anywhere else on the tile to ping
+              // as normal. Only shown outside edit mode (that already has
+              // its own corner icon here - see dragHint below).
+              const quickReady = !editingOrder && !!quickSpot && !!quickDate;
+              const quickJustSent = quickSentUid === f.uid;
+              return (
+                <Pressable
+                  key={f.uid}
+                  style={[styles.gridTile, editingOrder && styles.gridTileEditing, selected && styles.gridTileSelected]}
+                  onPress={() => (editingOrder ? handlePinnedTilePress(f.uid) : host(f))}
+                >
+                  {editingOrder && <Ionicons name="swap-horizontal" size={11} color={colors.textMuted} style={styles.dragHint} />}
+                  <View style={styles.gridAvatar}>
+                    <Text style={styles.gridAvatarText}>{(f.name || '?')[0].toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.gridNameText} numberOfLines={1}>{f.name || 'Friend'}</Text>
+                  {quickReady && (
+                    <Pressable
+                      style={[styles.quickSendBadge, quickJustSent && styles.quickSendBadgeSent]}
+                      disabled={quickSendingUid === f.uid || quickJustSent}
+                      onPress={() => sendQuickInvite(f)}
+                      hitSlop={6}
+                    >
+                      <Ionicons name={quickJustSent ? 'checkmark' : 'send'} size={10} color={colors.textDark} />
+                    </Pressable>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {editingOrder && (
+            <Text style={styles.editHint}>
+              Tap two tiles to swap them · tap {'➕'} on anyone below to add them here
+            </Text>
+          )}
+
+          {/* "See all friends" is a plain divider now, not a destination -
+              more friends load in directly below it as part of this same
+              scrolling page (design review: "the friends can be an
+              infinite scroll coming up from behind see all friends"),
+              replacing the old dedicated All-Friends screen with
+              search/A-Z index. The pencil (scoped here, not a page-wide
+              Edit mode) toggles reordering the grid above. */}
           {friends.length > 0 && (
-            <View style={styles.friendsSection}>
-              {/* No "Friends" sub-header here - "Pick Together" above
-                  already labels this whole zone, and avatars in a strip
-                  read as people on their own. */}
-              {/* Constant-height horizontal strip, however many friends
-                  exist - tap an avatar to ping them to spin together, same
-                  action the old per-row "Ping" button did. Was a full
-                  friendRow per friend (avatar + name + Ping button, and a
-                  Quick Invite send icon when one was ready) - with more than
-                  a handful of friends that list alone filled the screen and
-                  pushed the feed below it fully off-screen (user report).
-                  Quick Invite's send action now only lives in the full "See
-                  all friends" list below, where there's room for it. */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendStripRow}>
-                {friends.map((f) => (
-                  <Pressable key={f.uid} style={styles.friendStripItem} onPress={() => host(f)}>
-                    <View style={styles.friendAvatar}>
-                      <Text style={styles.friendAvatarText}>{(f.name || '?')[0].toUpperCase()}</Text>
+            <View style={styles.seeAllDivider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>{restFriends.length > 0 ? 'See all friends' : 'Your friends'}</Text>
+              <View style={styles.dividerLine} />
+              <Pressable
+                onPress={() => (editingOrder ? exitEditMode() : enterEditMode())}
+                hitSlop={8}
+                style={styles.editPencilBtn}
+              >
+                <Ionicons name={editingOrder ? 'checkmark-circle' : 'pencil'} size={13} color={colors.accent} />
+              </Pressable>
+            </View>
+          )}
+          {restFriends.length > 0 && (
+            <View style={styles.gridWrap}>
+              {restFriends.map((f) => {
+                const quickReady = !editingOrder && !!quickSpot && !!quickDate;
+                const quickJustSent = quickSentUid === f.uid;
+                return (
+                  <Pressable
+                    key={f.uid}
+                    style={styles.gridTile}
+                    onPress={() => (editingOrder ? promoteFriend(f.uid) : host(f))}
+                  >
+                    <View style={styles.gridAvatar}>
+                      <Text style={styles.gridAvatarText}>{(f.name || '?')[0].toUpperCase()}</Text>
                     </View>
-                    <Text style={styles.friendStripName} numberOfLines={1}>{f.name || 'Friend'}</Text>
+                    <Text style={styles.gridNameText} numberOfLines={1}>{f.name || 'Friend'}</Text>
+                    {editingOrder && (
+                      <View style={styles.promoteBadge}>
+                        <Ionicons name="add" size={10} color={colors.textDark} />
+                      </View>
+                    )}
+                    {quickReady && (
+                      <Pressable
+                        style={[styles.quickSendBadge, quickJustSent && styles.quickSendBadgeSent]}
+                        disabled={quickSendingUid === f.uid || quickJustSent}
+                        onPress={() => sendQuickInvite(f)}
+                        hitSlop={6}
+                      >
+                        <Ionicons name={quickJustSent ? 'checkmark' : 'send'} size={10} color={colors.textDark} />
+                      </Pressable>
+                    )}
                   </Pressable>
-                ))}
-              </ScrollView>
-              <Pressable style={styles.seeAllRow} onPress={() => setStep('friends')}>
-                <Text style={styles.seeAllText}>See all friends</Text>
-                <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+                );
+              })}
+            </View>
+          )}
+
+          {/* De-emphasized secondary action - joining someone ELSE's
+              already-started session is a different, less common action
+              than starting/pinging one of your own friends, so this stays
+              a small text link rather than competing with the grid above. */}
+          <Pressable style={styles.joinLinkRow} onPress={() => setShowCodeEntry((v) => !v)}>
+            <Text style={styles.joinLinkText}>Have a code? Join a session</Text>
+          </Pressable>
+          {showCodeEntry && (
+            <View style={styles.codeEntryRow}>
+              <TextInput
+                style={styles.codeInputSmall}
+                value={codeInput}
+                onChangeText={(t) => setCodeInput(t.toUpperCase())}
+                placeholder="CODE"
+                placeholderTextColor="#666"
+                maxLength={4}
+                autoCapitalize="characters"
+              />
+              <Pressable
+                style={[styles.joinBtnSmall, codeInput.length !== 4 && { opacity: 0.4 }]}
+                disabled={codeInput.length !== 4}
+                onPress={() => join()}
+              >
+                <Text style={styles.joinBtnSmallText}>Join</Text>
               </Pressable>
             </View>
           )}
@@ -709,103 +860,6 @@ export default function FriendSpin({
             </View>
           )}
         </ScrollView>
-      )}
-
-      {step === 'friends' && (
-        <View style={{ flex: 1, width: '100%' }}>
-          <Pressable onPress={() => { setStep('menu'); setFriendSearchQuery(''); }} style={styles.archiveBack}>
-            <Ionicons name="arrow-back" size={20} color={colors.accent} />
-            <Text style={styles.archiveBackText}>Back</Text>
-          </Pressable>
-
-          <View style={styles.friendSearchRow}>
-            <Ionicons name="search" size={16} color={colors.textMuted} />
-            <TextInput
-              style={styles.friendSearchInput}
-              value={friendSearchQuery}
-              onChangeText={setFriendSearchQuery}
-              placeholder="Search friends…"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
-
-          {(() => {
-            const filtered = friends.filter((f) =>
-              (f.name || 'Friend').toLowerCase().includes(friendSearchQuery.trim().toLowerCase())
-            );
-            // Alphabetize so the A-Z index's "jump to letter" is meaningful -
-            // `friends` itself has no guaranteed order (built up over time as
-            // sessions complete, see App.js).
-            const sorted = [...filtered].sort((a, b) =>
-              (a.name || 'Friend').localeCompare(b.name || 'Friend')
-            );
-            const showIndex = sorted.length > ALPHABET_INDEX_THRESHOLD;
-            const availableLetters = new Set(sorted.map((f) => firstLetterOf(f.name)));
-            const seenLetters = new Set();
-
-            return (
-              <ScrollView ref={friendsScrollRef} style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingRight: showIndex ? 22 : 0 }}>
-                {sorted.length === 0 && (
-                  <Text style={styles.bodyText}>
-                    {friends.length === 0
-                      ? 'No friends yet - finish a spin with someone once to add them here.'
-                      : 'No friends match that search.'}
-                  </Text>
-                )}
-                {sorted.map((f) => {
-                  const letter = firstLetterOf(f.name);
-                  const isFirstOfLetter = showIndex && !seenLetters.has(letter);
-                  seenLetters.add(letter);
-                  if (isFirstOfLetter) {
-                    friendLetterRefs.current[letter] = friendLetterRefs.current[letter] || React.createRef();
-                  }
-                  const quickReady = !!quickSpot && !!quickDate;
-                  const quickBusy = quickSendingUid === f.uid;
-                  const quickJustSent = quickSentUid === f.uid;
-                  return (
-                    <View
-                      key={f.uid}
-                      ref={isFirstOfLetter ? friendLetterRefs.current[letter] : undefined}
-                      style={styles.friendRow}
-                    >
-                      <View style={styles.friendAvatar}>
-                        <Text style={styles.friendAvatarText}>{(f.name || '?')[0].toUpperCase()}</Text>
-                      </View>
-                      <Text style={styles.friendName} numberOfLines={1}>{f.name || 'Friend'}</Text>
-                      {quickReady && (
-                        <Pressable
-                          style={[styles.quickSendBtn, quickJustSent && styles.quickSendBtnSent]}
-                          disabled={quickBusy || quickJustSent}
-                          onPress={() => sendQuickInvite(f)}
-                        >
-                          <Ionicons
-                            name={quickJustSent ? 'checkmark' : 'send'}
-                            size={14}
-                            color={colors.textDark}
-                          />
-                        </Pressable>
-                      )}
-                      <Pressable style={styles.pingBtn} onPress={() => host(f)}>
-                        <Ionicons name="paper-plane-outline" size={14} color={colors.textDark} />
-                        <Text style={styles.pingBtnText}>Ping</Text>
-                      </Pressable>
-                    </View>
-                  );
-                })}
-                {showIndex && (
-                  <AlphabetIndexBar
-                    availableLetters={availableLetters}
-                    onSelectLetter={jumpToFriendLetter}
-                  />
-                )}
-                {/* Matches archive step's own identical spacer - BottomNav
-                    stays visible over this screen too, so this needs the
-                    same insets.bottom + BOTTOM_NAV_CLEARANCE reservation. */}
-                <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
-              </ScrollView>
-            );
-          })()}
-        </View>
       )}
 
       {step === 'archive' && (
@@ -1124,34 +1178,53 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   feedStripTile: { width: 148, height: 148, borderRadius: 16, backgroundColor: colors.card },
   feedStripName: { color: colors.textLight, fontSize: 13, fontWeight: '600', marginTop: 6 },
   feedStripCuisine: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
-  orText: { color: colors.textMuted, marginVertical: 18 },
-  codeInput: { color: colors.gold, fontSize: 28, fontWeight: '900', letterSpacing: 10, borderBottomWidth: 2, borderBottomColor: colors.accent, textAlign: 'center', width: 200, marginBottom: 18, padding: 4 },
   codeDisplay: { color: colors.gold, fontSize: 52, fontWeight: '900', letterSpacing: 14, marginVertical: 14 },
   shareBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 25 },
   waitingText: { color: colors.textMuted, marginTop: 14, fontStyle: 'italic' },
   leaveText: { color: colors.danger, fontWeight: 'bold', fontSize: 14 },
-  friendsSection: { width: '100%', marginTop: 26 },
   friendsHeader: { color: colors.accent, fontSize: 13, fontWeight: 'bold', letterSpacing: 1, marginBottom: 10 },
-  friendRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, padding: 10, marginBottom: 8 },
-  friendAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  friendAvatarText: { color: colors.textDark, fontWeight: 'bold', fontSize: 14 },
-  friendName: { flex: 1, color: colors.textLight, fontSize: 14, fontWeight: '600' },
-  pingBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 6, paddingHorizontal: 10 },
-  pingBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 12, marginLeft: 4 },
-  // Menu step's constant-height friend strip - see the doc comment where
-  // it's used for why this replaced a full friendRow per friend.
-  friendStripRow: { gap: 14, paddingVertical: 2, paddingHorizontal: 2 },
-  friendStripItem: { alignItems: 'center', width: 52 },
-  friendStripName: { color: colors.textMuted, fontSize: 11, marginTop: 4, maxWidth: 52 },
-  seeAllRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10 },
-  seeAllText: { color: colors.accent, fontWeight: '700', fontSize: 12.5 },
-  // step === 'friends' (the full "See all friends" list)
-  friendSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.card, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, marginHorizontal: 20, marginBottom: 14 },
-  friendSearchInput: { flex: 1, color: colors.textLight, fontSize: 14 },
-  // Only rendered once a Quick Invite spot+time are both assembled - sits
-  // just left of the existing Ping button, a separate action entirely.
-  quickSendBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginRight: 8, ...neonSelected(colors) },
-  quickSendBtnSent: { backgroundColor: '#3DBE6C' },
+
+  // ---- Friends grid (menu step - Invite tile + top 5 + "everyone else") ----
+  gridWrap: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
+  gridTile: {
+    width: '31%', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: colors.card, borderRadius: 14, paddingVertical: 10,
+    borderWidth: 1.5, borderColor: 'transparent',
+  },
+  gridTileInvite: { backgroundColor: 'transparent', borderStyle: 'dashed', borderColor: colors.neon },
+  gridTileEditing: { borderColor: colors.cardAlt },
+  gridTileSelected: { borderColor: colors.neon, ...neonSelected(colors) },
+  gridAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.accentDark, alignItems: 'center', justifyContent: 'center' },
+  gridAvatarInvite: { backgroundColor: 'transparent', borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.neon },
+  gridAvatarText: { color: colors.textDark, fontWeight: 'bold', fontSize: 14 },
+  gridNameText: { color: colors.textLight, fontSize: 11, fontWeight: '700', maxWidth: 72 },
+  gridInviteText: { color: colors.neon, fontSize: 10.5, fontWeight: '700' },
+  dragHint: { position: 'absolute', top: 6, right: 6 },
+  editHint: { width: '100%', color: colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 6, marginBottom: 2 },
+  // Small badge in a tile's corner - add-to-top-5 (editing) or send-this-
+  // Quick-Invite (not editing), never both at once (see where each renders).
+  promoteBadge: {
+    position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9,
+    backgroundColor: colors.neon, alignItems: 'center', justifyContent: 'center',
+  },
+  quickSendBadge: {
+    position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9,
+    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', ...neonSelected(colors),
+  },
+  quickSendBadgeSent: { backgroundColor: '#3DBE6C' },
+  seeAllDivider: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 14 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.cardAlt },
+  dividerText: { color: colors.textMuted, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  editPencilBtn: { padding: 2 },
+  joinLinkRow: { paddingVertical: 10 },
+  joinLinkText: { color: colors.textMuted, fontSize: 12, fontWeight: '600', textDecorationLine: 'underline' },
+  codeEntryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 6 },
+  codeInputSmall: {
+    color: colors.gold, fontSize: 18, fontWeight: '900', letterSpacing: 6,
+    borderBottomWidth: 2, borderBottomColor: colors.accent, textAlign: 'center', width: 110, padding: 4,
+  },
+  joinBtnSmall: { backgroundColor: colors.accent, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 16 },
+  joinBtnSmallText: { color: colors.textDark, fontWeight: 'bold', fontSize: 13 },
   quickInviteSection: { width: '100%', marginTop: 20, backgroundColor: colors.card, borderRadius: 16, padding: 14 },
   quickInviteRow: { flexDirection: 'row', alignItems: 'center' },
   quickCalendarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.cardAlt, alignItems: 'center', justifyContent: 'center', marginRight: 10, ...buttonDepth },
