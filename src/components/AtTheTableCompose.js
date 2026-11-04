@@ -11,6 +11,7 @@ import { searchNearbyByKeyword } from '../api/places';
 import { loadAtTheTableDraft, saveAtTheTableDraft, clearAtTheTableDraft } from '../storage';
 import PlaceSearchBar from './PlaceSearchBar';
 import MomentsEditor, { newMoment } from './MomentsEditor';
+import StarRatingPicker from './StarRatingPicker';
 import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
 
 // Kept short and low-key on purpose (user request) - occasion is a small
@@ -227,25 +228,10 @@ export default function AtTheTableCompose({ location, travelType, onSave }) {
         />
       )}
 
-      {/* Optional - same 1-5 scale/wording as DetailModal's Journal compose
-          box, just not required to save here (see canSave above). */}
-      <Text style={styles.label}>Rating (optional)</Text>
-      <Text style={styles.scaleHint}>
-        Food only - not service, decor, or wait · 3 = would eat again if
-        convenient · 4 = good · 5 = excellent · ≤2 = skip it
-      </Text>
-      <View style={styles.starRow}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <Pressable key={n} onPress={() => setRating(n === rating ? 0 : n)} hitSlop={4}>
-            <Ionicons
-              name={n <= rating ? 'star' : 'star-outline'}
-              size={28}
-              color={colors.gold}
-              style={{ marginRight: 4 }}
-            />
-          </Pressable>
-        ))}
-      </View>
+      {/* Same shared picker as DetailModal's Journal compose box - still
+          not required to save here (see canSave above). */}
+      <Text style={styles.label}>Rating</Text>
+      <StarRatingPicker value={rating} onChange={setRating} allowClear />
 
       <Text style={styles.label}>Your note</Text>
       <MomentsEditor moments={moments} onChangeMoments={setMoments} />
@@ -315,9 +301,6 @@ const makeStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.card, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
     color: colors.textLight, fontSize: 14,
   },
-  // Matches DetailModal's Journal compose box exactly - same scale, same wording.
-  scaleHint: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 10 },
-  starRow: { flexDirection: 'row', marginBottom: 10 },
   shareRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   shareRowText: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginLeft: 6 },
   footerRow: { flexDirection: 'row', marginTop: 24 },

@@ -13,6 +13,7 @@ import { joinParts } from '../utils/format';
 import { loadJournalComposeDraft, saveJournalComposeDraft, clearJournalComposeDraft } from '../storage';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import MomentsEditor, { newMoment } from './MomentsEditor';
+import StarRatingPicker from './StarRatingPicker';
 
 // Google's Places `weekday_text` is Monday-first (index 0); JS's own
 // Date.getDay() is Sunday-first (0 = Sunday) - this converts the latter
@@ -101,6 +102,8 @@ export default function DetailModal({
   const [expanded, setExpanded] = useState(false);
   // Both sections start collapsed as slim header rows (user request) - tap
   // the row (or its chevron) to reveal the compose box/entries beneath it.
+  // Exception: Journal opens expanded if you already have entries here
+  // (see the reset effect below).
   const [journalSectionOpen, setJournalSectionOpen] = useState(false);
   const [friendsSectionOpen, setFriendsSectionOpen] = useState(false);
   // Per-entry "sharing/unsharing right now" state, keyed by entry id - purely
@@ -143,7 +146,10 @@ export default function DetailModal({
     setDraftRestored(false);
     setComposing(false);
     setEditingEntryId(null);
-    setJournalSectionOpen(false);
+    // Opens already expanded whenever you've written at least one entry for
+    // this spot (user request) - only starts collapsed when there's nothing
+    // of yours to show yet.
+    setJournalSectionOpen(!!(spot && journal?.[spot.id]?.length > 0));
     (async () => {
       const draft = await loadJournalComposeDraft();
       if (draft && spot && draft.spotId === spot.id) {
@@ -205,7 +211,8 @@ export default function DetailModal({
   };
   const startEdit = (entry) => {
     setEditingEntryId(entry.id);
-    setDraftRating(entry.rating);
+    // At the Table entries can be unrated (undefined) - picker needs a number.
+    setDraftRating(entry.rating || 0);
     // Old entries (before this form used moments) only ever had a single
     // flat note/photoUri - converted into a one-moment array here so the
     // SAME editor can open either shape without the entry itself needing a
@@ -604,22 +611,7 @@ export default function DetailModal({
 
                 {journalSectionOpen && composing && (
                   <View style={styles.composeBox}>
-                    <Text style={styles.scaleHint}>
-                      Food only - not service, decor, or wait · 3 = would eat again if
-                      convenient · 4 = good · 5 = excellent · ≤2 = skip it
-                    </Text>
-                    <View style={styles.starRow}>
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <Pressable key={n} onPress={() => setDraftRating(n)} hitSlop={4}>
-                          <Ionicons
-                            name={n <= draftRating ? 'star' : 'star-outline'}
-                            size={28}
-                            color={colors.gold}
-                            style={{ marginRight: 4 }}
-                          />
-                        </Pressable>
-                      ))}
-                    </View>
+                    <StarRatingPicker value={draftRating} onChange={setDraftRating} />
                     {/* Same editor AtTheTableCompose uses (user request -
                         this form needed the same multi-photo/multi-text
                         format, not the old single note + single photo). */}
@@ -820,8 +812,6 @@ const makeStyles = (colors) => StyleSheet.create({
   emptyFeedbackText: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic' },
   composeBox: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
   composeButtonRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-  scaleHint: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginBottom: 10 },
-  starRow: { flexDirection: 'row', marginBottom: 10 },
   entryRow: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 8 },
   entryPhoto: { width: 48, height: 48, borderRadius: 8, marginRight: 10, backgroundColor: '#333' },
   entryRating: { color: colors.gold, fontSize: 14, fontWeight: 'bold', marginBottom: 2 },
