@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth } from '../constants';
 import { isFirebaseConfigured } from '../api/firebase';
-import { fetchFriendJournal } from '../api/journal';
+import { fetchFriendRecentEntries } from '../api/journal';
 import { groupByCity } from '../utils/location';
 import SlidableSegmented from './SlidableSegmented';
 import AtTheTableCompose from './AtTheTableCompose';
@@ -80,8 +80,8 @@ export default function JournalOverlay({
     let cancelled = false;
     setLoadingFriends(true);
     Promise.all(friends.map(async (f) => {
-      const entries = await fetchFriendJournal(f.uid);
-      return Object.values(entries).flat().map((e) => ({ ...e, friendName: f.name }));
+      const { entries } = await fetchFriendRecentEntries(f.uid);
+      return entries.map((e) => ({ ...e, friendName: f.name }));
     })).then((results) => {
       if (cancelled) return;
       const flat = results.flat().sort((a, b) => b.updatedAt - a.updatedAt);

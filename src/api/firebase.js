@@ -45,6 +45,11 @@ export const auth = authInstance;
 
 /** Signs in anonymously (no account needed) and returns the user's uid. */
 export async function ensureSignedIn() {
+  // currentUser reads null until the persisted session finishes restoring
+  // from AsyncStorage; without waiting, any caller racing that restore
+  // (friend spin, cuisine badge, bug report) mints a fresh anonymous
+  // account on top of the saved Google one.
+  await auth.authStateReady();
   if (auth.currentUser) return auth.currentUser.uid;
   const cred = await signInAnonymously(auth);
   return cred.user.uid;

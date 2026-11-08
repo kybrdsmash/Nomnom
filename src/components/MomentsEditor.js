@@ -111,8 +111,12 @@ function MicButton({ colors, onTranscribed }) {
  */
 export default function MomentsEditor({
   moments, onChangeMoments,
-  firstPlaceholder = "What are you having? How's it going?",
-  morePlaceholder = 'Say more about this one...',
+  // "What I ordered" lives as the FIRST note's placeholder only (user
+  // request) - it's the dish names people search for years later, so the
+  // hint goes where the first thing they type lands. Every later note and
+  // photo caption is a plain blank field.
+  firstPlaceholder = 'What did you order? How is it?',
+  morePlaceholder = 'Add a note...',
 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);

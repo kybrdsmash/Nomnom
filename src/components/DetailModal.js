@@ -8,7 +8,7 @@ import { useTheme } from '../ThemeContext';
 import { buttonDepth } from '../constants';
 import { fetchPlaceDetails } from '../api/details';
 import { isFirebaseConfigured } from '../api/firebase';
-import { fetchFriendJournal } from '../api/journal';
+import { fetchFriendEntriesForPlace } from '../api/journal';
 import { joinParts } from '../utils/format';
 import { loadJournalComposeDraft, saveJournalComposeDraft, clearJournalComposeDraft } from '../storage';
 import FullscreenImageViewer from './FullscreenImageViewer';
@@ -183,8 +183,7 @@ export default function DetailModal({
     }
     let cancelled = false;
     Promise.all(friends.map(async (f) => {
-      const entries = await fetchFriendJournal(f.uid);
-      const list = entries[spot.id];
+      const list = await fetchFriendEntriesForPlace(f.uid, spot.id);
       return list && list.length > 0 ? { name: f.name, ...list[0] } : null;
     })).then((results) => {
       if (!cancelled) setFriendEntries(results.filter(Boolean));
@@ -618,7 +617,7 @@ export default function DetailModal({
                     <MomentsEditor
                       moments={draftMoments}
                       onChangeMoments={setDraftMoments}
-                      firstPlaceholder="Notable details about the food..."
+                      firstPlaceholder="What did you order? Anything notable?"
                     />
                     {/* Default ON (user decision: share by default, opt out
                         right here while writing rather than opting in

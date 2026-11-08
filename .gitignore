@@ -76,3 +76,6 @@ client_secret_*.apps.googleusercontent.com.json
 # `tee`'d output from local `eas build --local` runs (see .build-verify/local-build.sh) -
 # debug logs, regenerated fresh each build, not app source.
 build-local*.log
+
+# Personal Claude Code permissions
+.claude/settings.local.json

@@ -30,6 +30,8 @@ const KEYS = {
   navTapCounts: '@nomnom/navTapCounts',
   buddyAvatar: '@nomnom/buddyAvatar',
   journalView: '@nomnom/journalView',
+  journalSyncSigs: '@nomnom/journalSyncSigs',
+  journalSchema2Migrated: '@nomnom/journalSchema2Migrated',
 };
 
 async function load(key, fallback) {
@@ -161,8 +163,46 @@ export const saveFaveCuisines = (slots) => save(KEYS.faveCuisines, slots);
 // trimmed spot snapshot so the journal-browser screen can render/reopen it
 // without a fresh Places lookup - see src/api/journal.js for the Firestore
 // mirror that makes this visible to friends.
-export const loadJournal = () => load(KEYS.journal, {});
-export const saveJournal = (journal) => save(KEYS.journal, journal);
+//
+// Stored with each place's spot snapshot written ONCE ({ v: 2, places,
+// entries }) instead of copied onto every entry - a place reviewed three
+// times used to carry three full copies of the same restaurant record, and
+// the copies could drift apart (a stale name/photo on an older visit). The
+// canonical copy is the one from the most recently updated entry. Callers
+// never see this shape: loadJournal hands back the usual
+// { [placeId]: [entry...] } with `spot` re-attached to every entry, and
+// still accepts the old un-deduped shape.
+export const dehydrateJournal = (journal) => {
+  const places = {};
+  const entries = {};
+  Object.entries(journal || {}).forEach(([placeId, list]) => {
+    if (!Array.isArray(list) || list.length === 0) return;
+    const newest = list.reduce((a, b) => ((b.updatedAt || 0) > (a.updatedAt || 0) ? b : a), list[0]);
+    if (newest.spot) places[placeId] = newest.spot;
+    entries[placeId] = list.map(({ spot, ...rest }) => rest);
+  });
+  return { v: 2, places, entries };
+};
+export const hydrateJournal = (raw) => {
+  if (!raw || typeof raw !== 'object') return {};
+  if (raw.v !== 2) return raw; // old shape: entries already carry their own spot
+  const out = {};
+  Object.entries(raw.entries || {}).forEach(([placeId, list]) => {
+    const spot = raw.places?.[placeId];
+    out[placeId] = (list || []).map((e) => (spot ? { ...e, spot } : e));
+  });
+  return out;
+};
+export const loadJournal = async () => hydrateJournal(await load(KEYS.journal, {}));
+export const saveJournal = (journal) => save(KEYS.journal, dehydrateJournal(journal));
+
+// Journal -> Firestore sync bookkeeping (see src/api/journal.js): entryId ->
+// signature of what was last pushed, so only changed entries get written,
+// plus a flag for the one-time move off the old single-document journal.
+export const loadJournalSyncSigs = () => load(KEYS.journalSyncSigs, {});
+export const saveJournalSyncSigs = (sigs) => save(KEYS.journalSyncSigs, sigs);
+export const loadJournalSchema2Migrated = () => load(KEYS.journalSchema2Migrated, false);
+export const saveJournalSchema2Migrated = (v) => save(KEYS.journalSchema2Migrated, v);
 
 // One in-progress "At the Table" note at a time - saved on every change so
 // closing/reopening the app resumes exactly where it left off (user
@@ -172,8 +212,12 @@ export const loadAtTheTableDraft = () => load(KEYS.atTheTableDraft, null);
 export const saveAtTheTableDraft = (draft) => save(KEYS.atTheTableDraft, draft);
 export const clearAtTheTableDraft = () => save(KEYS.atTheTableDraft, null);
 
-// My Journal's ☰ menu choices: { sort: 'date' | 'alpha', collapsed: [city, ...] }
-export const loadJournalView = () => load(KEYS.journalView, { sort: 'date', collapsed: [] });
+// My Journal's view choices: { sort: 'date' | 'alpha', groupBy: 'city' |
+// 'rating' | 'cuisine' | 'recent', collapsed: [sectionKey, ...] }. Collapsed
+// keys are plain city names under the City grouping (back-compat with the
+// first version of this, which only had cities) and "<groupBy>:<label>"
+// for the other groupings.
+export const loadJournalView = () => load(KEYS.journalView, { sort: 'date', groupBy: 'city', collapsed: [] });
 export const saveJournalView = (view) => save(KEYS.journalView, view);
 
 // Same reasoning as atTheTableDraft, for DetailModal's own "My Journal"

@@ -95,6 +95,7 @@ export default function SettingsPanel({
   buddyAvatar, onChangeBuddy,
   onOpenBugReport, onOpenHelp,
   locationMeta = {}, onRefreshLocation,
+  fakeJournalCount = 0, onSeedFakeJournal, onClearFakeJournal,
 }) {
   const { colors, accentColor, setAccentColor } = useTheme();
   const insets = useSafeAreaInsets();
@@ -530,6 +531,29 @@ export default function SettingsPanel({
               </View>
             )}
 
+            {/* Dev builds only (Expo Go / dev client) - never shows in a
+                release build. Seeds 100 fake reviewed places across a dozen
+                cities (src/dev/fakeJournal.js) to test the Journal's
+                grouping/search at volume, and removes them again. Fake
+                entries are excluded from the Firestore mirror in App.js. */}
+            {__DEV__ && onSeedFakeJournal && (
+              <>
+                <Text style={styles.sectionTitle}>Developer</Text>
+                <View style={styles.devRow}>
+                  <Pressable style={styles.devBtn} onPress={onSeedFakeJournal}>
+                    <Ionicons name="flask-outline" size={15} color={colors.textDark} />
+                    <Text style={styles.devBtnText}>Seed 100 fake places</Text>
+                  </Pressable>
+                  {fakeJournalCount > 0 && (
+                    <Pressable style={[styles.devBtn, styles.devBtnDanger]} onPress={onClearFakeJournal}>
+                      <Ionicons name="trash-outline" size={15} color="#FFF" />
+                      <Text style={[styles.devBtnText, { color: '#FFF' }]}>Remove ({fakeJournalCount})</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </>
+            )}
+
             {/* The help icon doesn't depend on Firebase (it's static
                 in-app content) so it's not gated behind isFirebaseConfigured
                 the way Report a Bug is - own touch target, real gap
@@ -659,6 +683,13 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   // like the other gaps").
   input: { backgroundColor: colors.cardAlt, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: colors.textLight, fontSize: 14, marginBottom: 10 },
   bugReportRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  devRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
+  devBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.accent,
+    borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  devBtnDanger: { backgroundColor: colors.danger },
+  devBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 12.5 },
   helpBtn: {
     width: 40, height: 40, borderRadius: 14, marginRight: 10,
     backgroundColor: colors.cardAlt, alignItems: 'center', justifyContent: 'center',

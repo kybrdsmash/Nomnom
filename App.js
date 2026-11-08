@@ -55,6 +55,7 @@ import OnboardingOverlay from './src/components/OnboardingOverlay';
 import BuddyPicker from './src/components/BuddyPicker';
 import MapsLeaveWarningModal from './src/components/MapsLeaveWarningModal';
 import { isFirebaseConfigured, ensureSignedIn, auth } from './src/api/firebase';
+import { recordSpin, recordWarmCalls } from './src/api/analytics';
 import { onAuthStateChanged } from 'firebase/auth';
 import { pushSavedLists, fetchSavedLists, mergeById, mergeFaveCuisines } from './src/api/savedLists';
 import { watchPings, dismissPing } from './src/api/friendSession';
@@ -76,7 +77,8 @@ import {
   loadInstallReferrerChecked, saveInstallReferrerChecked,
   loadNavTapCounts, saveNavTapCounts,
 } from './src/storage';
-import { pushJournal, fetchFriendJournal, mergeJournal } from './src/api/journal';
+import { pushJournal, fetchMyJournal, mergeJournal } from './src/api/journal';
+import { buildFakeJournal, stripFakeEntries, countFakeEntries, isFakeEntry } from './src/dev/fakeJournal';
 import { uploadJournalPhoto, deleteJournalPhoto } from './src/api/journalPhotos';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -505,7 +507,7 @@ function AppInner() {
     fetchLocalFood({
       location, distance, minRating, selectedCuisines, travelType,
       count: 1, openNowOnly, maxPrice, reallyGoodOnly, allowRepeats: true, silent: true,
-    }).catch(() => {});
+    }).catch(() => {}).finally(recordWarmCalls);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
@@ -667,9 +669,15 @@ function AppInner() {
     // pulled them back DOWN (user report: "i have a few reviews written as
     // well - are those there?" - they were safely in Firestore, there just
     // wasn't a restore path to prove it, unlike favorites/history/tryLater
-    // above). fetchFriendJournal works unchanged for your OWN uid too - it's
-    // just a getDoc on journals/{uid}, nothing friend-specific about it.
-    fetchFriendJournal(myUid).then((remoteEntries) => {
+    // above). A device that already has a journal only asks for entries
+    // newer than its newest one (one Firestore read per entry returned);
+    // only a fresh install downloads the whole thing. Dev-seeded fakes are
+    // ignored when working out "newest" so seeding can't hide real entries.
+    const localNewest = Object.values(journal || {})
+      .flat()
+      .filter((e) => !isFakeEntry(e))
+      .reduce((max, e) => Math.max(max, e.updatedAt || 0), 0);
+    fetchMyJournal(myUid, localNewest).then((remoteEntries) => {
       if (!remoteEntries || Object.keys(remoteEntries).length === 0) return;
       setJournal((prev) => mergeJournal(prev, remoteEntries));
     });
@@ -697,6 +705,13 @@ function AppInner() {
     setShowBuddyPickerManual(false);
   };
 
+  // __DEV__-only (the Settings buttons that call these are gated on it):
+  // drop 100 fake reviewed places into the journal to test its grouping/
+  // search at volume, or strip them back out. Re-seeding replaces the
+  // previous fake set rather than stacking a second copy.
+  const seedFakeJournal = () => setJournal((prev) => ({ ...stripFakeEntries(prev), ...buildFakeJournal() }));
+  const clearFakeJournal = () => setJournal((prev) => stripFakeEntries(prev));
+
   // Mirrors the local journal (plus who's allowed to read it) up to
   // Firestore whenever either changes, so mutual friends can see it from
   // their own devices - fire-and-forget, matches storage.js's best-effort
@@ -710,11 +725,17 @@ function AppInner() {
     // for no reason. sharedPhotoUrl is left as-is: it's only ever present on
     // an entry while photoShared is true (see toggleEntryPhotoShare), so a
     // friend querying this doc directly never sees a photo you've unshared.
+    // Dev-seeded fake reviews (src/dev/fakeJournal.js) never leave the
+    // device - this account is every new install's default friend, so
+    // mirroring them would put 100 made-up restaurants in real users'
+    // Friends tabs.
     const shareable = Object.fromEntries(
-      Object.entries(journal).map(([placeId, entries]) => [
-        placeId,
-        entries.map(({ photoUri, ...rest }) => rest),
-      ])
+      Object.entries(journal)
+        .map(([placeId, entries]) => [
+          placeId,
+          entries.filter((e) => !isFakeEntry(e)).map(({ photoUri, ...rest }) => rest),
+        ])
+        .filter(([, entries]) => entries.length > 0)
     );
     pushJournal(myUid, shareable, friends.map((f) => f.uid));
   }, [journal, friends, storageLoaded, myUid]);
@@ -799,6 +820,7 @@ function AppInner() {
       marked.forEach((s) => seenIdsRef.current.add(s.id));
       saveSeenIds(seenIdsRef.current);
       addToHistory(marked);
+      recordSpin(marked, gameMode);
 
       if (gameMode === 'elimination' && marked.length > 1) {
         setEliminationList(marked);
@@ -1162,6 +1184,7 @@ function AppInner() {
         marked.forEach((s) => seenIdsRef.current.add(s.id));
         saveSeenIds(seenIdsRef.current);
         addToHistory(marked);
+        recordSpin(marked, 'flip');
         setResult(marked[0]);
       }
     } catch (error) {
@@ -1513,6 +1536,9 @@ function AppInner() {
         onOpenHelp={() => setShowHelp(true)}
         locationMeta={locationMeta}
         onRefreshLocation={refreshLocation}
+        fakeJournalCount={countFakeEntries(journal)}
+        onSeedFakeJournal={seedFakeJournal}
+        onClearFakeJournal={clearFakeJournal}
       />
 
       {/* Same bottom-left spot the old stray gear button used to occupy

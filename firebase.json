@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "auth": {
     "authorizedDomains": ["nom-nom-83f11.firebaseapp.com", "nom-nom-83f11.web.app", "localhost"],
     "providers": {

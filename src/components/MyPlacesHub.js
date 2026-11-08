@@ -6,7 +6,7 @@ import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth } from '../constants';
 import { isFirebaseConfigured } from '../api/firebase';
 import { BOTTOM_NAV_CLEARANCE, BottomNavFloor } from './BottomNav';
-import { fetchFriendJournal } from '../api/journal';
+import { fetchFriendRecentEntries } from '../api/journal';
 import { joinParts } from '../utils/format';
 import { cityFromAddress, groupByCity } from '../utils/location';
 import SlidableSegmented from './SlidableSegmented';
@@ -97,6 +97,9 @@ export default function MyPlacesHub({
   const [showAtTable, setShowAtTable] = useState(false);
   const [friendRows, setFriendRows] = useState([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const [friendsHaveMore, setFriendsHaveMore] = useState(false);
+  const [loadingMoreFriends, setLoadingMoreFriends] = useState(false);
+  const friendPagesRef = useRef({}); // friend uid -> { cursor, hasMore }
   // History pagination (user report: "history still loads too slowly") -
   // rendering potentially hundreds of accumulated history rows (each with
   // its own Image) at once on every visit was the actual bottleneck, not
@@ -110,6 +113,15 @@ export default function MyPlacesHub({
   // collapsed, remembered across visits. Gated on journalViewLoaded so the
   // defaults can't overwrite a saved choice before it's been read back.
   const [journalSort, setJournalSort] = useState('date'); // 'date' | 'alpha'
+  // Which axis the Journal's sections are cut along (user request, for a
+  // journal that outgrows one city: "one row of chips to re-sort the list
+  // by City, Rating, Cuisine, or Recent - one tap to pivot"). City is the
+  // original/default. Chips sit right under the search box, 1 tap each.
+  const [journalGroupBy, setJournalGroupBy] = useState('city'); // 'city' | 'rating' | 'cuisine' | 'recent'
+  // Collapsed section keys - plain city names under City grouping (kept
+  // for back-compat with the saved shape), "<groupBy>:<label>" otherwise,
+  // so collapsing "Seattle" doesn't also collapse an unrelated section
+  // that happens to share a label under another grouping.
   const [collapsedCities, setCollapsedCities] = useState([]);
   const [journalViewLoaded, setJournalViewLoaded] = useState(false);
   const [showJournalMenu, setShowJournalMenu] = useState(false);
@@ -117,13 +129,14 @@ export default function MyPlacesHub({
   useEffect(() => {
     loadJournalView().then((v) => {
       if (v?.sort) setJournalSort(v.sort);
+      if (v?.groupBy) setJournalGroupBy(v.groupBy);
       if (Array.isArray(v?.collapsed)) setCollapsedCities(v.collapsed);
       setJournalViewLoaded(true);
     });
   }, []);
   useEffect(() => {
-    if (journalViewLoaded) saveJournalView({ sort: journalSort, collapsed: collapsedCities });
-  }, [journalViewLoaded, journalSort, collapsedCities]);
+    if (journalViewLoaded) saveJournalView({ sort: journalSort, groupBy: journalGroupBy, collapsed: collapsedCities });
+  }, [journalViewLoaded, journalSort, journalGroupBy, collapsedCities]);
   const toggleCity = (city) =>
     setCollapsedCities((prev) => (prev.includes(city) ? prev.filter((c) => c !== city) : [...prev, city]));
   const AUTO_LOAD_STEP = 10;
@@ -165,9 +178,14 @@ export default function MyPlacesHub({
     if (tab !== 'friends' || !isFirebaseConfigured || !friends || friends.length === 0) return;
     let cancelled = false;
     setLoadingFriends(true);
+    friendPagesRef.current = {};
+    // First page only (each friend's 30 newest entries) - "Load more" below
+    // pulls the next page per friend instead of downloading everyone's
+    // whole journal on every visit.
     Promise.all(friends.map(async (f) => {
-      const entries = await fetchFriendJournal(f.uid);
-      return Object.values(entries).flat()
+      const page = await fetchFriendRecentEntries(f.uid);
+      friendPagesRef.current[f.uid] = { cursor: page.cursor, hasMore: page.hasMore };
+      return page.entries
         // Was showing every entry regardless of the writer's own sharing
         // choice - shared !== false so entries saved before this flag
         // existed still show (matches the current default-shared
@@ -178,10 +196,26 @@ export default function MyPlacesHub({
       if (cancelled) return;
       const flat = results.flat().sort((a, b) => b.updatedAt - a.updatedAt);
       setFriendRows(flat);
+      setFriendsHaveMore(Object.values(friendPagesRef.current).some((p) => p.hasMore));
       setLoadingFriends(false);
     });
     return () => { cancelled = true; };
   }, [tab, friends]);
+
+  // Next page for every friend who still has older entries.
+  const loadMoreFriends = async () => {
+    setLoadingMoreFriends(true);
+    const more = await Promise.all(friends.map(async (f) => {
+      const state = friendPagesRef.current[f.uid];
+      if (!state?.hasMore) return [];
+      const page = await fetchFriendRecentEntries(f.uid, { after: state.cursor });
+      friendPagesRef.current[f.uid] = { cursor: page.cursor, hasMore: page.hasMore };
+      return page.entries.filter((e) => e.shared !== false).map((e) => ({ ...e, friendName: f.name }));
+    }));
+    setFriendRows((prev) => [...prev, ...more.flat()].sort((a, b) => b.updatedAt - a.updatedAt));
+    setFriendsHaveMore(Object.values(friendPagesRef.current).some((p) => p.hasMore));
+    setLoadingMoreFriends(false);
+  };
 
   const titles = { history: 'History', tryLater: 'Try Later', favorites: 'Favorites', journal: 'Journal', friends: 'Friends' };
   const emptyMessages = {
@@ -327,32 +361,105 @@ export default function MyPlacesHub({
     );
   };
 
-  // Journal (Mine) - adapted from JournalOverlay.
+  // Journal (Mine) - adapted from JournalOverlay. `searchBlob` folds in
+  // everything typed across ALL of a place's entries (notes, dish names in
+  // the first moment, occasion, cuisine, city), not just the name - so "that
+  // place with the great ramen" is findable once the list is long (user
+  // request). Lowercased once here, not per keystroke.
   const mineRows = Object.values(journal || {})
     .filter((entries) => entries.length > 0)
     .map((entries) => {
       const latest = entries.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0];
-      return { ...latest.spot, latest, count: entries.length };
+      const searchBlob = [
+        latest.spot.name, latest.spot.type, cityFromAddress(latest.spot.address),
+        ...entries.flatMap((e) => [e.occasion, e.note, ...(e.moments || []).map((m) => m.text)]),
+      ].filter(Boolean).join(' ').toLowerCase();
+      return { ...latest.spot, latest, count: entries.length, searchBlob };
     })
     .sort((a, b) => b.latest.updatedAt - a.latest.updatedAt);
   const filteredMineRows = searchQuery.trim()
-    ? mineRows.filter((r) => r.name?.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    ? mineRows.filter((r) => r.searchBlob.includes(searchQuery.trim().toLowerCase()))
     : mineRows;
-  // groupByCity already sorts alphabetically within each city; 'date'
-  // re-sorts each city's rows newest-reviewed first.
-  const mineByCity = groupByCity(filteredMineRows, location).map((group) =>
-    journalSort === 'date'
-      ? { ...group, spots: [...group.spots].sort((a, b) => b.latest.updatedAt - a.latest.updatedAt) }
-      : group
-  );
 
-  const renderMineRow = ({ latest, count }, rowRef) => (
+  // Cuts filteredMineRows into [{ key, label, spots }] along the active
+  // grouping. Each section's rows are then sorted by journalSort (newest
+  // first / A-Z). `key` is what collapsedCities stores - see its comment.
+  const sortSectionRows = (rows) =>
+    journalSort === 'date'
+      ? [...rows].sort((a, b) => b.latest.updatedAt - a.latest.updatedAt)
+      : [...rows].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const buildJournalSections = (rows) => {
+    if (journalGroupBy === 'city') {
+      // groupByCity sorts cities nearest-first and rows A-Z within each.
+      return groupByCity(rows, location).map(({ city, spots }) => ({ key: city, label: city, spots: sortSectionRows(spots) }));
+    }
+    if (journalGroupBy === 'rating') {
+      // 5 stars down to 1, then everything left unrated.
+      const byRating = new Map();
+      rows.forEach((r) => {
+        const stars = typeof r.latest.rating === 'number' && r.latest.rating > 0 ? r.latest.rating : 0;
+        if (!byRating.has(stars)) byRating.set(stars, []);
+        byRating.get(stars).push(r);
+      });
+      return [5, 4, 3, 2, 1, 0]
+        .filter((stars) => byRating.has(stars))
+        .map((stars) => ({
+          key: `rating:${stars}`,
+          label: stars > 0 ? '★'.repeat(stars) + '☆'.repeat(5 - stars) : 'Not rated',
+          spots: sortSectionRows(byRating.get(stars)),
+        }));
+    }
+    if (journalGroupBy === 'cuisine') {
+      // A-Z by cuisine label, "Other" (no type on the spot) last.
+      const byType = new Map();
+      rows.forEach((r) => {
+        const t = r.type || 'Other';
+        if (!byType.has(t)) byType.set(t, []);
+        byType.get(t).push(r);
+      });
+      return [...byType.keys()]
+        .sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b))
+        .map((t) => ({ key: `cuisine:${t}`, label: t, spots: sortSectionRows(byType.get(t)) }));
+    }
+    // recent - This Week / This Month / then one section per month, newest
+    // first. Buckets are by the LATEST visit to each place.
+    const now = new Date();
+    const weekAgo = now.getTime() - 7 * 86400000;
+    const bucketOf = (ts) => {
+      if (ts >= weekAgo) return { order: 2e13, label: 'This Week' };
+      const d = new Date(ts);
+      if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) return { order: 1e13, label: 'This Month' };
+      return { order: d.getFullYear() * 100 + d.getMonth(), label: d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) };
+    };
+    const byBucket = new Map();
+    rows.forEach((r) => {
+      const b = bucketOf(r.latest.updatedAt);
+      if (!byBucket.has(b.label)) byBucket.set(b.label, { ...b, spots: [] });
+      byBucket.get(b.label).spots.push(r);
+    });
+    return [...byBucket.values()]
+      .sort((a, b) => b.order - a.order)
+      .map((b) => ({ key: `recent:${b.label}`, label: b.label, spots: sortSectionRows(b.spots) }));
+  };
+  const journalSections = buildJournalSections(filteredMineRows);
+  // Unfiltered set, for the ☰ menu's section list / collapse-all.
+  const allJournalSections = searchQuery.trim() ? buildJournalSections(mineRows) : journalSections;
+
+  // The thumbnail is YOUR OWN food photo from the latest visit when there is
+  // one (a picture of what you actually ate beats a storefront shot), and
+  // only falls back to the restaurant's Google photo otherwise. Bigger than
+  // the other lists' 46px circles (user request) - this is the screen people
+  // browse by picture.
+  const renderMineRow = ({ latest, count }, rowRef) => {
+    const foodPhoto = (latest.moments || []).map((m) => m.photoUri || m.sharedUri).find(Boolean);
+    const thumb = foodPhoto || latest.spot.photoUrl;
+    return (
     <Pressable key={latest.spot.id} ref={rowRef} style={styles.card} onPress={() => onShowDetails(latest.spot)}>
-      {latest.spot.photoUrl ? (
-        <Image source={{ uri: latest.spot.photoUrl }} style={styles.rowImage} />
+      {thumb ? (
+        <Image source={{ uri: thumb }} style={styles.rowImageLarge} />
       ) : (
-        <View style={styles.rowImagePlaceholder}>
-          <Ionicons name="restaurant" size={20} color={colors.textMuted} />
+        <View style={[styles.rowImagePlaceholder, styles.rowImageLarge]}>
+          <Ionicons name="restaurant" size={26} color={colors.textMuted} />
         </View>
       )}
       <View style={styles.rowTextCol}>
@@ -370,7 +477,8 @@ export default function MyPlacesHub({
         </Text>
       </View>
     </Pressable>
-  );
+    );
+  };
 
   // Was always showing the RESTAURANT's own Google photo, never the
   // friend's actual shared picture (which never even rendered anywhere,
@@ -477,20 +585,20 @@ export default function MyPlacesHub({
   } else if (tab === 'journal') {
     if (mineRows.length === 0) {
       listContent = <Text style={styles.emptyText}>{emptyMessages.journal}</Text>;
-    } else if (mineByCity.length === 0) {
+    } else if (journalSections.length === 0) {
       listContent = <Text style={styles.emptyText}>No reviews match "{searchQuery.trim()}".</Text>;
     } else {
-      listContent = mineByCity.map(({ city, spots }) => {
-        const collapsed = collapsedCities.includes(city);
+      listContent = journalSections.map(({ key, label, spots }) => {
+        const collapsed = collapsedCities.includes(key);
         // A-Z jump bar only makes sense when the rows are actually A-Z.
         const showIndex = !collapsed && journalSort === 'alpha' && spots.length > ALPHABET_INDEX_THRESHOLD;
         const seenLetters = new Set();
         const availableLetters = new Set(spots.map((s) => firstLetterOf(s.name)));
         return (
-          <View key={city} style={{ marginBottom: 8, paddingRight: showIndex ? 22 : 0 }}>
-            {/* Tapping a region header collapses/expands just that region
+          <View key={key} style={{ marginBottom: 8, paddingRight: showIndex ? 22 : 0 }}>
+            {/* Tapping a section header collapses/expands just that section
                 (1 tap); the ☰ menu does all of them at once. */}
-            <Pressable style={styles.cityHeaderRow} onPress={() => toggleCity(city)} hitSlop={4}>
+            <Pressable style={styles.cityHeaderRow} onPress={() => toggleCity(key)} hitSlop={4}>
               <View style={styles.cityHeaderLeft}>
                 <Ionicons
                   name={collapsed ? 'chevron-forward' : 'chevron-down'}
@@ -498,10 +606,13 @@ export default function MyPlacesHub({
                   color={colors.gold}
                   style={{ marginRight: 4, marginTop: -4 }}
                 />
-                <Text style={styles.categoryHeader}>{city}</Text>
+                <Text style={styles.categoryHeader}>{label}</Text>
                 {collapsed && <Text style={styles.cityCollapsedCount}> · {spots.length}</Text>}
               </View>
-              <ReviewMilestoneBadge count={spots.length} />
+              {/* The per-city milestone tier only means something per city. */}
+              {journalGroupBy === 'city'
+                ? <ReviewMilestoneBadge count={spots.length} />
+                : <Text style={styles.cityCollapsedCount}>{spots.length}</Text>}
             </Pressable>
             {!collapsed && spots.map((row) => {
               const letter = firstLetterOf(row.name);
@@ -509,16 +620,16 @@ export default function MyPlacesHub({
               seenLetters.add(letter);
               let rowRef;
               if (showIndex && isFirstOfLetter) {
-                const key = `${city}::${letter}`;
-                letterRefs.current[key] = letterRefs.current[key] || React.createRef();
-                rowRef = letterRefs.current[key];
+                const refKey = `${key}::${letter}`;
+                letterRefs.current[refKey] = letterRefs.current[refKey] || React.createRef();
+                rowRef = letterRefs.current[refKey];
               }
               return renderMineRow(row, rowRef);
             })}
             {showIndex && (
               <AlphabetIndexBar
                 availableLetters={availableLetters}
-                onSelectLetter={(letter) => jumpToLetter(city, letter)}
+                onSelectLetter={(letter) => jumpToLetter(key, letter)}
               />
             )}
           </View>
@@ -536,7 +647,23 @@ export default function MyPlacesHub({
     } else if (friendRows.length === 0) {
       listContent = <Text style={styles.emptyText}>None of your friends have reviewed anything yet.</Text>;
     } else {
-      listContent = friendRows.map(renderFriendRow);
+      listContent = (
+        <>
+          {friendRows.map(renderFriendRow)}
+          {friendsHaveMore && (
+            <Pressable style={styles.loadMoreRow} onPress={loadMoreFriends} disabled={loadingMoreFriends}>
+              {loadingMoreFriends
+                ? <ActivityIndicator color={colors.accent} />
+                : (
+                  <>
+                    <Text style={styles.loadMoreText}>Load older reviews</Text>
+                    <Ionicons name="arrow-down" size={16} color={colors.accent} />
+                  </>
+                )}
+            </Pressable>
+          )}
+        </>
+      );
     }
   }
 
@@ -651,6 +778,30 @@ export default function MyPlacesHub({
             />
           </View>
         )}
+        {/* Journal's group-by chips - 1 tap re-cuts the whole list along
+            another axis. Persisted with the sort/collapse choices. */}
+        {tab === 'journal' && mineRows.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            {[
+              { value: 'city', label: 'City', icon: 'location-outline' },
+              { value: 'rating', label: 'Rating', icon: 'star-outline' },
+              { value: 'cuisine', label: 'Cuisine', icon: 'restaurant-outline' },
+              { value: 'recent', label: 'Recent', icon: 'time-outline' },
+            ].map((opt) => {
+              const active = journalGroupBy === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  style={[styles.chip, styles.chipWithIcon, active && styles.chipActive]}
+                  onPress={() => setJournalGroupBy(opt.value)}
+                >
+                  <Ionicons name={opt.icon} size={13} color={active ? colors.textDark : colors.textMuted} />
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
         {showCityFilter && availableCities.length > 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
             <Pressable style={[styles.chip, !cityFilter && styles.chipActive]} onPress={() => setCityFilter(null)}>
@@ -711,7 +862,8 @@ export default function MyPlacesHub({
 
       {/* Opaque floor so rows scrolling under the floating BottomNav
           aren't visible through/around it - same principle as Feast (see
-          BottomNavFloor's own comment). */}
+          BottomNavFloor's own comment). Rendered before the journal menu
+          below so that menu still paints over it. */}
       <BottomNavFloor />
 
       {/* My Journal's ☰ menu - sort is 2 taps (☰ → option), one region is
@@ -738,13 +890,15 @@ export default function MyPlacesHub({
 
             <View style={styles.journalMenuDivider} />
             <View style={styles.journalMenuHeadingRow}>
-              <Text style={styles.journalMenuHeading}>REGIONS</Text>
+              <Text style={styles.journalMenuHeading}>
+                {journalGroupBy === 'city' ? 'REGIONS' : 'SECTIONS'}
+              </Text>
               <View style={{ flexDirection: 'row' }}>
                 <Pressable onPress={() => setCollapsedCities([])} hitSlop={6}>
                   <Text style={styles.journalMenuLink}>Expand all</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setCollapsedCities(groupByCity(mineRows, location).map((g) => g.city))}
+                  onPress={() => setCollapsedCities(allJournalSections.map((s) => s.key))}
                   hitSlop={6}
                   style={{ marginLeft: 14 }}
                 >
@@ -753,12 +907,12 @@ export default function MyPlacesHub({
               </View>
             </View>
             <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
-              {groupByCity(mineRows, location).map(({ city, spots }) => {
-                const collapsed = collapsedCities.includes(city);
+              {allJournalSections.map(({ key, label, spots }) => {
+                const collapsed = collapsedCities.includes(key);
                 return (
-                  <Pressable key={city} style={styles.journalMenuRow} onPress={() => toggleCity(city)}>
+                  <Pressable key={key} style={styles.journalMenuRow} onPress={() => toggleCity(key)}>
                     <Text style={[styles.journalMenuText, collapsed && { color: colors.textMuted }]} numberOfLines={1}>
-                      {city} <Text style={styles.journalMenuCount}>({spots.length})</Text>
+                      {label} <Text style={styles.journalMenuCount}>({spots.length})</Text>
                     </Text>
                     <Ionicons
                       name={collapsed ? 'chevron-forward' : 'chevron-down'}
@@ -852,6 +1006,7 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   goBtn: { backgroundColor: colors.accent, width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', ...buttonDepth },
   rowIconBtn: { padding: 6, marginRight: 4 },
   rowImage: { width: 46, height: 46, borderRadius: 23, marginRight: 15 },
+  rowImageLarge: { width: 78, height: 78, borderRadius: 14, marginRight: 14 },
   rowImagePlaceholder: { width: 46, height: 46, borderRadius: 23, marginRight: 15, backgroundColor: '#555', alignItems: 'center', justifyContent: 'center' },
   rowTextCol: { flex: 1, justifyContent: 'center', paddingRight: 10 },
   rowTitle: { color: colors.textLight, fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
@@ -865,6 +1020,7 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   searchInput: { flex: 1, color: colors.textLight, fontSize: 14, marginLeft: 8, padding: 0 },
   chipRow: { marginBottom: 12 },
   chip: { backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
+  chipWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   chipActive: { backgroundColor: colors.accent },
   chipText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: colors.textDark, fontWeight: 'bold' },

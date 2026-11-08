@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, Pressable, Image, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
+import { Modal, View, Text, Pressable, Image, ScrollView, StyleSheet, Platform, Alert, Share } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { neonSelected, buttonDepth } from '../constants';
+import { neonSelected, buttonDepth, JOIN_LINK_BASE_URL } from '../constants';
 import { useTheme } from '../ThemeContext';
 import { createDirectInvite, sendPing } from '../api/friendSession';
 import { shareIcsForSpot } from '../utils/ics';
@@ -36,7 +36,9 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
   const [sentCode, setSentCode] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Seeds the proposed time from the caller each time this opens.
+  // Seeds the proposed time from the caller each time this opens - the
+  // Quick Invite row may have one picked already; every other entry point
+  // passes nothing and starts blank as before.
   useEffect(() => {
     if (visible) setProposedDate(initialDate || null);
   }, [visible, initialDate]);
@@ -47,6 +49,7 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
     setSelectedFriendUid(null);
     setSending(false);
     setSentCode(null);
+    setSharedInvite(null);
     setErrorMsg('');
   };
 
@@ -102,6 +105,48 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
       setErrorMsg('Could not send the invite. Check your connection.');
     } finally {
       setSending(false);
+    }
+  };
+
+  // "Send in a message" - the primary action. Opens the phone's own share
+  // sheet (Messages, WhatsApp, anything) with the invite already written
+  // out, so it can go to anyone, Nomnom user or not, without Nomnom needing
+  // contacts permission. The invite itself is the same direct-invite session
+  // the in-app ping uses, so a recipient who taps the link lands on the same
+  // winner/chat/calendar screen. The session is created on the first tap
+  // and reused for re-shares (re-created only if the time changed).
+  const [sharedInvite, setSharedInvite] = useState(null); // { code, dateIso }
+  const [sharing, setSharing] = useState(false);
+  const shareByMessage = async () => {
+    if (!spot || sharing) return;
+    setSharing(true);
+    setErrorMsg('');
+    try {
+      const dateIso = proposedDate ? proposedDate.toISOString() : null;
+      let invite = sharedInvite;
+      if (!invite || invite.dateIso !== dateIso) {
+        const { code } = await createDirectInvite(location, displayName, spot, dateIso);
+        invite = { code, dateIso };
+        setSharedInvite(invite);
+      }
+      const when = proposedDate
+        ? proposedDate.toLocaleString(undefined, { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : null;
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name)}&query_place_id=${spot.id}`;
+      const message = [
+        `Let's eat at ${spot.name}${when ? ` - ${when}` : ''}!`,
+        mapsUrl,
+        `Tap to see the plan in Nomnom: ${JOIN_LINK_BASE_URL}?code=${invite.code}`,
+      ].join('\n');
+      const result = await Share.share({ message });
+      if (result?.action === Share.sharedAction) {
+        onSent?.();
+        close();
+      }
+    } catch (e) {
+      setErrorMsg('Could not create the invite. Check your connection.');
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -179,7 +224,19 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
                 />
               )}
 
-              <Text style={styles.sectionLabel}>Send to</Text>
+              <Pressable
+                style={[styles.sendBtn, sharing && { opacity: 0.6 }]}
+                disabled={sharing}
+                onPress={shareByMessage}
+              >
+                <Ionicons name="chatbubble-ellipses" size={18} color={colors.textDark} />
+                <Text style={styles.sendBtnText}>{sharing ? 'Opening…' : 'Send in a message'}</Text>
+              </Pressable>
+              {!proposedDate && (
+                <Text style={styles.hintText}>No time set - the message will just suggest the place.</Text>
+              )}
+
+              <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Or ping a Nomnom friend</Text>
               {friends.length === 0 ? (
                 <Text style={styles.emptyText}>
                   No friends yet - spin with someone once first so they show up here.
@@ -207,14 +264,18 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
 
               {!!errorMsg && <Text style={styles.errorText}>{errorMsg}</Text>}
 
-              <Pressable
-                style={[styles.sendBtn, !canSend && { opacity: 0.4 }]}
-                disabled={!canSend}
-                onPress={send}
-              >
-                <Ionicons name="paper-plane" size={18} color={colors.textDark} />
-                <Text style={styles.sendBtnText}>{sending ? 'Sending…' : 'Send Invite'}</Text>
-              </Pressable>
+              {friends.length > 0 && (
+                <Pressable
+                  style={[styles.sendBtn, styles.sendBtnSecondary, !canSend && { opacity: 0.4 }]}
+                  disabled={!canSend}
+                  onPress={send}
+                >
+                  <Ionicons name="paper-plane" size={18} color={colors.accent} />
+                  <Text style={[styles.sendBtnText, { color: colors.accent }]}>
+                    {sending ? 'Sending…' : !proposedDate ? 'Set a time to ping' : 'Ping in Nomnom'}
+                  </Text>
+                </Pressable>
+              )}
             </>
           )}
         </View>
@@ -247,6 +308,8 @@ const makeStyles = (colors) => StyleSheet.create({
   errorText: { color: colors.danger, fontSize: 13, marginBottom: 10, textAlign: 'center' },
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, borderRadius: 25, paddingVertical: 14, ...buttonDepth },
   sendBtnText: { color: colors.textDark, fontWeight: 'bold', fontSize: 15, marginLeft: 8 },
+  sendBtnSecondary: { backgroundColor: colors.accent + '26', shadowOpacity: 0, elevation: 0 },
+  hintText: { color: colors.textMuted, fontSize: 12, textAlign: 'center', marginTop: 6 },
   sentState: { alignItems: 'center', paddingVertical: 20 },
   sentText: { color: colors.textLight, fontSize: 18, fontWeight: 'bold', marginTop: 12 },
   sentSub: { color: colors.textMuted, fontSize: 13, marginTop: 4, marginBottom: 20, textAlign: 'center' },
