@@ -43,7 +43,7 @@ function shapeSearchResult(spot) {
   let photoUrl = null;
   if (spot.photos && spot.photos.length > 0) {
     const photoRef = spot.photos[0].photo_reference;
-    photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photoRef}&key=${GOOGLE_API_KEY}`;
+    photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${GOOGLE_API_KEY}`;
   }
   const specificType = (spot.types || []).find((t) => !GENERIC_TYPES.has(t));
 

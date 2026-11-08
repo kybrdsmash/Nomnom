@@ -65,7 +65,17 @@ function makeFilterKey({ location, distance, minRating, selectedCuisines, travel
 const NEXT_PAGE_DELAY_MS = 2000;
 const MAX_PAGES = 3; // Google's own cap - 20 results/page, 60 total
 
+// Billable Nearby Search requests made since the last takeNearbyCallCount();
+// analytics.js drains it after each spin so cost-per-spin can be measured.
+let nearbyCallCount = 0;
+export function takeNearbyCallCount() {
+  const n = nearbyCallCount;
+  nearbyCallCount = 0;
+  return n;
+}
+
 async function fetchPlacesPage(url) {
+  nearbyCallCount += 1;
   const response = await fetch(url);
   return response.json();
 }
@@ -610,7 +620,7 @@ function shapeSpot(spot, location, travelType) {
   let photoUrl = null;
   if (spot.photos && spot.photos.length > 0) {
     const photoRef = spot.photos[0].photo_reference;
-    photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photoRef}&key=${GOOGLE_API_KEY}`;
+    photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${GOOGLE_API_KEY}`;
   }
 
   const spotLat = spot.geometry.location.lat;
@@ -1102,6 +1112,7 @@ export async function searchNearbyByKeyword(location, travelType, keyword, { rad
 
   let data;
   try {
+    nearbyCallCount += 1;
     const response = await fetch(url);
     data = await response.json();
   } catch (e) {
