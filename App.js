@@ -134,6 +134,11 @@ function AppInner() {
   const [distance, setDistance] = useState(3);
   const [minRating, setMinRating] = useState(4.0);
   const [location, setLocation] = useState(null);
+  // When/where the current `location` fix was actually taken, for Settings'
+  // Location row (user request: "date and time on when it was last pulled
+  // and the actual rough location"). `label` fills in a moment later from
+  // the device's own reverse geocoder (free - no Google API call).
+  const [locationMeta, setLocationMeta] = useState({ at: null, label: null, refreshing: false });
   const [isSearching, setIsSearching] = useState(false);
 
   const [showCuisines, setShowCuisines] = useState(false);
@@ -445,12 +450,43 @@ function AppInner() {
       const MAX_CACHED_LOCATION_AGE_MS = 5 * 60 * 1000;
       const lastKnown = await Location.getLastKnownPositionAsync();
       if (lastKnown && Date.now() - lastKnown.timestamp < MAX_CACHED_LOCATION_AGE_MS) {
-        setLocation(lastKnown.coords);
+        applyLocationFix(lastKnown);
       }
       let loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords);
+      applyLocationFix(loc);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Single entry point for every new GPS fix, so Settings' "last pulled"
+  // time/place can never drift from the `location` the searches actually use.
+  const applyLocationFix = (fix) => {
+    setLocation(fix.coords);
+    setLocationMeta((prev) => ({ ...prev, at: fix.timestamp || Date.now(), label: null }));
+    Location.reverseGeocodeAsync({ latitude: fix.coords.latitude, longitude: fix.coords.longitude })
+      .then(([place]) => {
+        if (!place) return;
+        const area = place.district || place.subregion;
+        const city = place.city || place.subregion;
+        const label = [area && area !== city ? area : null, city, place.region].filter(Boolean).join(', ');
+        if (label) setLocationMeta((prev) => ({ ...prev, label }));
+      })
+      .catch(() => {});
+  };
+
+  // Settings' refresh button - a fresh fix only costs a Places call later if
+  // you've actually moved (places.js keys its cache on a rounded location).
+  const refreshLocation = async () => {
+    setLocationMeta((prev) => ({ ...prev, refreshing: true }));
+    try {
+      const loc = await Location.getCurrentPositionAsync({});
+      applyLocationFix(loc);
+    } catch (e) {
+      alert("Couldn't update your location - check that location is on and try again.");
+    } finally {
+      setLocationMeta((prev) => ({ ...prev, refreshing: false }));
+    }
+  };
 
   // Warm places.js's pool cache with whatever the filters are the instant we
   // have a GPS fix - fires once, on the location null->value transition
@@ -1475,6 +1511,8 @@ function AppInner() {
         onChangeBuddy={() => setShowBuddyPickerManual(true)}
         onOpenBugReport={() => setShowBugReport(true)}
         onOpenHelp={() => setShowHelp(true)}
+        locationMeta={locationMeta}
+        onRefreshLocation={refreshLocation}
       />
 
       {/* Same bottom-left spot the old stray gear button used to occupy

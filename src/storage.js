@@ -29,6 +29,7 @@ const KEYS = {
   installReferrerChecked: '@nomnom/installReferrerChecked',
   navTapCounts: '@nomnom/navTapCounts',
   buddyAvatar: '@nomnom/buddyAvatar',
+  journalView: '@nomnom/journalView',
 };
 
 async function load(key, fallback) {
@@ -170,6 +171,10 @@ export const saveJournal = (journal) => save(KEYS.journal, journal);
 export const loadAtTheTableDraft = () => load(KEYS.atTheTableDraft, null);
 export const saveAtTheTableDraft = (draft) => save(KEYS.atTheTableDraft, draft);
 export const clearAtTheTableDraft = () => save(KEYS.atTheTableDraft, null);
+
+// My Journal's ☰ menu choices: { sort: 'date' | 'alpha', collapsed: [city, ...] }
+export const loadJournalView = () => load(KEYS.journalView, { sort: 'date', collapsed: [] });
+export const saveJournalView = (view) => save(KEYS.journalView, view);
 
 // Same reasoning as atTheTableDraft, for DetailModal's own "My Journal"
 // compose box - that one had no persistence at all (plain useState), so

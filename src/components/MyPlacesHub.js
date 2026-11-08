@@ -15,6 +15,7 @@ import AlphabetIndexBar from './AlphabetIndexBar';
 import ReviewMilestoneBadge from './ReviewMilestoneBadge';
 import FullscreenImageViewer from './FullscreenImageViewer';
 import AddSpotModal from './AddSpotModal';
+import { loadJournalView, saveJournalView } from '../storage';
 
 // Same threshold/helper used by the two screens this consolidates
 // (HistoryFavoritesOverlay's Favorites/Try Later, JournalOverlay's Mine) -
@@ -105,6 +106,26 @@ export default function MyPlacesHub({
   // and only the explicit "Load 20 more" footer button (user-specified
   // behavior) grows it further, 20 at a time.
   const [historyVisibleCount, setHistoryVisibleCount] = useState(10);
+  // My Journal's ☰ menu (user request): sort order + which city regions are
+  // collapsed, remembered across visits. Gated on journalViewLoaded so the
+  // defaults can't overwrite a saved choice before it's been read back.
+  const [journalSort, setJournalSort] = useState('date'); // 'date' | 'alpha'
+  const [collapsedCities, setCollapsedCities] = useState([]);
+  const [journalViewLoaded, setJournalViewLoaded] = useState(false);
+  const [showJournalMenu, setShowJournalMenu] = useState(false);
+  const [journalMenuTop, setJournalMenuTop] = useState(110);
+  useEffect(() => {
+    loadJournalView().then((v) => {
+      if (v?.sort) setJournalSort(v.sort);
+      if (Array.isArray(v?.collapsed)) setCollapsedCities(v.collapsed);
+      setJournalViewLoaded(true);
+    });
+  }, []);
+  useEffect(() => {
+    if (journalViewLoaded) saveJournalView({ sort: journalSort, collapsed: collapsedCities });
+  }, [journalViewLoaded, journalSort, collapsedCities]);
+  const toggleCity = (city) =>
+    setCollapsedCities((prev) => (prev.includes(city) ? prev.filter((c) => c !== city) : [...prev, city]));
   const AUTO_LOAD_STEP = 10;
   const AUTO_LOAD_CAP = 30;
   const MANUAL_LOAD_STEP = 20;
@@ -317,7 +338,13 @@ export default function MyPlacesHub({
   const filteredMineRows = searchQuery.trim()
     ? mineRows.filter((r) => r.name?.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : mineRows;
-  const mineByCity = groupByCity(filteredMineRows, location);
+  // groupByCity already sorts alphabetically within each city; 'date'
+  // re-sorts each city's rows newest-reviewed first.
+  const mineByCity = groupByCity(filteredMineRows, location).map((group) =>
+    journalSort === 'date'
+      ? { ...group, spots: [...group.spots].sort((a, b) => b.latest.updatedAt - a.latest.updatedAt) }
+      : group
+  );
 
   const renderMineRow = ({ latest, count }, rowRef) => (
     <Pressable key={latest.spot.id} ref={rowRef} style={styles.card} onPress={() => onShowDetails(latest.spot)}>
@@ -454,16 +481,29 @@ export default function MyPlacesHub({
       listContent = <Text style={styles.emptyText}>No reviews match "{searchQuery.trim()}".</Text>;
     } else {
       listContent = mineByCity.map(({ city, spots }) => {
-        const showIndex = spots.length > ALPHABET_INDEX_THRESHOLD;
+        const collapsed = collapsedCities.includes(city);
+        // A-Z jump bar only makes sense when the rows are actually A-Z.
+        const showIndex = !collapsed && journalSort === 'alpha' && spots.length > ALPHABET_INDEX_THRESHOLD;
         const seenLetters = new Set();
         const availableLetters = new Set(spots.map((s) => firstLetterOf(s.name)));
         return (
           <View key={city} style={{ marginBottom: 8, paddingRight: showIndex ? 22 : 0 }}>
-            <View style={styles.cityHeaderRow}>
-              <Text style={styles.categoryHeader}>{city}</Text>
+            {/* Tapping a region header collapses/expands just that region
+                (1 tap); the ☰ menu does all of them at once. */}
+            <Pressable style={styles.cityHeaderRow} onPress={() => toggleCity(city)} hitSlop={4}>
+              <View style={styles.cityHeaderLeft}>
+                <Ionicons
+                  name={collapsed ? 'chevron-forward' : 'chevron-down'}
+                  size={14}
+                  color={colors.gold}
+                  style={{ marginRight: 4, marginTop: -4 }}
+                />
+                <Text style={styles.categoryHeader}>{city}</Text>
+                {collapsed && <Text style={styles.cityCollapsedCount}> · {spots.length}</Text>}
+              </View>
               <ReviewMilestoneBadge count={spots.length} />
-            </View>
-            {spots.map((row) => {
+            </Pressable>
+            {!collapsed && spots.map((row) => {
               const letter = firstLetterOf(row.name);
               const isFirstOfLetter = !seenLetters.has(letter);
               seenLetters.add(letter);
@@ -530,11 +570,29 @@ export default function MyPlacesHub({
           should just toggle over" (user request), one tap to
           switchTab('favorites') rather than a whole row of unrelated tabs. */}
       {tab === 'journal' ? (
-        <Pressable style={styles.myPlacesLinkRow} onPress={() => switchTab('favorites')}>
-          <Ionicons name="storefront-outline" size={15} color={colors.accent} />
-          <Text style={styles.myPlacesLinkText}>My Places</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.accent} />
-        </Pressable>
+        <View
+          style={styles.journalLinkBar}
+          onLayout={(e) => setJournalMenuTop(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+        >
+          {/* Balances the ☰ button so the My Places link stays centred. */}
+          <View style={styles.journalMenuBtn} />
+          <Pressable style={styles.myPlacesLinkRow} onPress={() => switchTab('favorites')}>
+            <Ionicons name="storefront-outline" size={15} color={colors.accent} />
+            <Text style={styles.myPlacesLinkText}>My Places</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+          </Pressable>
+          {mineRows.length > 0 ? (
+            <Pressable
+              style={[styles.journalMenuBtn, showJournalMenu && styles.journalMenuBtnActive]}
+              onPress={() => setShowJournalMenu((v) => !v)}
+              hitSlop={8}
+            >
+              <Ionicons name="menu" size={22} color={colors.accent} />
+            </Pressable>
+          ) : (
+            <View style={styles.journalMenuBtn} />
+          )}
+        </View>
       ) : (
         <View style={{ paddingHorizontal: 20 }}>
           <SlidableSegmented
@@ -651,6 +709,65 @@ export default function MyPlacesHub({
         <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
 
+      {/* My Journal's ☰ menu - sort is 2 taps (☰ → option), one region is
+          1 tap on its header or 2 here, all regions 2 taps. Backdrop tap
+          closes it. */}
+      {tab === 'journal' && showJournalMenu && (
+        <>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowJournalMenu(false)} />
+          <View style={[styles.journalMenu, { top: journalMenuTop }]}>
+            <Text style={styles.journalMenuHeading}>SORT BY</Text>
+            {[
+              { value: 'date', label: 'Review date (newest first)' },
+              { value: 'alpha', label: 'Alphabetical' },
+            ].map((opt) => (
+              <Pressable
+                key={opt.value}
+                style={[styles.journalMenuRow, journalSort === opt.value && styles.journalMenuRowActive]}
+                onPress={() => { setJournalSort(opt.value); setShowJournalMenu(false); }}
+              >
+                <Text style={styles.journalMenuText}>{opt.label}</Text>
+                {journalSort === opt.value && <Ionicons name="checkmark" size={18} color={colors.accent} />}
+              </Pressable>
+            ))}
+
+            <View style={styles.journalMenuDivider} />
+            <View style={styles.journalMenuHeadingRow}>
+              <Text style={styles.journalMenuHeading}>REGIONS</Text>
+              <View style={{ flexDirection: 'row' }}>
+                <Pressable onPress={() => setCollapsedCities([])} hitSlop={6}>
+                  <Text style={styles.journalMenuLink}>Expand all</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setCollapsedCities(groupByCity(mineRows, location).map((g) => g.city))}
+                  hitSlop={6}
+                  style={{ marginLeft: 14 }}
+                >
+                  <Text style={styles.journalMenuLink}>Collapse all</Text>
+                </Pressable>
+              </View>
+            </View>
+            <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled>
+              {groupByCity(mineRows, location).map(({ city, spots }) => {
+                const collapsed = collapsedCities.includes(city);
+                return (
+                  <Pressable key={city} style={styles.journalMenuRow} onPress={() => toggleCity(city)}>
+                    <Text style={[styles.journalMenuText, collapsed && { color: colors.textMuted }]} numberOfLines={1}>
+                      {city} <Text style={styles.journalMenuCount}>({spots.length})</Text>
+                    </Text>
+                    <Ionicons
+                      name={collapsed ? 'chevron-forward' : 'chevron-down'}
+                      size={16}
+                      color={collapsed ? colors.textMuted : colors.accent}
+                    />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </>
+      )}
+
       {showFab && (
         <Pressable
           style={styles.addFab}
@@ -691,7 +808,27 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0, left: 0, right: 0 }) =
   overlayTitle: { color: colors.accent, fontSize: 24, fontWeight: 'bold', letterSpacing: 1 },
   overlayBack: { padding: 5 },
   // Journal's own one-tap link back to My Places - see where it's used.
-  myPlacesLinkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 20, marginBottom: 14 },
+  myPlacesLinkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  // Link centred between the ☰ button and an equal-width spacer.
+  journalLinkBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 14 },
+  journalMenuBtn: { width: 36, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  // Frosted accent tint (not a solid fill) while the menu is open.
+  journalMenuBtnActive: { backgroundColor: colors.accent + '26' },
+  journalMenu: {
+    position: 'absolute', right: 16, width: 270, backgroundColor: colors.card, borderRadius: 16,
+    paddingVertical: 10, paddingHorizontal: 12, zIndex: 20, elevation: 12,
+    shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+  },
+  journalMenuHeading: { color: colors.textMuted, fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginBottom: 4, marginTop: 2 },
+  journalMenuHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  journalMenuRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10 },
+  journalMenuRowActive: { backgroundColor: colors.accent + '22' },
+  journalMenuText: { color: colors.textLight, fontSize: 14, flexShrink: 1, marginRight: 8 },
+  journalMenuCount: { color: colors.textMuted, fontSize: 12 },
+  journalMenuLink: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+  journalMenuDivider: { height: 1, backgroundColor: colors.cardAlt, marginVertical: 8 },
+  cityHeaderLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
+  cityCollapsedCount: { color: colors.textMuted, fontSize: 12, marginBottom: 8, marginTop: 4 },
   myPlacesLinkText: { color: colors.accent, fontWeight: '700', fontSize: 13.5 },
   // History's manual "load 20 more" prompt, past the auto-load cap.
   loadMoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },

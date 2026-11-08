@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, Animated, Easing, ScrollView, Platform, StyleSheet } from 'react-native';
+import { View, Text, Image, Pressable, TextInput, Switch, PanResponder, KeyboardAvoidingView, Animated, Easing, ScrollView, Platform, StyleSheet, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Application from 'expo-application';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -43,6 +43,18 @@ const NAV_USAGE_ITEMS = [
   { key: 'settings', label: 'Settings' },
 ];
 
+// "Nov 7, 3:42 PM · 12 min ago" for the Location row's last-pulled line.
+const formatPulledAt = (ts) => {
+  const d = new Date(ts);
+  const stamp = `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  const ago = mins < 1 ? 'just now'
+    : mins < 60 ? `${mins} min ago`
+    : mins < 1440 ? `${Math.floor(mins / 60)} hr ago`
+    : `${Math.floor(mins / 1440)} d ago`;
+  return `${stamp} · ${ago}`;
+};
+
 /**
  * Right-side slide-out settings drawer: tap BottomNav's Settings icon to
  * slide it in over Appearance (a soft hue picker driving the whole app's
@@ -82,6 +94,7 @@ export default function SettingsPanel({
   navTapCounts = {},
   buddyAvatar, onChangeBuddy,
   onOpenBugReport, onOpenHelp,
+  locationMeta = {}, onRefreshLocation,
 }) {
   const { colors, accentColor, setAccentColor } = useTheme();
   const insets = useSafeAreaInsets();
@@ -394,6 +407,32 @@ export default function SettingsPanel({
               </Pressable>
             )}
 
+            {/* Where/when the GPS fix every search uses was taken (user
+                request) - refresh is its own 1-tap target, see App.js's
+                refreshLocation. */}
+            <Text style={styles.sectionTitle}>Location</Text>
+            <View style={styles.locationBox}>
+              <Ionicons name="location" size={18} color={colors.accent} />
+              <View style={styles.locationTextCol}>
+                <Text style={styles.locationPlace} numberOfLines={2}>
+                  {locationMeta.label || (locationMeta.at ? 'Finding area name…' : 'Locating…')}
+                </Text>
+                {!!locationMeta.at && (
+                  <Text style={styles.locationTime}>Pulled {formatPulledAt(locationMeta.at)}</Text>
+                )}
+              </View>
+              <Pressable
+                onPress={onRefreshLocation}
+                disabled={locationMeta.refreshing}
+                hitSlop={8}
+                style={styles.locationRefreshBtn}
+              >
+                {locationMeta.refreshing
+                  ? <ActivityIndicator size="small" color={colors.accent} />
+                  : <Ionicons name="refresh" size={20} color={colors.accent} />}
+              </Pressable>
+            </View>
+
             <Text style={styles.sectionTitle}>Preferences</Text>
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Haptics</Text>
@@ -588,6 +627,11 @@ const makeStyles = (colors, insets = { top: 0, bottom: 0 }) => StyleSheet.create
   buddyRowLabel: { flex: 1, color: colors.textLight, fontSize: 13, fontWeight: '600' },
   // Nav Usage list - plain rows, sorted most-tapped first by the caller.
   navUsageBox: { backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 4 },
+  locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 10 },
+  locationTextCol: { flex: 1, marginLeft: 10, marginRight: 8 },
+  locationPlace: { color: colors.textLight, fontSize: 14, fontWeight: '600' },
+  locationTime: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  locationRefreshBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   navUsageRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   navUsageLabel: { color: colors.textLight, fontSize: 14 },
   navUsageCount: { color: colors.textMuted, fontSize: 14, fontWeight: 'bold' },
