@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeContext';
 import { neonSelected, buttonDepth } from '../constants';
 import { isFirebaseConfigured } from '../api/firebase';
-import { BOTTOM_NAV_CLEARANCE } from './BottomNav';
+import { BOTTOM_NAV_CLEARANCE, BottomNavFloor } from './BottomNav';
 import { fetchFriendJournal } from '../api/journal';
 import { joinParts } from '../utils/format';
 import { cityFromAddress, groupByCity } from '../utils/location';
@@ -708,6 +708,11 @@ export default function MyPlacesHub({
             that amount on a device with a real bottom inset. */}
         <View style={{ height: insets.bottom + BOTTOM_NAV_CLEARANCE }} />
       </ScrollView>
+
+      {/* Opaque floor so rows scrolling under the floating BottomNav
+          aren't visible through/around it - same principle as Feast (see
+          BottomNavFloor's own comment). */}
+      <BottomNavFloor />
 
       {/* My Journal's ☰ menu - sort is 2 taps (☰ → option), one region is
           1 tap on its header or 2 here, all regions 2 taps. Backdrop tap

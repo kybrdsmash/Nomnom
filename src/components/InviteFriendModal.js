@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, Pressable, Image, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,10 @@ import { shareIcsForSpot } from '../utils/ics';
  * whole live joint elimination session). Opened from either ResultCard's
  * share icon (an already-known result) or the Feast with Friends "Quick
  * Invite" search row (a freshly searched-for spot) - both just need a
- * `spot`, so this modal doesn't care which one it came from.
+ * `spot`, so this modal doesn't care which one it came from. The Quick
+ * Invite row also passes `initialDate` (a date/time it already collected)
+ * so the recipient-picker opens pre-filled instead of asking twice, and
+ * `onSent` so that row can clear itself once the invite actually lands.
  *
  * Sends via createDirectInvite (see friendSession.js) - creates the same
  * sessions/{code} doc shape a normal bracket uses, just pre-filled straight
@@ -22,7 +25,7 @@ import { shareIcsForSpot } from '../utils/ics';
  * exact same ResultCard/ScheduleMealModal winner screen this app already
  * has, with nothing new needed on that end.
  */
-export default function InviteFriendModal({ visible, onClose, spot, location, displayName, friends }) {
+export default function InviteFriendModal({ visible, onClose, spot, location, displayName, friends, initialDate = null, onSent }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [pickerStage, setPickerStage] = useState(null); // null | 'date' | 'time' | 'datetime'
@@ -32,6 +35,11 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
   const [sending, setSending] = useState(false);
   const [sentCode, setSentCode] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Seeds the proposed time from the caller each time this opens.
+  useEffect(() => {
+    if (visible) setProposedDate(initialDate || null);
+  }, [visible, initialDate]);
 
   const reset = () => {
     setPickerStage(null);
@@ -89,6 +97,7 @@ export default function InviteFriendModal({ visible, onClose, spot, location, di
       const { code, uid } = await createDirectInvite(location, displayName, spot, proposedDate.toISOString());
       await sendPing(friend.uid, uid, displayName, code);
       setSentCode(code);
+      onSent?.();
     } catch (e) {
       setErrorMsg('Could not send the invite. Check your connection.');
     } finally {

@@ -176,8 +176,10 @@ export const HELP_SECTIONS = [
     description: "A live, turn-based session between two phones - from picking a spot to locking in a time. Started from the Feast tab in the bottom nav.",
     groups: [{
       moves: [
-        { tag: 'visible', action: 'Start a session', result: 'Generates a 4-letter code to share - whoever opens the link joins automatically.' },
-        { tag: 'visible', action: "Ping, next to a friend's name", result: 'Starts a session and notifies them - the invite shows up as a banner from anywhere in the app.', secret: true },
+        { tag: 'visible', action: 'Quick Invite, at the top', result: 'Pick a date, search a place, then tap the paper plane to send a friend that exact plan - no live session needed.' },
+        { tag: 'tap', action: "A friend's tile", result: 'Starts a live pick-together session and notifies them - the invite shows up as a banner from anywhere in the app.' },
+        { tag: 'visible', action: 'The dashed Add a friend tile', result: 'Send an invite link and your friend code to anyone, add someone by their code, or join a live session by its 4-letter code.' },
+        { tag: 'tap', action: 'The three dots next to On the Schedule', result: 'Lets you reorder your top four friends. Tap two to swap them, or tap + on anyone below to promote them.', secret: true },
         { tag: 'tap', action: '✕ during play', result: 'Eliminates a spot, only enabled on your turn.' },
         { tag: 'tap', action: "I'm in, in the schedule sheet", result: "Locks your side of a proposed time. Once you're both locked, Add to Calendar appears." },
         { tag: 'visible', action: 'The calendar icon on your result', result: "Glows once you're both locked in. A small red dot means an unread message.", secret: true },

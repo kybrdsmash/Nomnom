@@ -38,6 +38,34 @@ export const BAR_HEIGHT = ITEM_HEIGHT + BAR_PADDING * 2 + RING_WIDTH * 2;
 export const BOTTOM_NAV_CLEARANCE = BAR_BOTTOM_OFFSET * 2 + BAR_HEIGHT;
 
 /**
+ * Opaque band behind the floating bar, for screens whose content SCROLLS
+ * under it (Feast, Places). The bar is frosted glass that deliberately
+ * lets Home's coin peek through behind it - but a list scrolling past
+ * underneath reads as a bug, not layering (user report: "we can't have
+ * things going behind the bottom bar and be visible"). Rendered inside
+ * the screen's own root (not here in BottomNav, which must stay see-
+ * through for Home), absolutely positioned over the full clearance zone:
+ * solid from the screen's bottom edge up to the bar's top, then a short
+ * fade across the gap above it so content dissolves instead of hitting a
+ * hard line. Default pointer handling (not 'none') so a tap on the band
+ * can't reach content that's hidden behind it.
+ */
+export function BottomNavFloor() {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const solidHeight = insets.bottom + BAR_BOTTOM_OFFSET + BAR_HEIGHT;
+  return (
+    <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: solidHeight + BAR_BOTTOM_OFFSET }}>
+      <LinearGradient
+        colors={[`${colors.background}00`, colors.background]}
+        style={{ height: BAR_BOTTOM_OFFSET }}
+      />
+      <View style={{ flex: 1, backgroundColor: colors.background }} />
+    </View>
+  );
+}
+
+/**
  * Persistent 5-destination bottom nav (Option C from the design canvas
  * review: a floating pill, not a slide-out drawer or a full-width tab bar -
  * picked for tying every destination to exactly 1 tap, matching the
