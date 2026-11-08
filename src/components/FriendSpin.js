@@ -102,7 +102,7 @@ function friendInitials(name) {
 // false or delete once real friends fill the grid. Names chosen to hit
 // friendLabel's edge cases: fits as "First L.", too long so falls back to
 // first name, single names, a first name that itself overflows.
-const DEV_SEED_FAKE_FRIENDS = true;
+const DEV_SEED_FAKE_FRIENDS = false;
 const DEV_FAKE_FRIENDS = (__DEV__ && DEV_SEED_FAKE_FRIENDS) ? [
   'Maya Chen', 'Christopher Rodriguez', 'Bo Li', 'Alexandria Montgomery', 'Sam',
   'Priya Venkataraman', 'Jordan Blake', 'Theodore', 'Ana Sofia Reyes', 'Kai Nakamura',

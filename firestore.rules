@@ -35,5 +35,26 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+    // Friend-code reverse lookup (src/api/friendCode.js): anyone signed in can
+    // resolve a code to {uid, name}; only the owner can create or change theirs.
+    match /friendCodes/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name']);
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name']);
+      allow delete: if false;
+    }
+    // Shared feed photo pool (src/api/feedPhotos.js): any signed-in device
+    // upserts the spots it searched; fields are fixed to what the writer sends.
+    match /feedPhotos/{placeId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['placeId', 'name', 'photoUrl', 'cuisine', 'rating', 'updatedAt']);
+      allow delete: if false;
+    }
   }
 }

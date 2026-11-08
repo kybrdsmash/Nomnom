@@ -79,3 +79,4 @@ build-local*.log
 
 # Personal Claude Code permissions
 .claude/settings.local.json
+*.log
