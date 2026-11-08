@@ -14,17 +14,17 @@
  * final - see the pitch artifact linked in TODO.md.
  */
 
-// Ordered low -> high. Threshold = distinct places reviewed IN ONE CITY
-// (revisiting the same spot again doesn't bump this - it's about breadth of
-// places tried in that city, not total visits logged there). No 0-tier: this
-// is only ever computed for a city that already has at least one entry (see
-// JournalOverlay.js's mineByCity, which never produces an empty city bucket).
+// Ordered low -> high. Threshold = completed reviews IN ONE CITY, counting
+// every review (revisiting the same spot and reviewing it again DOES bump
+// this - the goal is to reward habitual reviewing, not just breadth of places
+// tried). No 0-tier: this is only ever computed for a city that already has
+// at least one entry (see JournalOverlay.js's mineByCity, which never
+// produces an empty city bucket).
 export const REVIEW_TIERS = [
-  { min: 1, name: 'New Taster', icon: '🥄' },
-  { min: 3, name: 'Regular', icon: '🍴' },
-  { min: 7, name: 'Local Regular', icon: '🍜' },
-  { min: 15, name: 'Food Explorer', icon: '🗺️' },
-  { min: 30, name: 'Local Legend', icon: '🏆' },
+  { min: 1, name: 'Tourist', icon: '🎒' },
+  { min: 5, name: 'Visitor', icon: '🧭' },
+  { min: 15, name: 'Local', icon: '🏡' },
+  { min: 40, name: 'Aficionado', icon: '🏆' },
 ];
 
 // Global (all cities combined) distinct-place count - not currently

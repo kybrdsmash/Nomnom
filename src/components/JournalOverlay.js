@@ -231,7 +231,7 @@ export default function JournalOverlay({
                   <View key={city} style={{ marginBottom: 8, paddingRight: showIndex ? 22 : 0 }}>
                     <View style={styles.cityHeaderRow}>
                       <Text style={styles.categoryHeader}>{city}</Text>
-                      <ReviewMilestoneBadge count={spots.length} />
+                      <ReviewMilestoneBadge count={spots.reduce((sum, s) => sum + s.count, 0)} />
                     </View>
                     {spots.map((row) => {
                       const letter = firstLetterOf(row.name);

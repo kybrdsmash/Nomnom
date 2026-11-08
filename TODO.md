@@ -250,7 +250,7 @@ single-note form.
   eat?"), which names the actual problem solved. Alternatives floated: "The
   food app that actually picks for you" / "No more scrolling. Just eat."
   Revisit once the user has thought on it more - not applied anywhere yet.
-- [x] Rewards system for completed reviews — v1 shipped 2026-09-14: per-city tier label (🥄 New Taster → 🍴 Regular → 🍜 Local Regular → 🗺️ Food Explorer → 🏆 Local Legend), inline next to each city header in JournalOverlay's "My Reviews" screen. Deliberately per-city, not global - see `src/api/rewards.js`.
+- [x] Rewards system for completed reviews — v1 shipped 2026-09-14: per-city tier label, inline next to each city header in JournalOverlay's "My Reviews" screen. Deliberately per-city, not global - see `src/api/rewards.js`. Revised 2026-11-08: tiers are now 🎒 Tourist (1) → 🧭 Visitor (5) → 🏡 Local (15) → 🏆 Aficionado (40), counted by total completed reviews in the city (repeat reviews of the same spot count) to reward habitual reviewing.
 - [x] Fancier coin-spin animation — bench built and tuned values applied 2026-09-14 (anticipation dip + micro-bounce enabled, impact squash/stretch left off). See `src/components/CoinSpinner.js`.
 
 ### Rewards: region strategy (background thinking, not blocking)
