@@ -1,10 +1,24 @@
 import {
-  GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes,
-} from '@react-native-google-signin/google-signin';
-import {
   GoogleAuthProvider, linkWithCredential, signInWithCredential, signOut,
 } from 'firebase/auth';
 import { auth } from './firebase';
+
+// Optional require, not a static import: Expo Go doesn't ship this native
+// module, and a top-level import of it crashes the whole app on launch there
+// (which blocked running the app in Expo Go / the local emulator at all).
+// Real builds get the module exactly as before; Expo Go just can't do
+// Google sign-in (promptGoogleSignIn explains why instead).
+let GoogleSignin = null;
+let isSuccessResponse = () => false;
+let isErrorWithCode = () => false;
+let statusCodes = {};
+try {
+  // eslint-disable-next-line global-require
+  const mod = require('@react-native-google-signin/google-signin');
+  ({ GoogleSignin, isSuccessResponse, isErrorWithCode, statusCodes } = mod);
+} catch {
+  GoogleSignin = null;
+}
 
 // Configure once at module load - GoogleSignin.configure() is synchronous
 // and just stores config for later calls, safe before any UI mounts.
@@ -14,9 +28,14 @@ import { auth } from './firebase';
 // still registered in Google Cloud Console, but this library verifies
 // against it natively via Google Play Services instead of a client ID
 // passed in code.
-GoogleSignin.configure({
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-});
+try {
+  GoogleSignin?.configure({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  });
+} catch {
+  // Module present but its native half missing (Expo Go) - same as above.
+  GoogleSignin = null;
+}
 
 /**
  * Runs the native Google Sign-In flow (Android Credential Manager under the
@@ -31,6 +50,9 @@ GoogleSignin.configure({
  * redirect, which is exactly the part Google now blocks.
  */
 export async function promptGoogleSignIn() {
+  if (!GoogleSignin) {
+    throw new Error('Google sign-in needs the installed app build - it isn\'t available in Expo Go.');
+  }
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const response = await GoogleSignin.signIn();
   if (!isSuccessResponse(response)) return null;
@@ -85,7 +107,7 @@ export async function signInWithGoogleIdToken(idToken) {
 /** Signs out of the current (Google-linked) account entirely. */
 export async function signOutGoogle() {
   try {
-    await GoogleSignin.signOut();
+    await GoogleSignin?.signOut();
   } catch {
     // Best-effort - clearing the native session isn't critical if it fails,
     // the Firebase signOut below is what actually matters to the app.
