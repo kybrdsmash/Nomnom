@@ -1,26 +1,22 @@
-# Session handoff (as of 2026-11-08)
+# Session handoff (as of 2026-11-09)
 
-**Start here** when opening a new Claude Code session on Nomnom. `CLAUDE.md` is the stable architecture reference; this file is "where we left off." `TODO.md` is the long-form backlog, but it was last updated 2026-09-19 and is **stale** (see step 4 below).
+**Start here** when opening a new Claude Code session on Nomnom. `CLAUDE.md` is the stable architecture reference; this file is "where we left off." `TODO.md` is the long-form backlog, but it was last updated 2026-09-19 and is **stale**.
 
-## Do these first, in order
+## State as of 2026-11-09
 
-1. **Check nothing else is mid-edit.** Several Nomnom sessions were open at once on 2026-11-08. Before committing, confirm no other session is still writing to the working tree (ListAgents / ask the user).
-2. **Commit the uncommitted work.** As of 2026-11-08 the working tree had ~1,200 uncommitted lines across 17 modified files (App.js, journal.js, FriendSpin.js, MyPlacesHub.js, InviteFriendModal.js, storage.js, SettingsPanel.js, BottomNav.js, firebase.js, places.js, rewards.js, ...) plus new untracked files:
-   - `firestore.rules` + `firebase.json` now points at it
-   - `src/api/analytics.js` (per-user spin/API-call counters on `users/{uid}`)
-   - `src/components/FriendIndexReel.js`
-   - `src/dev/fakeJournal.js` (100 fake places for testing Journal at volume)
-   - `BUSINESS_PLAN.md` (tiers/pricing notes)
-   - `.claude/agents/app-checker.md` (emulator QA agent)
-   - Don't commit: `build-preview.log` (consider gitignoring `*.log`), `.claude/worktrees/`.
-   Group into sensible commits by feature (`git diff` per file), on `v2-redesign`.
-3. **Push the branch - it has never been pushed.** `v2-redesign` exists only on this PC: 100+ commits ahead of `origin/main` (Google Sign-In, iOS setup, Journal/Feast redesign, everything since mid-September). Run `git push -u origin v2-redesign`. This is the single biggest risk in the project right now.
-4. **Refresh `TODO.md`** to match reality: check off Google Sign-In (shipped Oct 3-11, incl. persistence fix), At the Table star rating (Oct 11, Nov 4), Journal on its own BottomNav tab, friend-selection grid, iOS Firebase registration + simulator build profile; add the new items below.
+- All work is committed and `v2-redesign` is pushed to `origin` (rank change 9e8accf, analytics c8e4df5, journal sync v2 a07677a, rules/dev-flag 38c3cec). Intentionally uncommitted: `BUSINESS_PLAN.md`, `.claude/`.
+- `firestore.rules` is **deployed** (2026-11-08), including `friendCodes` and `feedPhotos`. Storage rules (`journalPhotos/{uid}`, `bugReportScreenshots/{uid}`) are still unconfirmed - see TODO.md.
+- **Build 80 (versionCode 80, 1.1.0) is live on closed testing "Friends Beta"** and confirmed on the user's phone. Release flow: `.build-verify/local-build.sh` via `wsl -d Ubuntu`, copy to `.build-verify/app-vNN-local.aab` (latest v30), then `npx eas-cli submit --platform android --profile closedTesting --path <aab> --non-interactive`. Claude can do all of this; it works.
+- `DEV_SEED_FAKE_FRIENDS` in FriendSpin.js is now `false`.
+
+## Do these first
+
+1. **Refresh `TODO.md`** to match reality: check off Google Sign-In (shipped Oct 3-11), At the Table star rating, Journal on its own BottomNav tab, friend-selection grid, iOS Firebase registration + simulator profile.
+2. **Phone-verify build 80:** journal migration, a new review syncing, Friends tab, Feast feed, Add a friend by code, "Send in a message" share sheet.
+3. **Privacy:** update `docs/privacy-policy.html` Section 4, Settings copy, and Play Data Safety for `analytics.js` usage counters.
 
 ## Things to verify before the next release
 
-- **`firestore.rules` is local only, not deployed.** It covers sessions, pings, journals (+ `entries` subcollection), savedLists, bugReports (create-only), cuisineFeedback (create-only), users. It does **not** include `feedPhotos` - add it if that collection is still in use. Before `firebase deploy --only firestore:rules`, diff against the live rules in the Firebase console (deploy replaces them wholesale). Storage rules (`journalPhotos/{uid}`, `bugReportScreenshots/{uid}`) are still unconfirmed too - see TODO.md.
-- **`analytics.js` vs. privacy claims.** It writes per-user usage counts to Firestore. Settings copy says "no analytics SDK, no user id," and `docs/privacy-policy.html` Section 4 says no analytics. Technically no SDK, but update the policy and Play's Data Safety form to mention usage counters.
 - **Fake journal data** is tagged `fake: true`, excluded from the Firestore mirror in App.js, and its Settings button is meant to be `__DEV__`-only. Confirm that gate before a release build - the developer account is every new user's default friend, so a leak would show in real users' Friends tabs.
 - **Version bump** to 1.2.0 is due at EAS build 100 (comment above `version` in `app.config.js`).
 
@@ -29,7 +25,7 @@
 **Play Store launch (Android first):**
 - Closed testing: 12+ testers opted in for 14+ days before Production unlocks - it's a clock, start ASAP.
 - Play listing: screenshots, description, Data Safety "users can request deletion" = **Yes** (didn't save last time), update "App access" now that sign-in exists, privacy policy needs lawyer review + public URL.
-- `eas submit` needs a GCP service-account key (`eas.json` submit config is empty).
+- `eas submit --profile closedTesting` works (key at C:/Users/Isaac/keys/nomnom-play-submit.json, track "Friends Beta"); Claude can upload builds.
 - Chat has no block/report/remove-friend - fine for closed testing, likely needed before public release.
 
 **Needs a real build / second device to verify:**
