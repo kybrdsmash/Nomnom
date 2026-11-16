@@ -45,7 +45,7 @@
 
 **API-cost options awaiting the user's approve/reject:** persist `places.js`'s `cachedPool` to AsyncStorage; cache Place Photos app-side. (`analytics.js` now measures cost per spin - see `BUSINESS_PLAN.md` - which can inform these.)
 
-**Later:** App Store ($99/yr Apple account), Facebook login, alternative reveal animations (paid-tier idea, see BUSINESS_PLAN.md), Google Maps saved-places import, tablet layout, slogan, ads.
+**Later:** App Store ($99/yr Apple account), Facebook login, alternative reveal animations (paid-tier idea, see BUSINESS_PLAN.md), Google Maps saved-places import (decided 2026-11-16: no live API exists - do it as a Google Takeout file import; place-ID matching may cost one Places call per saved place, needs approval), tablet layout, slogan, ads.
 
 ## Dev environment notes
 
