@@ -78,13 +78,21 @@ export function useVerticalScale() {
 // just inert now - it simply can't be reached via any filter anymore,
 // same as an untagged dish would behave.
 export const CUISINES = [
-  'Acai', 'African', 'American', 'Armenian', 'Asian', 'Bagels', 'Bakery',
-  'BBQ', 'Brazilian', 'Burgers', 'Cafe', 'Candy', 'Chinese', 'Chocolate',
-  'Coffee', 'Deli', 'Dessert', 'Diner', 'Donuts', 'French', 'Greek',
-  'Ice Cream', 'Indian', 'Indonesian', 'Italian', 'Japanese', 'Juice',
-  'Korean', 'Lebanese', 'Mediterranean', 'Mexican', 'Middle Eastern',
-  'Pizza', 'Ramen', 'Sandwiches', 'Seafood', 'Spanish', 'Sushi', 'Tea',
-  'Thai', 'Turkish', 'Vegan', 'Vegetarian', 'Vietnamese',
+  'Acai', 'Afghan', 'African', 'American', 'Argentinian', 'Armenian',
+  'Asian', 'Bagels', 'Bakery', 'Bangladeshi', 'BBQ', 'Brazilian',
+  'Breakfast', 'British', 'Burgers', 'Burmese', 'Cafe', 'Cajun', 'Cambodian',
+  'Candy', 'Caribbean', 'Chinese', 'Chocolate', 'Coffee', 'Colombian',
+  'Cuban', 'Deli', 'Dessert', 'Dim Sum', 'Diner', 'Donuts', 'Dumplings',
+  'Eastern European', 'Ethiopian', 'Falafel', 'Filipino', 'French', 'German',
+  'Greek', 'Halal', 'Hawaiian', 'Himalayan', 'Hot Pot', 'Ice Cream',
+  'Indian', 'Indonesian', 'Israeli', 'Italian', 'Japanese', 'Juice',
+  'Korean', 'Korean BBQ', 'Latin American', 'Lebanese', 'Malaysian',
+  'Mediterranean', 'Mexican', 'Middle Eastern', 'Moroccan', 'Pakistani',
+  'Pastry', 'Persian', 'Peruvian', 'Pizza', 'Portuguese', 'Ramen', 'Salads',
+  'Sandwiches', 'Seafood', 'Shawarma', 'Soul Food', 'South Indian',
+  'Spanish', 'Sri Lankan', 'Steakhouse', 'Sushi', 'Tacos', 'Taiwanese',
+  'Tapas', 'Tea', 'Tex-Mex', 'Thai', 'Turkish', 'Vegan', 'Vegetarian',
+  'Vietnamese', 'Wings',
 ];
 
 // Default names for the 3 Fave-cuisine-preset slots (see FaveCuisineButton.js)
