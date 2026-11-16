@@ -32,6 +32,11 @@ import { fetchLocalFood, pickFromFavorites } from './src/api/places';
 
 import CoinSpinner from './src/components/CoinSpinner';
 import DaydreamRaccoon from './src/components/DaydreamRaccoon';
+import CuisineGlobe from './src/components/CuisineGlobe';
+
+// Prototype (2026-11-16): rotating cuisine globe replaces the raccoon header.
+// Flip to false to bring the raccoon back.
+const SHOW_CUISINE_GLOBE = true;
 import FilterPanel from './src/components/FilterPanel';
 import EliminationList from './src/components/EliminationList';
 import BrowseList from './src/components/BrowseList';
@@ -45,7 +50,6 @@ import MyPlacesHub from './src/components/MyPlacesHub';
 import SettingsPanel from './src/components/SettingsPanel';
 import DetailModal from './src/components/DetailModal';
 import FriendSpin from './src/components/FriendSpin';
-import RollingFoodStrip from './src/components/RollingFoodStrip';
 import CuisineDropdown from './src/components/CuisineDropdown';
 import JournalOverlay from './src/components/JournalOverlay';
 import FoodDetailModal from './src/components/FoodDetailModal';
@@ -1373,10 +1377,18 @@ function AppInner() {
         <View
           style={[styles.topControlsScroll, styles.topControlsContent]}
         >
-          <DaydreamRaccoon
-            onLongPressFood={(food) => setFoodDetailFood(food)}
-            foodDetailOpen={foodDetailFood !== null}
-          />
+          {SHOW_CUISINE_GLOBE ? (
+            <CuisineGlobe
+              selectedCuisines={selectedCuisines}
+              onToggleCuisine={toggleCuisine}
+              setSelectedCuisines={setSelectedCuisines}
+            />
+          ) : (
+            <DaydreamRaccoon
+              onLongPressFood={(food) => setFoodDetailFood(food)}
+              foodDetailOpen={foodDetailFood !== null}
+            />
+          )}
           <FilterPanel
             travelType={travelType}
             setTravelType={setTravelType}
@@ -1396,22 +1408,10 @@ function AppInner() {
           />
         </View>
 
-        {/* Hidden while the Cuisines dropdown is open - a trial run of
-            leaving it visible (relying purely on elevation to stay behind
-            the dropdown) brought back a version of the same gap/sliver
-            problem, so it goes back to fully unmounting instead of trying
-            to out-stack it. Wrapped with a small upward nudge (user
-            report: sitting as a plain flex item in this gap read as too
-            far down, not actually centered between the Cuisines trigger
-            above and the mode toggle below) - RollingFoodStrip itself
-            stays layout-agnostic about its neighbors; this is App.js's
-            call to make since it's the one that knows what's on either
-            side of the gap. */}
-        {!showCuisines && (
-          <View style={styles.rollingFoodWrap}>
-            <RollingFoodStrip onLongPressFood={(food) => setFoodDetailFood(food)} />
-          </View>
-        )}
+        {/* RollingFoodStrip was removed from the home screen 2026-11-16
+            (user request: kept "in our back pocket" - the component file
+            still exists, just isn't rendered). The top area is being
+            redesigned around a rotating cuisine globe. */}
 
         <View style={styles.bottomControls}>
           {/* Replaces the vertical space the old horizontal mode toggle
@@ -1428,7 +1428,11 @@ function AppInner() {
               the quick filters"). A plain spacer restores the original
               flex proportions directly instead of re-guessing
               rollingFoodWrap's own margin a third time. */}
-          <View style={{ height: 76 * vscale }} />
+          {/* Was 76 - kept the old RollingFoodStrip clear of the coin's side
+              icon stacks. With the strip gone that space goes to the globe
+              and filters above. (After changing this, do a full reload -
+              coinCenterY can be measured mid-layout on a hot reload.) */}
+          <View style={{ height: 24 * vscale }} />
           <View ref={coinWrapperRef} collapsable={false} onLayout={measureCoin}>
             <CoinSpinner
               ref={coinRef}
@@ -1808,16 +1812,6 @@ const makeStyles = (colors, vscale = 1, insets = { top: 0, bottom: 0, left: 0, r
     paddingTop: insets.top + 38 * vscale,
     paddingBottom: insets.bottom + BOTTOM_NAV_CLEARANCE,
   },
-  // REVERTED to the original tuned negative margin (see homeScreen's comment
-  // above for why the 'flex-end' experiment this was paired with got undone).
-  // Was bumped to -50 when this read as too close to the horizontal mode
-  // toggle that used to sit directly below it in bottomControls - that
-  // toggle has since moved out entirely (GameModeIcons, coin's left side),
-  // so the premise for that bump no longer applies. Back to -38, combined
-  // with bottomControls' new compensating spacer (see its comment) which
-  // addresses the actual mechanical cause (freed flex space from removing
-  // the toggle) rather than re-tuning this number a third time.
-  rollingFoodWrap: { marginTop: -38 * vscale },
   // elevation here (not just document order) is what makes this reliably
   // paint above RollingFoodStrip on Android - same reasoning as
   // CuisineDropdown's wrapper: RollingFoodStrip's native-driven icon
