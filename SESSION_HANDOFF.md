@@ -1,12 +1,29 @@
-# Session handoff (as of 2026-11-09)
+# Session handoff (as of 2026-11-16)
 
 **Start here** when opening a new Claude Code session on Nomnom. `CLAUDE.md` is the stable architecture reference; this file is "where we left off." `TODO.md` is the long-form backlog, but it was last updated 2026-09-19 and is **stale**.
+
+## What changed 2026-11-16 (home screen redesign, in progress)
+
+- **Cuisine globe** (`src/components/CuisineGlobe.js`) replaced the raccoon header and the rolling food strip on the home screen. `SHOW_CUISINE_GLOBE` in App.js brings the raccoon back; `RollingFoodStrip.js` is kept but not rendered (user: "back pocket"). Pure JS (d3-geo, topojson-client, world-atlas + react-native-svg), runs in Expo Go.
+  - World view: tilted 23.4deg, spins only around its polar axis, night side + soft sun glow from the real sun position (fades while dragging), mealtime-glowing region pins. Chips: All, 8 regions, Bites/Sweets/Drinks, plus a leaf toggle (Vegan + Vegetarian) at the end of the first row.
+  - Tapping a region dot or chip zooms in: globe goes upright (no tilt) and turns to face the region, so drags spin on a vertical axis. The region dot splits into labelled country dots; tapping one turns on that country's cuisines. Each region has All + a flat one-tap cuisine list. The globe's own touch handler hit-tests dots (SVG onPress was unreliable).
+- **Cuisines 44 -> 87** (`constants.js` CUISINES, `places.js` CUISINE_TYPE_REQUIREMENTS + NAME_HINTS), all backed by real Google Table A types - no extra API calls per spin. Caveat: a region's "All" can select up to 11 cuisines but each fetch still searches at most 5 (random).
+- **Onboarding:** swipe back/forth between steps; "Say what you think" step with a thought-bubble icon.
+- The old Cuisines dropdown panel still exists under the globe (both drive the same selection) - remove it once a replacement is chosen.
+
+## Open decisions (ask the user)
+
+1. Cuisine filter layout: recommended **B + D** - a "Regions | Cravings" toggle to cut chip rows, and replace the old Cuisines dropdown with a "Thai · Sushi · +2 ✕" summary line (keeps My Faves).
+2. Country dots: show the cuisine name briefly on tap ("Burmese ✓")? User asked whether the dots convey the right info.
+3. Dietary: recommended a Profile "Dietary" setting (None/Vegetarian/Vegan/Halal) that the leaf follows. Note the leaf/filters only find DEDICATED veg restaurants; Google's "serves vegetarian food" field needs a paid per-place Details call (API-cost option, needs approval).
+4. Taste learning from ratings/favorites/eliminations - plan proposed (on-device profile weighting the cached pool, zero extra API calls), not built.
+5. Feather/leaf drift animation needs a new start point now that the raccoon's thought bubble is gone (suggested: food drifting off the globe toward the coin).
 
 ## State as of 2026-11-09
 
 - All work is committed and `v2-redesign` is pushed to `origin` (rank change 9e8accf, analytics c8e4df5, journal sync v2 a07677a, rules/dev-flag 38c3cec). Intentionally uncommitted: `BUSINESS_PLAN.md`, `.claude/`.
 - `firestore.rules` is **deployed** (2026-11-08), including `friendCodes` and `feedPhotos`. Storage rules (`journalPhotos/{uid}`, `bugReportScreenshots/{uid}`) are still unconfirmed - see TODO.md.
-- **Build 80 (versionCode 80, 1.1.0) is live on closed testing "Friends Beta"** and confirmed on the user's phone. Release flow: `.build-verify/local-build.sh` via `wsl -d Ubuntu`, copy to `.build-verify/app-vNN-local.aab` (latest v30), then `npx eas-cli submit --platform android --profile closedTesting --path <aab> --non-interactive`. Claude can do all of this; it works.
+- **Build 81 (versionCode 81, 1.1.0) was submitted to closed testing "Friends Beta" on 2026-11-16** (globe redesign). Build 80 was confirmed on the user's phone 2026-11-09. Release flow: `.build-verify/local-build.sh` via `wsl -d Ubuntu`, copy to `.build-verify/app-vNN-local.aab` (latest v31), then `npx eas-cli submit --platform android --profile closedTesting --path <aab> --non-interactive`. Claude can do all of this; it works.
 - `DEV_SEED_FAKE_FRIENDS` in FriendSpin.js is now `false`.
 
 ## Do these first
