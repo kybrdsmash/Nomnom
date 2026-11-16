@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useMemo, useState } from 'react';
+import { Modal, View, Text, Pressable, PanResponder, StyleSheet } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
 import { buttonDepth, neonSelected } from '../constants';
 
@@ -18,12 +18,14 @@ const STEPS = [
   {
     icon: 'fast-food-outline',
     title: 'Narrow it down',
-    body: 'Tap Cuisines to filter by what you\'re craving - or leave it blank for a total surprise.',
+    body: 'Spin the globe and tap a region to filter by what you\'re craving - or leave it blank for a total surprise.',
   },
   {
-    icon: 'heart-outline',
-    title: 'Save what you love',
-    body: 'Favorite a spot, bookmark one for later, or jot a note in your Journal after you eat there.',
+    // MaterialCommunityIcons (Ionicons has no thought bubble/brain).
+    icon: 'thought-bubble-outline',
+    iconSet: 'mci',
+    title: 'Say what you think',
+    body: 'Rate the spots you try and jot a note in your Journal. Favorite or bookmark the ones worth coming back to.',
   },
   {
     icon: 'settings-outline',
@@ -34,6 +36,8 @@ const STEPS = [
     body: 'Your Profile tab has appearance, travel method, and a full help guide whenever you need it.',
   },
 ];
+
+const SWIPE_PX = 50;
 
 /**
  * First-launch walkthrough - shown once automatically for a brand new
@@ -56,16 +60,32 @@ export default function OnboardingOverlay({ visible, onDismiss }) {
   const finish = () => { onDismiss(dontShowAgain); reset(); };
   const next = () => (isLast ? finish() : setStep((s) => s + 1));
 
+  // Swipe left/right to move between steps (user request: couldn't go back).
+  // A swipe past the last step does nothing - "Get Started" stays the only
+  // way to finish, so nobody skips the "don't show again" box by accident.
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
+        onPanResponderRelease: (_, g) => {
+          if (g.dx < -SWIPE_PX) setStep((s) => Math.min(STEPS.length - 1, s + 1));
+          else if (g.dx > SWIPE_PX) setStep((s) => Math.max(0, s - 1));
+        },
+      }),
+    []
+  );
+  const Icon = current.iconSet === 'mci' ? MaterialCommunityIcons : Ionicons;
+
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={finish}>
-      <View style={styles.backdrop}>
+      <View style={styles.backdrop} {...swipe.panHandlers}>
         <Pressable style={styles.skipBtn} onPress={finish} hitSlop={10}>
           <Text style={styles.skipText}>Skip</Text>
         </Pressable>
 
         <View style={styles.card}>
           <View style={styles.iconCircle}>
-            <Ionicons name={current.icon} size={36} color={colors.textDark} />
+            <Icon name={current.icon} size={36} color={colors.textDark} />
           </View>
           <Text style={styles.title}>{current.title}</Text>
           <Text style={styles.body}>{current.body}</Text>
